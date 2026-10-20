@@ -1,9 +1,13 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
 import { pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
+import { ChargeCards } from './controls/ChargeCards';
+import { ClockRing } from './controls/ClockRing';
+import { PullSheet } from './controls/PullSheet';
+import type { ControlProps } from './controls/types';
 import { MIN_MS, addLocalDays, formatClock, formatDuration, periodRange, type Period } from '../../domain/time';
 import {
   dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
@@ -104,9 +108,40 @@ export default function Today() {
     else if (!isCurrent) go(offset + 1); // влево — позже
   };
 
+  const order: Period[] = ['day', 'week', 'month'];
+  // Щипок двумя пальцами: свести — крупнее масштаб (день → неделя → месяц), развести — мельче.
+  // Храним пальцы по pointerId (≈ Dictionary<int, Vector2>).
+  const fingers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d0: number; ratio: number } | null>(null);
+  const spread = () => {
+    const [a, b] = [...fingers.current.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  const pinchDown = (e: PointerEvent) => {
+    fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fingers.current.size === 2) { pinch.current = { d0: spread(), ratio: 1 }; swipe.current = null; }
+  };
+  const pinchMove = (e: PointerEvent) => {
+    if (!fingers.current.has(e.pointerId)) return;
+    fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current && fingers.current.size === 2) pinch.current.ratio = spread() / pinch.current.d0;
+  };
+  /** true — это был щипок (свайп не считаем). */
+  const pinchUp = (e: PointerEvent) => {
+    fingers.current.delete(e.pointerId);
+    const p = pinch.current;
+    if (!p) return false;
+    if (fingers.current.size === 0) {
+      pinch.current = null;
+      const i = order.indexOf(scale);
+      if (p.ratio < 0.8 && i < 2) pickScale(order[i + 1]);
+      else if (p.ratio > 1.25 && i > 0) pickScale(order[i - 1]);
+    }
+    return true;
+  };
+
   const periodName = isCurrent ? titles[scale] : periodTitle(scale, from, to);
   const scales = [{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }] as const;
-  const order: Period[] = ['day', 'week', 'month'];
   const pickScale = (v: Period) => { setDir(order.indexOf(v) > order.indexOf(scale) ? 'fwd' : 'back'); setScale(v); setOffset(0); };
 
   // ——— общие куски экрана; компоновка ниже расставляет их по-разному ———
@@ -122,9 +157,10 @@ export default function Today() {
   const viz = (
     <div
       className="widget viz"
-      onPointerDown={(e) => { swipe.current = { x: e.clientX, y: e.clientY }; }}
-      onPointerUp={(e) => onSwipeEnd(e.clientX, e.clientY)}
-      onPointerCancel={() => { swipe.current = null; }}
+      onPointerDown={(e) => { pinchDown(e); swipe.current = { x: e.clientX, y: e.clientY }; }}
+      onPointerMove={pinchMove}
+      onPointerUp={(e) => { if (!pinchUp(e)) onSwipeEnd(e.clientX, e.clientY); }}
+      onPointerCancel={(e) => { pinchUp(e); swipe.current = null; }}
     >
       {/* key меняется при смене периода → React пересоздаёт обёртку, и её CSS-анимация
           проигрывается заново (листание, появление стёкол — зависит от компоновки). */}
@@ -165,57 +201,36 @@ export default function Today() {
   );
 
   let layout: ReactNode;
-  if (design === 'diary') {
-    // Дневник: без карточек, экран как страница. Сверху — дата и итог крупным
-    // заголовком, масштаб — строкой слов, мозаика — «иллюстрация», внизу навигация словами.
-    const step = { day: 'день', week: 'неделя', month: 'месяц' }[scale];
+  if (design === 'clock' || design === 'charge' || design === 'pull') {
+    // Мозаика во весь экран; сверху — только итог и масштаб, внизу — свой способ управления.
+    const control: ControlProps = {
+      activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
+      run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
+      name: (id) => name(id).at(-1) ?? '',
+    };
     layout = (
       <>
-        <div className="diary-top">
-          <div className="diary-date">{scale === 'day' && isCurrent ? date : periodName}</div>
-          <div className="diary-total" onClick={() => go(0)}>{formatDuration(total)}</div>
-          <div className="diary-scale">
+        <div className="fb-head">
+          <div className="fb-left" onClick={() => go(0)}>
+            <div className="fb-title">{periodName}</div>
+            <div className="fb-total">{formatDuration(total)}</div>
+          </div>
+          <div className="fb-scales">
             {scales.map((o) => (
-              <button key={o.id} aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label.toLowerCase()}</button>
+              <button key={o.id} aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label[0]}</button>
             ))}
           </div>
         </div>
         {banner}
         {viz}
-        <div className="diary-nav">
-          <button onClick={() => go(offset - 1)}>‹ прошлый {step}</button>
-          {!isCurrent && <button className="accent" onClick={() => go(0)}>сейчас</button>}
-          <button disabled={isCurrent} onClick={() => go(offset + 1)}>следующий ›</button>
-        </div>
-        {dial}
-      </>
-    );
-  } else if (design === 'panel') {
-    // Панель: строка состояния сверху, слева вертикальная шкала Д/Н/М со стрелками,
-    // справа мозаика в рамке с угловыми скобками, внизу полукруг.
-    layout = (
-      <>
-        <div className="panel-status">
-          <span className="panel-title" onClick={() => go(0)}>{periodName}</span>
-          <b className="panel-total">{formatDuration(total)}</b>
-        </div>
-        {banner}
-        <div className="panel-main">
-          <div className="panel-rail">
-            <button className="panel-step" onClick={() => go(offset - 1)} aria-label="Раньше">▲</button>
-            {scales.map((o) => (
-              <button key={o.id} className="panel-scale" aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label[0]}</button>
-            ))}
-            <button className="panel-step" disabled={isCurrent} onClick={() => go(offset + 1)} aria-label="Позже">▼</button>
-          </div>
-          {viz}
-        </div>
-        {dial}
+        {design === 'clock' && <ClockRing {...control} />}
+        {design === 'charge' && <ChargeCards {...control} />}
+        {design === 'pull' && <PullSheet {...control} />}
       </>
     );
   } else {
     // Классика и Витрина: шапка со стрелками, сегменты, мозаика, полукруг.
-    // (Витрина отличается расстановкой поверх мозаики — это делает CSS.)
+    // (Витрина отличается тем, что мозаика под всем на весь экран — это делает CSS.)
     layout = (
       <>
         <div className="today-head">
@@ -237,7 +252,7 @@ export default function Today() {
 
   // Экран без прокрутки: мозаика забирает всё место, что осталось от остального.
   return (
-    <div className={'screen fit today ' + design}>
+    <div className={'screen fit today lay-' + design + (design === 'classic' ? '' : ' fullbleed')}>
       {layout}
 
       {picking && (

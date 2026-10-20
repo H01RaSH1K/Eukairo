@@ -55,6 +55,11 @@ export function startTimer(activityId: string, durationMs?: number) {
   set({ entries: [...closed, { id: newId(), activityId, start: now, end: null, plannedEnd, source: 'timer', updatedAt: now }] });
 }
 
+/** Записать уже прошедшее время (задним числом). */
+export function logEntry(activityId: string, start: number, end: number) {
+  saveEntry({ id: newId(), activityId, start, end, source: 'manual', updatedAt: Date.now() });
+}
+
 /** Диапазон ползунка таймера у занятия (минуты). */
 export function setActivityTimer(id: string, minMin: number, maxMin: number) {
   set({ activities: state.activities.map((a) => (a.id === id ? { ...a, timerMinMin: minMin, timerMaxMin: maxMin, updatedAt: Date.now() } : a)) });

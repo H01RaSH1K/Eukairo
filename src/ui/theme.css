@@ -351,5 +351,4 @@ input.field { -webkit-user-select: text; user-select: text; }
 .tree-row .tree-name { flex: 1; }
 .range-edit { margin: 2px 0 10px 28px; padding: 10px 12px; background: var(--chip); border-radius: 12px; display: flex; flex-direction: column; gap: 6px; }
 .range-edit .setting-title { margin: 4px 0 0; font-size: 14px; }
-.design-chips { flex-wrap: nowrap; }
-.design-chips button { flex: 1; padding: 6px 4px; font-size: 13px; }
+.design-chips button { padding: 6px 10px; font-size: 13px; }
