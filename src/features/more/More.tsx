@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { activityColors } from '../../domain/colors';
 import { childrenOf } from '../../domain/tree';
-import { resetDemo, setFill, setViz, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
+import { resetDemo, setFill, setSpotSize, setViz, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
 import { visualizations } from '../../visualizations/registry';
 import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
@@ -42,7 +42,18 @@ export default function More({ goToday }: { goToday: () => void }) {
             <button key={v.id} aria-pressed={state.vizId === v.id} onClick={() => setViz(v.id)}>{v.title}</button>
           ))}
         </div>
-        <div className="card-title sub-title">Заливка</div>
+        <div className="sub-title-row">
+          <div className="card-title sub-title">Заливка</div>
+          {state.fill === 'spots' && (
+            // Ползунок размера пятен — в строке заголовка, чтобы экран не вырос.
+            // onChange срабатывает на каждом шаге — мозаика пересобирается сразу.
+            <label className="slider-row">
+              <span className="dim">размер</span>
+              <input type="range" min={1} max={10} value={state.spotSize} onChange={(e) => setSpotSize(Number(e.target.value))} />
+              <span className="dim">{state.spotSize}</span>
+            </label>
+          )}
+        </div>
         <div className="opt-grid three">
           {fills.map(([id, title]) => (
             <button key={id} aria-pressed={state.fill === id} onClick={() => setFill(id)}>{title}</button>

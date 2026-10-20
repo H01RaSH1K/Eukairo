@@ -13,7 +13,7 @@ import './mosaic.css';
 
 const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 
-function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillProp, onSelect }: VisualizationProps & { pattern: PatternId }) {
+function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillProp, spotSize, onSelect }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
   // Меряем место под картину, чтобы узор заполнил виджет целиком.
   // ResizeObserver ≈ подписка на событие «размер изменился».
@@ -39,8 +39,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillPro
   const filled = hours.filter((o): o is HourOwner => o !== null);
   const seed = seedFor(from);
   const places = useMemo(
-    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, days.length) : fill === 'jar' ? filled.map((_, i) => i) : null),
-    [fill, cells, seed, days.length, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, days.length, spotSize) : fill === 'jar' ? filled.map((_, i) => i) : null),
+    [fill, cells, seed, days.length, spotSize, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
   );
   let owners: (HourOwner | null)[] = hours;
   if (places) {

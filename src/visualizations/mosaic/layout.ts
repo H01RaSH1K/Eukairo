@@ -26,14 +26,15 @@ export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = 
  * Возвращает номер стекла для каждого занятого часа (в том же порядке, что `filled`).
  * Центры пятен зависят только от `seed`, поэтому за день пятна не прыгают, а растут.
  */
-export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, days = 1): number[] {
+export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, days = 1, size = 3): number[] {
   const c = cells.map(centroid);
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const rand = rng(seed + 17);
 
-  // Пятна: подряд идущие записи — у дня 3–6 штук, у недели 5–8, у месяца 11–14;
-  // запись = отрезок часов одного entryId.
-  const base = 3 + Math.round(days / 4);
+  // Пятна: подряд идущие записи; сколько их в пятне — от ползунка `size` (1…10)
+  // и длины периода. При size 3: у дня 3–6, у недели 5–8, у месяца 12–15.
+  // Запись = отрезок часов одного entryId.
+  const base = Math.max(1, Math.round(size * (1 + days / 10)));
   const pick = () => base + Math.floor(rand() * 4);
   const sizes: number[] = [];
   let runs = 0, want = pick();

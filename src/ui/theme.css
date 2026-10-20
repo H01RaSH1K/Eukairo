@@ -288,3 +288,8 @@ input.field { -webkit-user-select: text; user-select: text; }
 .opt-grid.three button { padding: 7px 2px; font-size: 13px; }
 .btn-row.demo { align-items: center; }
 .btn-row.demo .card-title { margin: 0 auto 0 0; }
+.sub-title-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; margin-bottom: 8px; height: 18px; }
+.sub-title-row .card-title.sub-title { margin: 0; }
+.slider-row { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.slider-row input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.slider-row span:last-child { width: 1.5em; text-align: right; }

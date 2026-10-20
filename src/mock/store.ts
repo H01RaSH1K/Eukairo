@@ -10,18 +10,22 @@ export interface MockState {
   activities: Activity[];
   entries: Entry[];          // отсортированы по start
   vizId: string;             // выбранный стиль визуализации
-  fill: string;              // заливка мозаики: flow | rows | calendar | jar
+  fill: string;              // заливка мозаики: flow | rows | calendar | jar | spots
+  spotSize: number;          // размер пятен, 1…10
   backupBanner: boolean;     // плашка «давно не было бэкапа»
   forgottenAsked: string | null; // по какой записи уже спросили «таймер ещё идёт?»
 }
 
 const VIZ_KEY = 'eukairo.mock.viz';
 const FILL_KEY = 'eukairo.mock.fill';
+const SPOT_KEY = 'eukairo.mock.spot';
 
 function initial(): MockState {
   let vizId = 'mosaic-glass';
   let fill = 'calendar';
+  let spotSize = 3;
   try {
+    spotSize = Number(localStorage.getItem(SPOT_KEY) ?? spotSize) || spotSize;
     vizId = localStorage.getItem(VIZ_KEY) ?? vizId;
     fill = localStorage.getItem(FILL_KEY) ?? fill;
   } catch { /* приватный режим */ }
@@ -30,6 +34,7 @@ function initial(): MockState {
     entries: makeDemoEntries(Date.now()),
     vizId,
     fill,
+    spotSize,
     backupBanner: true,
     forgottenAsked: null,
   };
@@ -93,6 +98,11 @@ export function setFill(fill: string) {
   set({ fill });
 }
 
+export function setSpotSize(spotSize: number) {
+  try { localStorage.setItem(SPOT_KEY, String(spotSize)); } catch { /* ничего */ }
+  set({ spotSize });
+}
+
 export function dismissBackupBanner() { set({ backupBanner: false }); }
 export function markForgottenAsked(id: string) { set({ forgottenAsked: id }); }
 
@@ -108,4 +118,4 @@ export function simulateForgotten() {
 }
 
 export function showBackupBanner() { set({ backupBanner: true }); }
-export function resetDemo() { set({ ...initial(), vizId: state.vizId, fill: state.fill }); }
+export function resetDemo() { set({ ...initial(), vizId: state.vizId, fill: state.fill, spotSize: state.spotSize }); }
