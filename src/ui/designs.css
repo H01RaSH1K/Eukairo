@@ -246,3 +246,11 @@ html[data-focus] .tabbar { display: none; }
 .tray-tile::after { /* прогресс — полоска по низу плитки */
   content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: calc(var(--p) * 100%); background: var(--c); transition: width 1s linear;
 }
+
+/* Фокус в установленном приложении: экран (height: 100%) у iOS короче физического
+   на полосу «Домой», а сверху мозаика лезла под часы. Поэтому в фокусе витраж
+   приклеен к окну: от низа строки состояния до самого низа экрана. */
+.today.focus .widget.viz, .today.focus .focus-light {
+  position: fixed !important; top: env(safe-area-inset-top); left: 0; right: 0; bottom: 0;
+}
+.today.focus .focus-plaque { position: fixed !important; }
