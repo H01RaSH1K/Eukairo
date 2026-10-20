@@ -31,10 +31,10 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, day
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const rand = rng(seed + 17);
 
-  // Пятна: подряд идущие записи, по 2–4 штуки (у месяца крупнее — 5–7),
+  // Пятна: подряд идущие записи — у дня 3–6 штук, у недели 5–8, у месяца 11–14;
   // запись = отрезок часов одного entryId.
-  const base = 2 + Math.floor(days / 10);
-  const pick = () => base + Math.floor(rand() * 3);
+  const base = 3 + Math.round(days / 4);
+  const pick = () => base + Math.floor(rand() * 4);
   const sizes: number[] = [];
   let runs = 0, want = pick();
   filled.forEach((o, i) => {
