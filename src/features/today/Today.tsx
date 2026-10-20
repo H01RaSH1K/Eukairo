@@ -1,31 +1,191 @@
-import { Suspense, lazy } from 'react';
-import { defaultVisualization } from '../../visualizations/registry';
-import { startOfLocalDay, startOfNextLocalDay } from '../../domain/time';
+import { Suspense, lazy, useMemo, useState, type ComponentType } from 'react';
+import type { Entry } from '../../db/schema';
+import { activityColors } from '../../domain/colors';
+import { toSpans } from '../../domain/spans';
+import { pathOf } from '../../domain/tree';
+import { MIN_MS, formatClock, formatDuration, formatTimer, periodRange, type Period } from '../../domain/time';
+import {
+  dismissBackupBanner, markForgottenAsked, running, saveEntry, setViz, startTimer, stopTimer, useMock,
+} from '../../mock/store';
+import { findVisualization, visualizations } from '../../visualizations/registry';
+import type { VisualizationPlugin, VisualizationProps } from '../../visualizations/types';
+import { Segmented } from '../../ui/Segmented';
+import { Sheet } from '../../ui/Sheet';
+import { useNow } from '../../ui/useNow';
+import { ActivityPicker } from '../activities/ActivityPicker';
+import { EntrySheet } from '../timeline/EntrySheet';
+import { shareBackup } from '../more/backup';
 
-// lazy() ≈ загрузить префаб по требованию: код мозаики — отдельный файл,
-// оболочка показывается, не дожидаясь его.
-const Visualization = lazy(defaultVisualization.load);
+// lazy() ≈ загрузить префаб по требованию: код стиля — отдельный файл.
+// Кэшируем, чтобы при перерисовке не создавать компонент заново.
+const lazyCache = new Map<string, ComponentType<VisualizationProps>>();
+function lazyViz(p: VisualizationPlugin) {
+  if (!lazyCache.has(p.id)) lazyCache.set(p.id, lazy(p.load));
+  return lazyCache.get(p.id)!;
+}
+
+const FORGET_AFTER_MS = 180 * MIN_MS;
+
+const titles: Record<Period, string> = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
 
 export default function Today() {
-  const now = Date.now();
-  const from = startOfLocalDay(now);
+  const state = useMock();
+  const { activities, entries } = state;
+  const now = useNow(1000);
+  const [scale, setScale] = useState<Period>('day');
+  const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  const colors = useMemo(() => activityColors(activities), [activities]);
+  const { from, to } = periodRange(scale, now);
+  const spans = toSpans(entries, colors, from, to, now);
+  const total = spans.reduce((sum, s) => sum + s.end - s.start, 0);
+  const run = running(state);
+  const plugin = findVisualization(state.vizId);
+  const Viz = lazyViz(plugin);
+
+  const name = (id: string) => pathOf(activities, id).map((a) => a.name);
   const date = new Date(now).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // Частые занятия: топ-6 по числу записей за 2 недели.
+  const quick = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const e of entries) if (e.start > Date.now() - 14 * 86_400_000) count.set(e.activityId, (count.get(e.activityId) ?? 0) + 1);
+    return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => id);
+  }, [entries]);
+
+  const forgotten = run && now - run.start > FORGET_AFTER_MS && state.forgottenAsked !== run.id ? run : null;
 
   return (
     <div className="screen">
-      <h1>Сегодня</h1>
-      <p className="dim" style={{ marginTop: -8 }}>{date}</p>
-      <Suspense fallback={null}>
-        <Visualization
-          scale="day"
-          from={from}
-          to={startOfNextLocalDay(now)}
-          spans={[]}
-          runningEntryId={null}
-          onSelect={() => {}}
+      <div className="today-head">
+        <div>
+          <h1>{titles[scale]}</h1>
+          <p className="dim sub">{scale === 'day' ? date : `полезного: ${formatDuration(total)}`}</p>
+        </div>
+        {scale === 'day' && <div className="today-total">{formatDuration(total)}</div>}
+      </div>
+
+      {state.backupBanner && (
+        <div className="banner">
+          <span>Бэкап не делали 4 дня</span>
+          <button className="btn small primary" onClick={() => shareBackup(state)}>Сохранить</button>
+          <button className="banner-x" onClick={dismissBackupBanner}>✕</button>
+        </div>
+      )}
+
+      <Segmented
+        options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
+        value={scale}
+        onChange={setScale}
+      />
+
+      <div className="viz">
+        <Suspense fallback={null}>
+          <Viz
+            scale={scale}
+            from={from}
+            to={to}
+            spans={spans}
+            runningEntryId={run?.id ?? null}
+            onSelect={(id) => {
+              const e = entries.find((x) => x.id === id);
+              if (e) setSelected({ entry: e, isNew: false });
+            }}
+          />
+        </Suspense>
+      </div>
+
+      {/* Только для макетов: быстро сравнить два варианта мозаики. */}
+      <div className="compare">
+        <span className="dim">Макет · вид мозаики:</span>
+        <Segmented
+          options={visualizations.map((v) => ({ id: v.id, label: v.id === 'mosaic-hours' ? 'По часам' : 'Плотно' }))}
+          value={plugin.id}
+          onChange={setViz}
         />
-      </Suspense>
-      <p className="dim">Здесь будут таймер и быстрые кнопки занятий.</p>
+      </div>
+
+      {run ? (
+        <div className="timer" style={{ background: colors.get(run.activityId) }} onClick={() => setSelected({ entry: run, isNew: false })}>
+          <div className="timer-info">
+            <div className="timer-path">{name(run.activityId).slice(0, -1).join(' › ')}</div>
+            <div className="timer-name">{name(run.activityId).at(-1)}</div>
+            <div className="timer-since">с {formatClock(run.start)}</div>
+          </div>
+          <div className="timer-clock">{formatTimer(now - run.start)}</div>
+          <button className="timer-stop" onClick={(e) => { e.stopPropagation(); stopTimer(); }}>■</button>
+        </div>
+      ) : (
+        <div className="timer idle">Ничего не идёт. Тапни занятие, чтобы начать.</div>
+      )}
+
+      <div className="quick">
+        {quick.map((id) => {
+          const active = run?.activityId === id;
+          const path = name(id);
+          return (
+            <button key={id} className={'chip' + (active ? ' active' : '')} onClick={() => (active ? stopTimer() : startTimer(id))}>
+              <span className="dot" style={{ background: colors.get(id) }} />
+              <span className="chip-text">
+                <span>{path.at(-1)}</span>
+                {path.length > 1 && <small className="dim">{path.at(-2)}</small>}
+              </span>
+            </button>
+          );
+        })}
+        <button className="chip more" onClick={() => setPicking(true)}>Все занятия…</button>
+      </div>
+
+      <button
+        className="btn ghost"
+        onClick={() => setSelected({
+          entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: quick[0] ?? 'work', start: now - 60 * MIN_MS, end: now, source: 'manual', updatedAt: now },
+          isNew: true,
+        })}
+      >
+        ＋ Добавить задним числом
+      </button>
+
+      {picking && (
+        <ActivityPicker
+          activities={activities}
+          colors={colors}
+          title="Запустить таймер"
+          onPick={(id) => { startTimer(id); setPicking(false); }}
+          onClose={() => setPicking(false)}
+        />
+      )}
+
+      {selected && <EntrySheet entry={selected.entry} isNew={selected.isNew} onClose={() => setSelected(null)} />}
+
+      {forgotten && <ForgottenDialog entry={forgotten} name={name(forgotten.activityId).at(-1)!} now={now} />}
     </div>
+  );
+}
+
+// «Таймер идёт 5 ч, всё ещё гуляешь с собакой?»
+function ForgottenDialog({ entry, name, now }: { entry: Entry; name: string; now: number }) {
+  const [stopAt, setStopAt] = useState(formatClock(entry.start + 60 * MIN_MS));
+  const stop = () => {
+    const [h, m] = stopAt.split(':').map(Number);
+    const d = new Date(entry.start);
+    d.setHours(h, m, 0, 0);
+    let t = d.getTime();
+    if (t <= entry.start) t += 86_400_000;
+    saveEntry({ ...entry, end: Math.min(t, now) });
+  };
+  return (
+    <Sheet title="Таймер не забыт?" onClose={() => markForgottenAsked(entry.id)}>
+      <div className="form">
+        <p className="center">«{name}» идёт уже <b>{formatDuration(now - entry.start)}</b> (с {formatClock(entry.start)}). Всё ещё идёт?</p>
+        <button className="btn primary" onClick={() => markForgottenAsked(entry.id)}>Да, идёт</button>
+        <label className="field time">
+          <span className="dim">Нет, закончил в</span>
+          <input type="time" value={stopAt} onChange={(e) => setStopAt(e.target.value)} />
+        </label>
+        <button className="btn" onClick={stop}>Остановить в {stopAt}</button>
+      </div>
+    </Sheet>
   );
 }

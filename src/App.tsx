@@ -27,7 +27,7 @@ export default function App() {
         {tab === 'today' && <Today />}
         {tab === 'timeline' && <Timeline />}
         {tab === 'stats' && <Stats />}
-        {tab === 'more' && <More />}
+        {tab === 'more' && <More goToday={() => setTab('today')} />}
       </Suspense>
       <nav className="tabbar">
         {tabs.map((t) => (
