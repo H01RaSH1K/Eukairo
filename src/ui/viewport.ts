@@ -1,21 +1,7 @@
-// iOS, приложение с экрана «Домой»: окно (window.innerHeight, а с ним height: 100%
-// и position: fixed; bottom: 0) иногда короче физического экрана, и снизу остаётся
-// пустая полоса. Меряем недостачу и отдаём в CSS как --vp-gap: корень на столько
-// выше, а прибитое к низу (таб-бар, листы, фокус) — на столько ниже.
-
+// Для проверки на телефоне («Ещё», внизу): на сколько окно короче экрана.
+// В iOS 26 у приложения с «Домой» бывает недостача на высоту строки состояния —
+// лечится в CSS (theme.css, display-mode: standalone), здесь только замер.
 export function viewportGap(): number {
-  // navigator.standalone есть только в Safari, поэтому в типах его нет — отсюда any
-  const standalone = (navigator as any).standalone === true || matchMedia('(display-mode: standalone)').matches;
   const portrait = window.innerHeight > window.innerWidth;
-  if (!standalone || !portrait) return 0;
-  const gap = screen.height - window.innerHeight;
-  return gap > 0 && gap < 150 ? gap : 0; // больше — это не наш баг, а что-то другое
+  return portrait ? Math.max(0, screen.height - window.innerHeight) : 0;
 }
-
-function apply() {
-  document.documentElement.style.setProperty('--vp-gap', `${viewportGap()}px`);
-}
-
-apply();
-window.addEventListener('resize', apply);
-window.addEventListener('orientationchange', apply);

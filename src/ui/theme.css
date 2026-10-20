@@ -406,9 +406,10 @@ input.field { -webkit-user-select: text; user-select: text; }
 .field input[type='date'] { text-align: right; }
 .btn-row .btn.arrow { flex: 0 0 48px; }
 
-/* Недостача высоты окна в iOS-приложении (ui/viewport.ts, обычно 0) */
-html, body { overflow: hidden; }
-#root { height: calc(100% + var(--vp-gap, 0px)); }
-.tabbar { bottom: calc(0px - var(--vp-gap, 0px)); }
-.sheet-backdrop { bottom: calc(0px - var(--vp-gap, 0px)); }
-.fab { bottom: calc(env(safe-area-inset-bottom) + var(--tabbar-h) + 16px - var(--vp-gap, 0px)); }
+/* iOS 26, приложение с «Домой» (viewport-fit=cover + black-translucent): пока страница
+   ниже экрана, окно WebKit короче на высоту строки состояния и снизу остаётся полоса,
+   куда рисовать нельзя (WebKit bug 301108). Страница не ниже экрана — окно полное.
+   min() не даёт лишней прокрутки, когда строка состояния непрозрачная (inset 0). */
+@media (display-mode: standalone) {
+  html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top))); }
+}
