@@ -66,6 +66,11 @@ export function useAppearance(): Appearance {
 /** Текущее оформление без подписки — для бэкапа. */
 export const currentAppearance = (): Appearance => state;
 
+/** Целиком заменить оформление (восстановление из бэкапа). Чужие/битые значения чистятся. */
+export function replaceAppearance(a: Partial<Appearance>) {
+  set({ day: clean(a.day), week: clean(a.week), month: clean(a.month) });
+}
+
 /** Значения настроек стиля на этом масштабе, с умолчаниями (по умолчанию — выбранного стиля). */
 export function settingsOf(a: Appearance, scale: Scale, vizId = a[scale].vizId): SettingValues {
   return withDefaults(findVisualization(vizId).settings, a[scale].settings[vizId]);

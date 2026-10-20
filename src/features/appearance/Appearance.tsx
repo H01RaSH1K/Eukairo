@@ -2,7 +2,7 @@ import { Suspense, useMemo, useState } from 'react';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
 import { addLocalDays, periodRange, type Period } from '../../domain/time';
-import { running, useMock } from '../../mock/store';
+import { useData } from '../../db/store';
 import { applyToAll, resetSettings, setSetting, setVisualization, settingsOf, useAppearance } from '../../settings/appearance';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
@@ -14,15 +14,14 @@ import { SettingControl } from './SettingControl';
 // Сверху выбираем, что настраиваем; ниже живое превью, стили с миниатюрами и настройки стиля.
 // Настройки берутся из описаний в реестре, поэтому новый стиль появляется здесь сам.
 export default function Appearance({ onBack }: { onBack: () => void }) {
-  const mock = useMock();
-  const { activities, entries } = mock;
+  const { activities, entries, running } = useData();
   const look = useAppearance();
   const now = useNow(30_000);
   const [scale, setScale] = useState<Period>('day');
   const plugin = findVisualization(look[scale].vizId);
   const values = settingsOf(look, scale);
   const colors = useMemo(() => activityColors(activities), [activities]);
-  const runId = running(mock)?.id ?? null;
+  const runId = running?.id ?? null;
 
   const { from, to } = periodRange(scale, now);
   const spans = toSpans(entries, colors, from, to, now);

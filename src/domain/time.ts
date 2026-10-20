@@ -87,3 +87,11 @@ export function formatTimer(ms: number): string {
   const m = Math.floor((s % 3600) / 60);
   return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** Русское множественное число: plural(5, ['запись', 'записи', 'записей']) → «записей». */
+export function plural(n: number, [one, few, many]: [string, string, string]): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}

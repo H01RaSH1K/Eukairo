@@ -1,12 +1,14 @@
-// Демо-данные для макетов: дерево занятий и ~5 недель правдоподобных записей.
-// Когда появится настоящее ядро, эта папка удаляется целиком.
-import type { Activity, Entry } from '../db/schema';
+// Демо-данные: дерево занятий и ~5 недель правдоподобных записей.
+// Нужны, чтобы посмотреть мозаику и сводки на «живых» данных. Модуль грузится
+// только по кнопке «Ещё → Демо-данные» и в стартовый бандл не попадает.
+import { db, type Activity, type Entry } from './schema';
+import { newId } from './commands';
 import { addLocalDays, HOUR_MS, MIN_MS, startOfLocalDay } from '../domain/time';
 
 const a = (id: string, parentId: string | null, name: string, order: number, extra: Partial<Activity> = {}): Activity =>
   ({ id, parentId, name, order, updatedAt: 0, ...extra });
 
-export const demoActivities: Activity[] = [
+const demoActivities: Activity[] = [
   a('work', null, 'Работа', 0, { hue: 215, icon: '💼', timerMinMin: 25, timerMaxMin: 240 }),
   a('euk', 'work', 'Eukairo', 0),
   a('code', 'euk', 'Код', 0),
@@ -59,10 +61,7 @@ const weekend: Slot[] = [
   ['dog', 21, 40, 60, 1],
 ];
 
-let idCounter = 0;
-export const newId = () => crypto.randomUUID?.() ?? `id-${Date.now()}-${idCounter++}`;
-
-export function makeDemoEntries(now: number): Entry[] {
+function makeDemoEntries(now: number): Entry[] {
   const rand = rng(42);
   const entries: Entry[] = [];
   const today = startOfLocalDay(now);
@@ -98,4 +97,14 @@ export function makeDemoEntries(now: number): Entry[] {
   const start = Math.max(last ? last.end! + 5 * MIN_MS : today, now - 25 * MIN_MS);
   if (start < now) entries.push({ id: newId(), activityId: 'code', start, end: null, source: 'timer', updatedAt: now });
   return entries;
+}
+
+/** Стереть занятия и записи и заполнить демо-данными. Настройки не трогаем. */
+export function fillDemo() {
+  return db.transaction('rw', db.activities, db.entries, async () => {
+    await Promise.all([db.activities.clear(), db.entries.clear()]);
+    const now = Date.now();
+    await db.activities.bulkAdd(demoActivities.map((a) => ({ ...a, updatedAt: now })));
+    await db.entries.bulkAdd(makeDemoEntries(now));
+  });
 }

@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } fro
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
-import { pathOf, timerRange } from '../../domain/tree';
+import { isHidden, pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
 import { ChargeCards } from './controls/ChargeCards';
 import { ClockRing } from './controls/ClockRing';
@@ -11,9 +11,11 @@ import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
 import { MIN_MS, addLocalDays, formatClock, formatDuration, periodRange, type Period } from '../../domain/time';
-import {
-  dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
-} from '../../mock/store';
+import { answerForgotten, saveEntry, snoozeBackupBanner, startTimer, stopTimer } from '../../db/commands';
+import { settingOf, useData } from '../../db/store';
+import { shareBackup } from '../../db/backup';
+import { forgottenTimer, type ForgottenAnswer } from '../../domain/forgotten';
+import { defaultActivity, quickActivities } from '../../domain/quick';
 import { findVisualization } from '../../visualizations/registry';
 import { settingsOf, useAppearance } from '../../settings/appearance';
 import { setFocus, useDesign } from '../../settings/design';
@@ -23,9 +25,8 @@ import { Sheet } from '../../ui/Sheet';
 import { useNow } from '../../ui/useNow';
 import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
-import { shareBackup } from '../more/backup';
 
-const FORGET_AFTER_MS = 180 * MIN_MS;
+const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
 
 const titles: Record<Period, string> = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
 
@@ -45,8 +46,8 @@ function periodTitle(scale: Period, from: number, to: number): string {
 }
 
 export default function Today() {
-  const state = useMock();
-  const { activities, entries } = state;
+  const data = useData();
+  const { activities, entries, running: run } = data;
   const now = useNow(1000);
   const [scale, setScale] = useState<Period>('day');
   const [offset, setOffset] = useState(0); // 0 = текущий период, -1 = предыдущий…
@@ -63,7 +64,6 @@ export default function Today() {
   const isCurrent = offset === 0;
   const spans = toSpans(entries, colors, from, to, now);
   const total = spans.reduce((sum, s) => sum + s.end - s.start, 0);
-  const run = running(state);
   const look = useAppearance();
   const design = useDesign();
   const [drawerOpen, setDrawerOpen] = useState(true);
@@ -77,29 +77,29 @@ export default function Today() {
   const name = (id: string) => pathOf(activities, id).map((a) => a.name);
   const date = new Date(now).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  // Частые занятия: топ-6 по числу записей за 2 недели.
-  const quick = useMemo(() => {
-    const count = new Map<string, number>();
-    for (const e of entries) if (e.start > Date.now() - 14 * 86_400_000) count.set(e.activityId, (count.get(e.activityId) ?? 0) + 1);
-    return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => id);
-  }, [entries]);
+  // Частые занятия: топ-6 по числу записей за 2 недели (мало истории — добиваем корнями дерева).
+  const quick = useMemo(() => quickActivities(activities, entries, Date.now()), [activities, entries]);
 
   // Занятие на полукруге: идущее, выбранное или самое частое.
-  const dialId = run?.activityId ?? chosen ?? quick[0] ?? activities[0].id;
+  // Выбранное могли успеть завершить в «Занятиях» — тогда берём частое.
+  const chosenOk = chosen && !isHidden(activities, chosen) ? chosen : null;
+  const dialId = run?.activityId ?? chosenOk ?? quick[0] ?? '';
   const range = timerRange(activities, dialId);
   // Длительность помним для каждого занятия; по умолчанию — середина диапазона.
   const minutes = Math.min(range[1], Math.max(range[0], minutesFor[dialId] ?? Math.round((range[0] + range[1]) / 10) * 5));
 
-  // Таймер на время закрывается сам ровно в назначенную минуту.
-  useEffect(() => {
-    if (run?.plannedEnd && now >= run.plannedEnd) stopTimer(run.plannedEnd);
-  }, [run, now]);
+  // Таймер на время закрывается сам ровно в назначенную минуту — это следит db/store.ts.
 
-  // «Забыл выключить» — только у таймера без лимита.
-  const forgotten = run && !run.plannedEnd && now - run.start > FORGET_AFTER_MS && state.forgottenAsked !== run.id ? run : null;
+  // «Забыл выключить» — только у таймера без лимита; порог — у занятия (по умолчанию 3 ч).
+  const forgotten = forgottenTimer(run, activities, now, settingOf<ForgottenAnswer | null>(data, 'forgottenAnswer', null));
+
+  // Плашка бэкапа: бэкапа не было 3 дня (а если не было вовсе — с первой записи прошло 3 дня).
+  const lastBackup = settingOf<number | null>(data, 'lastBackupAt', null);
+  const since = lastBackup ?? entries[0]?.start ?? now;
+  const backupDue = now - since > BACKUP_EVERY_MS && now > settingOf(data, 'backupSnoozeUntil', 0);
 
   const newRetro = () => setSelected({
-    entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: quick[0] ?? 'work', start: now - 60 * MIN_MS, end: now, source: 'manual', updatedAt: now },
+    entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: defaultActivity(activities, entries) ?? '', start: now - 60 * MIN_MS, end: now, source: 'manual', updatedAt: now },
     isNew: true,
   });
 
@@ -170,11 +170,11 @@ export default function Today() {
 
   // ——— общие куски экрана; компоновка ниже расставляет их по-разному ———
 
-  const banner = state.backupBanner && (
+  const banner = backupDue && (
     <div className="banner">
-      <span>Бэкап не делали 4 дня</span>
-      <button className="btn small primary" onClick={() => shareBackup(state)}>Сохранить</button>
-      <button className="banner-x" onClick={dismissBackupBanner}>✕</button>
+      <span>{lastBackup === null ? 'Бэкапа ещё не было' : `Бэкап не делали ${Math.floor((now - lastBackup) / 86_400_000)} дн.`}</span>
+      <button className="btn small primary" onClick={() => void shareBackup()}>Сохранить</button>
+      <button className="banner-x" onClick={() => void snoozeBackupBanner()}>✕</button>
     </div>
   );
 
@@ -234,9 +234,9 @@ export default function Today() {
         run={run}
         now={now}
         onPick={() => setPicking(true)}
-        onStart={() => startTimer(dialId, minutes * MIN_MS)}
-        onStartFree={() => startTimer(dialId)}
-        onStop={() => stopTimer()}
+        onStart={() => void startTimer(dialId, minutes * MIN_MS)}
+        onStartFree={() => void startTimer(dialId)}
+        onStop={() => void stopTimer()}
         onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
       />
     );
@@ -297,7 +297,9 @@ export default function Today() {
       {head}
       {banner}
       {viz}
-      {drawer}
+      {dialId ? drawer : (
+        <div className="widget pad center dim">Нет занятий — добавь их в «Ещё → Занятия»</div>
+      )}
       {/* в фокусе — только витраж и едва заметная кнопка выхода */}
       {focus && (
         <>
@@ -335,13 +337,13 @@ function ForgottenDialog({ entry, name, now }: { entry: Entry; name: string; now
     d.setHours(h, m, 0, 0);
     let t = d.getTime();
     if (t <= entry.start) t += 86_400_000;
-    saveEntry({ ...entry, end: Math.min(t, now) });
+    void saveEntry({ ...entry, end: Math.min(t, now) });
   };
   return (
-    <Sheet title="Таймер не забыт?" onClose={() => markForgottenAsked(entry.id)}>
+    <Sheet title="Таймер не забыт?" onClose={() => void answerForgotten(entry.id)}>
       <div className="form">
         <p className="center">«{name}» идёт уже <b>{formatDuration(now - entry.start)}</b> (с {formatClock(entry.start)}). Всё ещё идёт?</p>
-        <button className="btn primary" onClick={() => markForgottenAsked(entry.id)}>Да, идёт</button>
+        <button className="btn primary" onClick={() => void answerForgotten(entry.id)}>Да, идёт</button>
         <label className="field time">
           <span className="dim">Нет, закончил в</span>
           <input type="time" value={stopAt} onChange={(e) => setStopAt(e.target.value)} />

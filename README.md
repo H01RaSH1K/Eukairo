@@ -29,10 +29,10 @@ npm run build   # сборка в dist/
 src/
   main.tsx          точка входа
   App.tsx           нижние вкладки
-  db/               схема базы; все изменения данных — через команды
+  db/               схема базы, store (чтение), commands (ВСЕ записи), бэкап, демо-данные
   domain/           чистые функции про время + тесты
   visualizations/   плагины визуализации (первый — мозаика)
-  features/         экраны: today, timeline, stats, more
+  features/         экраны: today, timeline, stats, more, activities (редактор занятий)
   platform/         всё платформенное (веб сейчас, Capacitor потом)
   ui/               тема и общие компоненты
 ```

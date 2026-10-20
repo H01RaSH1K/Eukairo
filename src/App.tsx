@@ -1,4 +1,5 @@
 import { Suspense, lazy, useState } from 'react';
+import { useData } from './db/store';
 import Today from './features/today/Today';
 
 // «Сегодня» грузится сразу (стартовый экран), остальные вкладки — при первом открытии.
@@ -20,6 +21,18 @@ const tabs: { id: Tab; title: string; icon: string }[] = [
 export default function App() {
   // useState ≈ поле, при изменении которого React перерисовывает компонент.
   const [tab, setTab] = useState<Tab>('today');
+  const { ready, error } = useData();
+
+  // База открывается доли секунды — до этого рисуем пустой фон, а не пустые экраны.
+  if (!ready) return null;
+  if (error) {
+    return (
+      <div className="screen fit">
+        <h1>Не открылась база</h1>
+        <div className="widget pad">Safari не дал доступ к хранилищу ({error}). Если это приватный режим — открой приложение в обычном.</div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -27,7 +40,7 @@ export default function App() {
         {tab === 'today' && <Today />}
         {tab === 'timeline' && <Timeline />}
         {tab === 'stats' && <Stats />}
-        {tab === 'more' && <More goToday={() => setTab('today')} />}
+        {tab === 'more' && <More />}
       </Suspense>
       <nav className="tabbar">
         {tabs.map((t) => (

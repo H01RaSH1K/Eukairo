@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import { timerRange } from '../../../domain/tree';
 import { MIN_MS, formatClock, formatTimer } from '../../../domain/time';
-import { startTimer, stopTimer } from '../../../mock/store';
+import { startTimer, stopTimer } from '../../../db/commands';
 import { shortMin } from '../Dial';
 import type { ControlProps } from './types';
 
