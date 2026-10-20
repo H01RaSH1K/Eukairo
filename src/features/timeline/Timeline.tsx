@@ -11,6 +11,11 @@ import { EntrySheet } from './EntrySheet';
 
 const GAP_MIN_MS = 20 * MIN_MS; // пустоты короче не показываем
 
+// Высота строки — по длительности: час = PX_PER_HOUR пикселей. Снизу ограничено,
+// чтобы короткая запись осталась читаемой; длинную пустоту (ночь) ограничиваем сверху.
+const PX_PER_HOUR = 80;
+const heightOf = (ms: number, min: number, max = Infinity) => Math.min(max, Math.max(min, (ms / HOUR_MS) * PX_PER_HOUR));
+
 // Лента дня: записи по порядку, пустоты между ними можно заполнить задним числом.
 export default function Timeline() {
   const { activities, entries } = useMock();
@@ -38,18 +43,18 @@ export default function Timeline() {
   // Собираем строки: запись, пустота, запись…
   const rows: ReactNode[] = [];
   list.forEach((e, i) => {
+    const end = e.end ?? now;
     const prevEnd = i === 0 ? null : list[i - 1].end ?? now;
     if (prevEnd !== null && e.start - prevEnd >= GAP_MIN_MS) {
       rows.push(
-        <button key={'gap' + e.id} className="gap" onClick={() => draft(prevEnd, e.start)}>
+        <button key={'gap' + e.id} className="gap" style={{ height: heightOf(e.start - prevEnd, 34, 3 * PX_PER_HOUR) }} onClick={() => draft(prevEnd, e.start)}>
           Пусто {formatClock(prevEnd)}–{formatClock(e.start)} · {formatDuration(e.start - prevEnd)} <b>＋</b>
         </button>,
       );
     }
     const path = pathOf(activities, e.activityId).map((a) => a.name);
-    const end = e.end ?? now;
     rows.push(
-      <div key={e.id} className="entry" onClick={() => setSelected({ entry: e, isNew: false })}>
+      <div key={e.id} className="entry" style={{ height: heightOf(end - e.start, 56) }} onClick={() => setSelected({ entry: e, isNew: false })}>
         <span className="entry-bar" style={{ background: colors.get(e.activityId) }} />
         <div className="entry-main">
           <div>{path.at(-1)}</div>

@@ -208,7 +208,8 @@ input.field { -webkit-user-select: text; user-select: text; }
 .day-nav button { border: 0; background: var(--surface); color: var(--text); width: 40px; height: 40px; border-radius: 50%; font-size: 22px; }
 .day-nav button:disabled { opacity: .3; }
 .entries { display: flex; flex-direction: column; gap: 6px; }
-.entry { display: flex; align-items: stretch; gap: 12px; background: var(--surface); border-radius: 12px; padding: 10px 12px 10px 10px; }
+.entries > * { flex: none; box-sizing: border-box; } /* высота — по длительности (Timeline.tsx), не сжимать */
+.entry { display: flex; align-items: stretch; gap: 12px; background: var(--surface); border-radius: 12px; padding: 10px 12px 10px 10px; overflow: hidden; }
 .entry-bar { width: 5px; border-radius: 3px; flex: none; }
 .entry-main { flex: 1; min-width: 0; }
 .entry-time { text-align: right; font-variant-numeric: tabular-nums; }
