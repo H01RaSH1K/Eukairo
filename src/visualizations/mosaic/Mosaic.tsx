@@ -1,40 +1,43 @@
 import { useMemo, type ComponentType } from 'react';
-import type { Span, VisualizationProps } from '../types';
-import { dayStarts, startOfLocalDay } from '../../domain/time';
+import type { VisualizationProps } from '../types';
+import { HOUR_MS, dayStarts } from '../../domain/time';
 import { hourOwners } from './layout';
 import { getPattern, leadPath, type PatternId } from './patterns';
 import './mosaic.css';
 
-// Мозаика-витраж: день делится на 24 сегмента по узору, сегмент = час суток.
+// Мозаика-витраж: период делится на сегменты по узору, сегмент = час
+// (день — 24, неделя — 168, месяц — 24 × дней; всегда одна картина).
 // Час целиком одного цвета — цвета записи, занявшей бо́льшую его часть (от 30 мин).
 // Часы одной записи сливаются в одну фигуру: между ними нет свинцовой линии.
 
-function DayGlass({ pattern, spans, dayStart, runningEntryId, onSelect, small }: {
-  pattern: PatternId;
-  spans: Span[];
-  dayStart: number;
-  runningEntryId: string | null;
-  onSelect: (id: string) => void;
-  small?: boolean;
-}) {
-  const { w, h, cells } = getPattern(pattern);
-  const owners = hourOwners(spans, dayStart);
+const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
+
+function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: VisualizationProps & { pattern: PatternId }) {
+  const days = dayStarts(from, to);
+  const { w, h, cells, decor } = getPattern(pattern, days.length);
+  // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
+  const owners = days.flatMap((d) => hourOwners(spans, d));
   const ownerIds = owners.map((o) => o?.entryId ?? null);
-  // Пересчитываем линии, только когда меняются хозяева часов (≈ кэш по ключу).
+  // Линии пересчитываем, только когда меняются хозяева часов (≈ кэш по ключу).
   const key = ownerIds.join('|');
-  const lead = useMemo(() => leadPath(cells, ownerIds), [pattern, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lead = useMemo(() => leadPath([...cells, ...(decor ?? [])], ownerIds), [cells, key]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const now = Date.now();
-  const nowHour = now >= dayStart && now < dayStart + 24 * 3_600_000 ? Math.floor((now - dayStart) / 3_600_000) : -1;
+  const dayIdx = days.findIndex((d, i) => now >= d && now < (days[i + 1] ?? to));
+  const nowCell = dayIdx >= 0 ? dayIdx * 24 + Math.floor((now - days[dayIdx]) / HOUR_MS) : -1;
+  const pts = (i: number) => cells[i].map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
 
   return (
-    <svg className={'glass' + (small ? ' small' : '') + (pattern === 'rose' ? ' round' : '')} viewBox={`-1 -1 ${w + 2} ${h + 2}`}>
-      {cells.map((poly, i) => {
+    <svg className={'glass ' + scale} viewBox={`-1 -1 ${w + 2} ${h + 2}`}>
+      {decor?.map((poly, i) => (
+        <polygon key={'d' + i} points={poly.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ')} className="glass-decor" />
+      ))}
+      {cells.map((_, i) => {
         const o = owners[i];
-        const pts = poly.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
         return (
           <polygon
             key={i}
-            points={pts}
+            points={pts(i)}
             // Обводка цветом заливки прячет тонкие щели между слитыми сегментами.
             fill={o ? o.color : undefined}
             stroke={o ? o.color : undefined}
@@ -43,36 +46,9 @@ function DayGlass({ pattern, spans, dayStart, runningEntryId, onSelect, small }:
           />
         );
       })}
-      <path d={lead} className="glass-lead" />
-      {!small && nowHour >= 0 && (
-        <polygon
-          points={cells[nowHour].map((p) => p.join(',')).join(' ')}
-          className="glass-now"
-        />
-      )}
+      <path d={lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] }} />
+      {nowCell >= 0 && nowCell < cells.length && <polygon points={pts(nowCell)} className="glass-now" style={{ strokeWidth: leadWidth[scale] * 0.6 }} />}
     </svg>
-  );
-}
-
-function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: VisualizationProps & { pattern: PatternId }) {
-  if (scale === 'day') {
-    return <DayGlass pattern={pattern} spans={spans} dayStart={from} runningEntryId={runningEntryId} onSelect={onSelect} />;
-  }
-  const days = dayStarts(from, to);
-  const today = startOfLocalDay(Date.now());
-  // Неделя — 7 витражей в ряд; месяц — календарь из маленьких витражей.
-  const offset = scale === 'month' ? (new Date(days[0]).getDay() + 6) % 7 : 0;
-  return (
-    <div className="glass-cal">
-      {['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((d) => <div key={d} className="glass-calhead">{d}</div>)}
-      {Array.from({ length: offset }, (_, i) => <div key={'e' + i} />)}
-      {days.map((d) => (
-        <div key={d} className={'glass-day' + (d === today ? ' today' : '')}>
-          {scale === 'month' && <span className="glass-date">{new Date(d).getDate()}</span>}
-          <DayGlass pattern={pattern} spans={spans} dayStart={d} runningEntryId={runningEntryId} onSelect={onSelect} small />
-        </div>
-      ))}
-    </div>
   );
 }
 

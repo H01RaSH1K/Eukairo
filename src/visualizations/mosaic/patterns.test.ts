@@ -8,14 +8,16 @@ const area = (poly: [number, number][]) =>
   }, 0)) / 2;
 
 describe('узоры', () => {
-  it.each(['grid', 'glass', 'tri'] as PatternId[])('%s: 24 сегмента покрывают картину без дыр', (id) => {
-    const p = getPattern(id);
-    expect(p.cells).toHaveLength(24);
-    expect(p.cells.reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 2);
+  it.each(['grid', 'glass', 'shards', 'hex', 'spiral', 'tri'] as PatternId[])('%s: сегменты покрывают картину без дыр', (id) => {
+    for (const days of [1, 7, 31]) {
+      const p = getPattern(id, days);
+      expect(p.cells).toHaveLength(days * 24);
+      expect([...p.cells, ...(p.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 1);
+    }
   });
 
-  it('роза: 24 лепестка', () => {
-    expect(getPattern('rose').cells).toHaveLength(24);
+  it('роза: кольцо на день', () => {
+    expect(getPattern('rose', 7).cells).toHaveLength(168);
   });
 });
 
@@ -26,6 +28,6 @@ describe('leadPath', () => {
     const owner = Array(24).fill(null);
     owner[0] = owner[1] = 'e1'; // 0:00 и 1:00 — соседи в сетке
     const merged = leadPath(cells, owner).split('M').length;
-    expect(none - merged).toBe(2); // общее ребро было нарисовано дважды (по разу от каждой клетки)
+    expect(none - merged).toBe(1); // общее ребро больше не рисуется
   });
 });

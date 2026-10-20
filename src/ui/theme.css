@@ -220,3 +220,7 @@ input.field { -webkit-user-select: text; user-select: text; }
 .field.time .field-value { font-size: 20px; }
 .field-row > * { flex: 1; }
 .viz-caption { font-size: 12px; text-align: center; margin: 6px 0 8px; }
+.chips-scroll { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px; scrollbar-width: none; }
+.chips-scroll::-webkit-scrollbar { display: none; }
+.chips-scroll button { flex: none; border: 0; border-radius: 16px; padding: 7px 12px; background: var(--surface); color: var(--text-dim); font: inherit; font-size: 13px; }
+.chips-scroll button[aria-pressed='true'] { background: #3a3a43; color: var(--text); }

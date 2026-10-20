@@ -96,11 +96,11 @@ export default function Today() {
         </Suspense>
         <p className="dim viz-caption">Сегмент = час суток. Часы одной записи сливаются в одну фигуру.</p>
         {/* Только для макетов: быстро сравнить узоры деления. */}
-        <Segmented
-          options={visualizations.map((v) => ({ id: v.id, label: v.title.split(' ')[0] }))}
-          value={plugin.id}
-          onChange={setViz}
-        />
+        <div className="chips-scroll">
+          {visualizations.map((v) => (
+            <button key={v.id} aria-pressed={v.id === plugin.id} onClick={() => setViz(v.id)}>{v.title}</button>
+          ))}
+        </div>
       </div>
 
       {run ? (
