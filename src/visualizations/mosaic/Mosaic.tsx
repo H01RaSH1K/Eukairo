@@ -84,7 +84,9 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
             stroke={o ? o.color : undefined}
             className={(o ? 'glass-fill' : 'glass-empty') + (o && o.entryId === runningEntryId ? ' live' : '')}
             // Доля 0…1 — порядок стекла; дизайн может по ней растянуть анимацию появления.
-            style={{ '--d': (i / cells.length).toFixed(3) } as CSSProperties}
+            // --v — свой оттенок у каждого стекла (0…1, постоянный для номера): дизайн может
+            // подсветить пустые стёкла неравномерно, как настоящее стекло.
+            style={{ '--d': (i / cells.length).toFixed(3), '--v': (((i * 2654435761) >>> 0) % 1000 / 1000).toFixed(3) } as CSSProperties}
             onClick={() => o && onSelect(o.entryId)}
           />
         );

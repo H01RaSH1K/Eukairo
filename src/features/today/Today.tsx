@@ -275,7 +275,15 @@ export default function Today() {
       {viz}
       {drawer}
       {/* в фокусе — только витраж и едва заметная кнопка выхода */}
-      {focus && <button className="focus-exit" onClick={() => focusOn(false)} aria-label="Выйти из фокуса">✕</button>}
+      {focus && (
+        <>
+          {/* свет, проходящий сквозь витраж, — медленно плывёт; тапы проходят насквозь */}
+          <div className="focus-light" />
+          {/* табличка, как под картиной в музее */}
+          <div className="focus-plaque">{periodName} · {formatDuration(total)}</div>
+          <button className="focus-exit" onClick={() => focusOn(false)} aria-label="Выйти из фокуса">✕</button>
+        </>
+      )}
 
       {picking && (
         <ActivityPicker

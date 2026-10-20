@@ -176,7 +176,30 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 }
 .today.focus { padding: 0 !important; }
 /* шторки (запись, выбор занятия) остаются: тап по куску в фокусе открывает запись */
-.today.focus > :not(.widget.viz):not(.focus-exit):not(.sheet-backdrop) { display: none !important; }
+.today.focus > :not(.widget.viz):not(.focus-exit):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque) { display: none !important; }
+/* Пустые стёкла — не плоские: у каждого свой лёгкий оттенок (--v из Mosaic.tsx) */
+.today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), #8a8fb0 calc(4% + var(--v) * 9%)); transition: fill .6s; }
+.today.focus .glass-fill { filter: saturate(1.15); }
+/* Свет: два мягких пятна плывут по витражу (screen — светлеет только то, что под ним) */
+.focus-light {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255,236,200,.22), transparent 45%),
+    radial-gradient(circle at 75% 70%, rgba(170,200,255,.16), transparent 40%);
+  background-size: 200% 200%;
+  animation: light-drift 38s ease-in-out infinite alternate;
+}
+@keyframes light-drift {
+  0% { background-position: 0% 0%, 100% 100%; }
+  50% { background-position: 60% 40%, 30% 60%; }
+  100% { background-position: 100% 100%, 0% 0%; }
+}
+.focus-plaque {
+  position: absolute !important; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 2;
+  text-align: center; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.45);
+  text-shadow: 0 1px 8px rgba(0,0,0,.9); pointer-events: none;
+  animation: fade-in 1.2s .6s ease-out both;
+}
 .today.focus .widget.viz::after { display: none; }
 html[data-focus] .tabbar { display: none; }
 .focus-exit {
@@ -187,7 +210,7 @@ html[data-focus] .tabbar { display: none; }
 .focus-exit:active { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .viz-anim, .glass-fill, .widget.dial { animation: none !important; }
+  .viz-anim, .glass-fill, .widget.dial, .focus-light { animation: none !important; }
 }
 
 /* Невысокий экран (iPhone SE): полукруг и циферблат поменьше, чтобы мозаике осталось места. */
