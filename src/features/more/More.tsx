@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { activityColors } from '../../domain/colors';
-import { childrenOf } from '../../domain/tree';
-import { resetDemo, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
+import { childrenOf, timerRange } from '../../domain/tree';
+import { shortMin } from '../today/Dial';
+import { resetDemo, setActivityTimer, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
 import { useAppearance } from '../../settings/appearance';
 import Appearance from '../appearance/Appearance';
@@ -15,6 +16,7 @@ export default function More({ goToday }: { goToday: () => void }) {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
   const [lookOpen, setLookOpen] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null); // у какого занятия открыт диапазон таймера
   const look = useAppearance();
   // Один стиль на всё — пишем его; разные — «свой у каждого».
   const ids = new Set([look.day.vizId, look.week.vizId, look.month.vizId]);
@@ -29,10 +31,12 @@ export default function More({ goToday }: { goToday: () => void }) {
 
   const tree = (parentId: string | null, depth: number): ReactNode[] =>
     childrenOf(state.activities, parentId).flatMap((a) => [
-      <div key={a.id} className="tree-row" style={{ paddingLeft: 4 + depth * 20 }}>
+      <div key={a.id} className="tree-row" style={{ paddingLeft: 4 + depth * 20 }} onClick={() => setEditing(editing === a.id ? null : a.id)}>
         <span className="dot" style={{ background: colors.get(a.id) }} />
         <span className="tree-name">{a.icon && depth === 0 ? `${a.icon} ` : ''}{a.name}</span>
+        <span className="dim small">{timerRange(state.activities, a.id).map(shortMin).join(' – ')}</span>
       </div>,
+      ...(editing === a.id ? [<TimerRangeEditor key={a.id + '-edit'} id={a.id} own={a.timerMinMin !== undefined} range={timerRange(state.activities, a.id)} />] : []),
       ...tree(a.id, depth + 1),
     ]);
 
@@ -78,9 +82,25 @@ export default function More({ goToday }: { goToday: () => void }) {
       {treeOpen && (
         <Sheet title="Занятия" onClose={() => setTreeOpen(false)}>
           <div className="tree">{tree(null, 0)}</div>
-          <p className="dim small">Цвет детей — оттенки цвета корня. Редактор дерева (добавить, перенести, архив) — на этапе ядра.</p>
+          <p className="dim small">Справа — диапазон ползунка таймера, тапни занятие, чтобы поменять. Дети без своего диапазона берут его у родителя. Цвет детей — оттенки цвета корня. Редактор дерева (добавить, перенести, архив) — на этапе ядра.</p>
         </Sheet>
       )}
+    </div>
+  );
+}
+
+/** Диапазон ползунка таймера у занятия: «от» и «до», шаг 5 минут. */
+function TimerRangeEditor({ id, own, range }: { id: string; own: boolean; range: [number, number] }) {
+  const [lo, hi] = range;
+  return (
+    <div className="range-edit">
+      {!own && <div className="dim small">Сейчас берётся у родителя — подвинь, чтобы задать своё.</div>}
+      <label className="setting-title">Таймер от <span className="setting-value">{shortMin(lo)}</span></label>
+      <input className="slider" type="range" min={5} max={475} step={5} value={lo}
+        onChange={(e) => { const v = Number(e.target.value); setActivityTimer(id, v, Math.max(hi, v + 5)); }} />
+      <label className="setting-title">до <span className="setting-value">{shortMin(hi)}</span></label>
+      <input className="slider" type="range" min={10} max={480} step={5} value={hi}
+        onChange={(e) => { const v = Number(e.target.value); setActivityTimer(id, Math.min(lo, v - 5), v); }} />
     </div>
   );
 }

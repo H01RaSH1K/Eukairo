@@ -7,7 +7,7 @@ const a = (id: string, parentId: string | null, name: string, order: number, ext
   ({ id, parentId, name, order, updatedAt: 0, ...extra });
 
 export const demoActivities: Activity[] = [
-  a('work', null, 'Работа', 0, { hue: 215, icon: '💼' }),
+  a('work', null, 'Работа', 0, { hue: 215, icon: '💼', timerMinMin: 25, timerMaxMin: 240 }),
   a('euk', 'work', 'Eukairo', 0),
   a('code', 'euk', 'Код', 0),
   a('design', 'euk', 'Дизайн', 1),
@@ -15,8 +15,8 @@ export const demoActivities: Activity[] = [
   a('calls', 'alfa', 'Созвоны', 0),
   a('tasks', 'alfa', 'Задачи', 1),
   a('mail', 'work', 'Почта и планы', 2),
-  a('dog', null, 'Прогулка с собакой', 1, { hue: 30, icon: '🐕' }),
-  a('cook', null, 'Готовка', 2, { hue: 352, icon: '🍳' }),
+  a('dog', null, 'Прогулка с собакой', 1, { hue: 30, icon: '🐕', timerMinMin: 10, timerMaxMin: 90 }),
+  a('cook', null, 'Готовка', 2, { hue: 352, icon: '🍳', timerMinMin: 15, timerMaxMin: 120 }),
   a('eng', null, 'Английский', 3, { hue: 275, icon: '🇬🇧' }),
   a('duo', 'eng', 'Duolingo', 0),
   a('series', 'eng', 'Сериалы', 1),

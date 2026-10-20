@@ -312,3 +312,31 @@ input.field { -webkit-user-select: text; user-select: text; }
 .slider { width: 100%; accent-color: var(--accent); margin: 0; }
 .setting-toggle { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; }
 .apply-all { align-self: flex-start; padding-left: 0; }
+
+/* ——— полукруг таймера ——— */
+.widget.dial { position: relative; padding: 10px 12px 12px; }
+.dial-svg { display: block; width: 100%; height: auto; touch-action: none; overflow: visible; }
+.dial-track { fill: none; stroke: #2a2a31; stroke-width: 12; stroke-linecap: round; }
+.dial-fill { fill: none; stroke-width: 12; stroke-linecap: round; transition: d .15s; }
+.dial-fill.free { animation: glass-pulse 1.6s ease-in-out infinite; }
+.dial-handle { fill: #fff; stroke-width: 4; }
+.dial-svg.running .dial-handle { display: none; }
+.dial-tick { fill: var(--text-dim); font-size: 7px; text-anchor: middle; dominant-baseline: hanging; }
+.dial-center {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  width: 56%; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center;
+}
+.dial-activity {
+  border: 0; background: #26262d; color: var(--text); font: inherit; font-size: 14px;
+  border-radius: 999px; padding: 5px 12px; display: flex; align-items: center; gap: 7px;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dial-value { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 4px; }
+.dial-sub { font-size: 12px; }
+.dial-buttons { display: flex; gap: 8px; margin-top: 6px; }
+.dial-go { border: 0; border-radius: 999px; padding: 9px 26px; font: inherit; font-weight: 600; font-size: 16px; color: #0d0d10; }
+.dial-go.stop { background: #3a3a43; color: var(--text); margin-top: 6px; }
+.dial-free { border: 0; border-radius: 999px; width: 40px; background: #26262d; color: var(--text); font-size: 20px; }
+.tree-row .tree-name { flex: 1; }
+.range-edit { margin: 2px 0 10px 28px; padding: 10px 12px; background: #26262d; border-radius: 12px; display: flex; flex-direction: column; gap: 6px; }
+.range-edit .setting-title { margin: 4px 0 0; font-size: 14px; }

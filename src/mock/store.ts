@@ -47,10 +47,17 @@ export function stopTimer(at = Date.now()) {
   set({ entries: state.entries.map((e) => (e.end === null ? { ...e, end: Math.max(at, e.start), updatedAt: Date.now() } : e)) });
 }
 
-export function startTimer(activityId: string) {
+/** Запустить таймер. `durationMs` — на время (запись закроется сама), без него — без лимита. */
+export function startTimer(activityId: string, durationMs?: number) {
   const now = Date.now();
   const closed = state.entries.map((e) => (e.end === null ? { ...e, end: now, updatedAt: now } : e));
-  set({ entries: [...closed, { id: newId(), activityId, start: now, end: null, source: 'timer', updatedAt: now }] });
+  const plannedEnd = durationMs ? now + durationMs : undefined;
+  set({ entries: [...closed, { id: newId(), activityId, start: now, end: null, plannedEnd, source: 'timer', updatedAt: now }] });
+}
+
+/** Диапазон ползунка таймера у занятия (минуты). */
+export function setActivityTimer(id: string, minMin: number, maxMin: number) {
+  set({ activities: state.activities.map((a) => (a.id === id ? { ...a, timerMinMin: minMin, timerMaxMin: maxMin, updatedAt: Date.now() } : a)) });
 }
 
 /** Создать или исправить запись; соседи обрезаются/делятся/удаляются. */

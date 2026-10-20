@@ -36,3 +36,16 @@ export function subtreeIds(all: Activity[], id: string): Set<string> {
   }
   return ids;
 }
+
+/**
+ * Диапазон ползунка таймера в минутах: своё значение или ближайшего предка,
+ * иначе 15…120. (Как forgetAfterMin — настраивается на любом уровне дерева.)
+ */
+export function timerRange(activities: Activity[], id: string): [number, number] {
+  let min: number | undefined, max: number | undefined;
+  for (const a of [...pathOf(activities, id)].reverse()) { // от узла к корню
+    min ??= a.timerMinMin; // ??= ≈ «присвоить, если ещё null» (как ??= в C#)
+    max ??= a.timerMaxMin;
+  }
+  return [min ?? 15, Math.max(max ?? 120, (min ?? 15) + 5)];
+}

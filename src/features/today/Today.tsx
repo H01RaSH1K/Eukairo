@@ -1,9 +1,10 @@
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
-import { pathOf } from '../../domain/tree';
-import { MIN_MS, addLocalDays, formatClock, formatDuration, formatTimer, periodRange, type Period } from '../../domain/time';
+import { pathOf, timerRange } from '../../domain/tree';
+import { Dial } from './Dial';
+import { MIN_MS, addLocalDays, formatClock, formatDuration, periodRange, type Period } from '../../domain/time';
 import {
   dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
 } from '../../mock/store';
@@ -44,6 +45,8 @@ export default function Today() {
   const [offset, setOffset] = useState(0); // 0 = текущий период, -1 = предыдущий…
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [minutesFor, setMinutesFor] = useState<Record<string, number>>({});
 
   const colors = useMemo(() => activityColors(activities), [activities]);
   const { from, to } = periodRange(scale, shift(scale, now, offset));
@@ -65,7 +68,19 @@ export default function Today() {
     return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => id);
   }, [entries]);
 
-  const forgotten = run && now - run.start > FORGET_AFTER_MS && state.forgottenAsked !== run.id ? run : null;
+  // Занятие на полукруге: идущее, выбранное или самое частое.
+  const dialId = run?.activityId ?? chosen ?? quick[0] ?? activities[0].id;
+  const range = timerRange(activities, dialId);
+  // Длительность помним для каждого занятия; по умолчанию — середина диапазона.
+  const minutes = Math.min(range[1], Math.max(range[0], minutesFor[dialId] ?? Math.round((range[0] + range[1]) / 10) * 5));
+
+  // Таймер на время закрывается сам ровно в назначенную минуту.
+  useEffect(() => {
+    if (run?.plannedEnd && now >= run.plannedEnd) stopTimer(run.plannedEnd);
+  }, [run, now]);
+
+  // «Забыл выключить» — только у таймера без лимита.
+  const forgotten = run && !run.plannedEnd && now - run.start > FORGET_AFTER_MS && state.forgottenAsked !== run.id ? run : null;
 
   const newRetro = () => setSelected({
     entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: quick[0] ?? 'work', start: now - 60 * MIN_MS, end: now, source: 'manual', updatedAt: now },
@@ -117,38 +132,27 @@ export default function Today() {
         </Suspense>
       </div>
 
-      {run ? (
-        <div className="widget timer" style={{ background: colors.get(run.activityId) }} onClick={() => setSelected({ entry: run, isNew: false })}>
-          <div className="timer-info">
-            <div className="timer-name">{name(run.activityId).at(-1)}</div>
-            <div className="timer-path">{[...name(run.activityId).slice(0, -1), `с ${formatClock(run.start)}`].join(' › ')}</div>
-          </div>
-          <div className="timer-clock">{formatTimer(now - run.start)}</div>
-          <button className="timer-stop" onClick={(e) => { e.stopPropagation(); stopTimer(); }}>■</button>
-        </div>
-      ) : (
-        <div className="widget timer idle">Ничего не идёт. Тапни занятие ниже.</div>
-      )}
-
-      <div className="widget quick">
-        {quick.slice(0, 5).map((id) => {
-          const active = run?.activityId === id;
-          return (
-            <button key={id} className={'chip' + (active ? ' active' : '')} onClick={() => (active ? stopTimer() : startTimer(id))}>
-              <span className="dot" style={{ background: colors.get(id) }} />
-              <span className="chip-text">{name(id).at(-1)}</span>
-            </button>
-          );
-        })}
-        <button className="chip more" onClick={() => setPicking(true)}>Ещё…</button>
-      </div>
+      <Dial
+        name={name(dialId).at(-1) ?? ''}
+        color={colors.get(dialId) ?? '#888'}
+        range={range}
+        minutes={minutes}
+        onMinutes={(m) => setMinutesFor({ ...minutesFor, [dialId]: m })}
+        run={run}
+        now={now}
+        onPick={() => setPicking(true)}
+        onStart={() => startTimer(dialId, minutes * MIN_MS)}
+        onStartFree={() => startTimer(dialId)}
+        onStop={() => stopTimer()}
+        onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
+      />
 
       {picking && (
         <ActivityPicker
           activities={activities}
           colors={colors}
-          title="Запустить таймер"
-          onPick={(id) => { startTimer(id); setPicking(false); }}
+          title="Занятие"
+          onPick={(id) => { setChosen(id); setPicking(false); }}
           onClose={() => setPicking(false)}
           footer={<button className="btn ghost" onClick={() => { setPicking(false); newRetro(); }}>＋ Добавить запись задним числом</button>}
         />

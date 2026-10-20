@@ -12,6 +12,8 @@ export interface Activity {
   icon?: string;             // эмодзи
   order: number;             // порядок среди соседей
   forgetAfterMin?: number;   // нет → берётся у родителя, иначе 180
+  timerMinMin?: number;      // диапазон ползунка таймера, мин; нет → у родителя, иначе 15…120
+  timerMaxMin?: number;
   archivedAt?: number;
   updatedAt: number;
 }
@@ -23,6 +25,7 @@ export interface Entry {
   activityId: string;
   start: number;
   end: number | null;         // null = таймер идёт
+  plannedEnd?: number;        // таймер на время: когда закрыть запись сама (нет = без лимита)
   note?: string;
   source: 'timer' | 'manual'; // строковый union вместо enum
   updatedAt: number;
