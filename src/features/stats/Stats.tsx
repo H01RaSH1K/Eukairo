@@ -3,7 +3,7 @@ import type { Activity, Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { childrenOf, pathOf, rootOf, subtreeIds } from '../../domain/tree';
 import { HOUR_MS, dayStarts, formatDuration, periodRange, type Period } from '../../domain/time';
-import { useMock } from '../../mock/store';
+import { useData } from '../../db/store';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
 
@@ -18,7 +18,7 @@ function ownTotals(entries: Entry[], from: number, to: number, now: number) {
 }
 
 export default function Stats() {
-  const { activities, entries } = useMock();
+  const { activities, entries } = useData();
   const now = useNow(60_000);
   const [period, setPeriod] = useState<Period>('week');
   const [focus, setFocus] = useState<string | null>(null); // какой узел раскрыт в круговой
@@ -73,8 +73,9 @@ function Donut({ activities, colors, focus, setFocus, sum, own }: {
   own: Map<string, number>;
 }) {
   // Секторы уровня: дети раскрытого узла (+ его собственные записи без подзанятия).
-  const slices = childrenOf(activities, focus)
-    .map((a) => ({ id: a.id, label: a.name, ms: sum(a.id), color: colors.get(a.id)!, drill: childrenOf(activities, a.id).length > 0 }))
+  // withArchived: завершённые проекты остаются в сводках за те периоды, где по ним есть время
+  const slices = childrenOf(activities, focus, true)
+    .map((a) => ({ id: a.id, label: a.name, ms: sum(a.id), color: colors.get(a.id)!, drill: childrenOf(activities, a.id, true).some((k) => sum(k.id) > 0) }))
     .filter((s) => s.ms > 0);
   if (focus && (own.get(focus) ?? 0) > 0) {
     slices.push({ id: focus + ':own', label: 'без подзанятия', ms: own.get(focus)!, color: colors.get(focus)!, drill: false });
@@ -139,7 +140,7 @@ function Bars({ period, from, to, entries, activities, colors, now }: {
   const buckets = period === 'day'
     ? Array.from({ length: 24 }, (_, h) => [from + h * HOUR_MS, from + (h + 1) * HOUR_MS])
     : dayStarts(from, to).map((d, i, all) => [d, all[i + 1] ?? to]);
-  const roots = childrenOf(activities, null);
+  const roots = childrenOf(activities, null, true);
   const rootIdOf = new Map(activities.map((a) => [a.id, rootOf(activities, a.id)!.id]));
 
   const data = buckets.map(([a, b]) => {

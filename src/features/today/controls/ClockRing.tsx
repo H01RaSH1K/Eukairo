@@ -1,7 +1,8 @@
 import { useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { timerRange } from '../../../domain/tree';
 import { HOUR_MS, MIN_MS, formatClock, formatTimer, startOfLocalDay } from '../../../domain/time';
-import { logEntry, startTimer, stopTimer, useMock } from '../../../mock/store';
+import { logEntry, startTimer, stopTimer } from '../../../db/commands';
+import { useData } from '../../../db/store';
 import { shortMin } from '../Dial';
 import type { ControlProps } from './types';
 
@@ -24,7 +25,7 @@ const Arc = ({ f1, f2, color, className }: { f1: number; f2: number; color: stri
 );
 
 export function ClockRing({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name }: ControlProps) {
-  const { entries } = useMock();
+  const { entries } = useData();
   const day0 = startOfLocalDay(now);
   const frac = (t: number) => (t - day0) / DAY;
   const color = colors.get(current) ?? '#888';

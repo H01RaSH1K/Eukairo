@@ -5,7 +5,8 @@ import { pathOf } from '../../domain/tree';
 import {
   HOUR_MS, MIN_MS, addLocalDays, formatClock, formatDuration, startOfLocalDay, startOfNextLocalDay,
 } from '../../domain/time';
-import { useMock } from '../../mock/store';
+import { useData } from '../../db/store';
+import { defaultActivity } from '../../domain/quick';
 import { useDesign } from '../../settings/design';
 import { useNow } from '../../ui/useNow';
 import { EntrySheet } from './EntrySheet';
@@ -19,7 +20,7 @@ const heightOf = (ms: number, min: number, max = Infinity) => Math.min(max, Math
 
 // Лента дня: записи по порядку, пустоты между ними можно заполнить задним числом.
 export default function Timeline() {
-  const { activities, entries } = useMock();
+  const { activities, entries } = useData();
   const now = useNow(30_000);
   const [day, setDay] = useState(() => startOfLocalDay(Date.now()));
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
@@ -38,7 +39,7 @@ export default function Timeline() {
 
   const draft = (start: number, end: number) =>
     setSelected({
-      entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: 'work', start, end, source: 'manual', updatedAt: Date.now() },
+      entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: defaultActivity(activities, entries) ?? '', start, end, source: 'manual', updatedAt: Date.now() },
       isNew: true,
     });
 

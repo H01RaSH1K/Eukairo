@@ -33,9 +33,12 @@ export interface Design {
 
 const KEY = 'eukairo.design';
 
-function load(): Design {
+function readRaw(): string | null {
+  try { return localStorage.getItem(KEY); } catch { return null; }
+}
+
+function load(raw = readRaw()): Design {
   try {
-    const raw = localStorage.getItem(KEY);
     if (raw?.startsWith('{')) {
       const d = JSON.parse(raw) as Partial<Design>;
       return {
@@ -60,6 +63,7 @@ const listeners = new Set<() => void>();
 
 /** Атрибуты на <html>: по ним CSS делает таб-бар плавающим и прячет его в фокусе. */
 function apply() {
+  if (typeof document === 'undefined') return; // тесты в Node: страницы нет
   const html = document.documentElement;
   html.dataset.mode = current.mode;
   if (current.showcase) html.dataset.showcase = ''; else delete html.dataset.showcase;
@@ -73,11 +77,19 @@ export function useDesign(): Design {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => current);
 }
 
+/** Текущий вид без подписки — для бэкапа. */
+export const currentDesign = (): Design => current;
+
 export function setDesign(patch: Partial<Design>) {
   current = { ...current, ...patch };
   try { localStorage.setItem(KEY, JSON.stringify(current)); } catch { /* ничего */ }
   apply();
   listeners.forEach((l) => l());
+}
+
+/** Целиком заменить вид (восстановление из бэкапа); неизвестные значения → умолчания. */
+export function replaceDesign(d: unknown) {
+  setDesign(load(JSON.stringify(d)));
 }
 
 /** Фокус: на экране только витраж (таб-бар тоже прячется). Не сохраняется. */

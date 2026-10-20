@@ -1,11 +1,25 @@
 // Дерево занятий: чистые функции поверх плоского списка (parentId-ссылки).
 import type { Activity } from '../db/schema';
 
-/** Дети узла (null = корни) по порядку, без архивных. */
-export function childrenOf(all: Activity[], parentId: string | null): Activity[] {
+/**
+ * Дети узла (null = корни) по порядку. Завершённые (archivedAt) по умолчанию скрыты;
+ * `withArchived` — для цветов и сводок, где прошлые проекты должны остаться.
+ */
+export function childrenOf(all: Activity[], parentId: string | null, withArchived = false): Activity[] {
   return all
-    .filter((a) => a.parentId === parentId && !a.archivedAt)
+    .filter((a) => a.parentId === parentId && (withArchived || !a.archivedAt))
     .sort((a, b) => a.order - b.order);
+}
+
+/** Узел скрыт из выбора: завершён он сам или кто-то из предков. */
+export function isHidden(all: Activity[], id: string): boolean {
+  const path = pathOf(all, id);
+  return path.length === 0 || path.some((a) => a.archivedAt);
+}
+
+/** Можно ли сделать `newParentId` родителем `id` (не в себя и не в своего потомка). */
+export function canMoveTo(all: Activity[], id: string, newParentId: string | null): boolean {
+  return newParentId === null || !subtreeIds(all, id).has(newParentId);
 }
 
 /** Цепочка от корня до узла: [Работа, Eukairo, Код]. */
@@ -48,4 +62,10 @@ export function timerRange(activities: Activity[], id: string): [number, number]
     max ??= a.timerMaxMin;
   }
   return [min ?? 15, Math.max(max ?? 120, (min ?? 15) + 5)];
+}
+
+/** Порог «забытого таймера» в минутах: своё значение, у предка, иначе 180 (3 ч). */
+export function forgetAfter(activities: Activity[], id: string): number {
+  for (const a of [...pathOf(activities, id)].reverse()) if (a.forgetAfterMin) return a.forgetAfterMin;
+  return 180;
 }

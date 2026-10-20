@@ -1,23 +1,31 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { activityColors } from '../../domain/colors';
-import { childrenOf, timerRange } from '../../domain/tree';
-import { shortMin } from '../today/Dial';
-import { resetDemo, setActivityTimer, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { mergeBackup, readBackup, replaceWithBackup, shareBackup } from '../../db/backup';
+import { settingOf, useData } from '../../db/store';
+import type { Backup } from '../../domain/backup';
 import { findVisualization } from '../../visualizations/registry';
 import { useAppearance } from '../../settings/appearance';
 import { modes, setDesign, themes, useDesign } from '../../settings/design';
 import Appearance from '../appearance/Appearance';
-import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
+import { plural } from '../../domain/time';
 
-// Экран «Ещё»: занятия, стиль, бэкап, служебное. В макете — плюс демо-кнопки.
-export default function More({ goToday }: { goToday: () => void }) {
-  const state = useMock();
-  const colors = useMemo(() => activityColors(state.activities), [state.activities]);
+const ENTRIES: [string, string, string] = ['запись', 'записи', 'записей'];
+const ACTS: [string, string, string] = ['занятие', 'занятия', 'занятий'];
+
+// Редактор занятий нужен редко — грузим его код только при первом открытии.
+const Activities = lazy(() => import('../activities/Activities'));
+
+// Экран «Ещё»: оформление, режим таймера, занятия, бэкап, служебное.
+export default function More() {
+  const data = useData();
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
   const [lookOpen, setLookOpen] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null); // у какого занятия открыт диапазон таймера
+  const [restore, setRestore] = useState<{ backup?: Backup; error?: string; done?: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const lastBackup = settingOf<number | null>(data, 'lastBackupAt', null);
+  const backupAge = lastBackup === null ? 'не было' : ago(Date.now() - lastBackup);
+  const activeCount = data.activities.filter((a) => !a.archivedAt).length;
   const look = useAppearance();
   const design = useDesign();
   // Один стиль на всё — пишем его; разные — «свой у каждого».
@@ -31,19 +39,30 @@ export default function More({ goToday }: { goToday: () => void }) {
 
   const standalone = window.matchMedia('(display-mode: standalone)').matches;
 
-  const tree = (parentId: string | null, depth: number): ReactNode[] =>
-    childrenOf(state.activities, parentId).flatMap((a) => [
-      <div key={a.id} className="tree-row" style={{ paddingLeft: 4 + depth * 20 }} onClick={() => setEditing(editing === a.id ? null : a.id)}>
-        <span className="dot" style={{ background: colors.get(a.id) }} />
-        <span className="tree-name">{a.icon && depth === 0 ? `${a.icon} ` : ''}{a.name}</span>
-        <span className="dim small">{timerRange(state.activities, a.id).map(shortMin).join(' – ')}</span>
-      </div>,
-      ...(editing === a.id ? [<TimerRangeEditor key={a.id + '-edit'} id={a.id} own={a.timerMinMin !== undefined} range={timerRange(state.activities, a.id)} />] : []),
-      ...tree(a.id, depth + 1),
-    ]);
+  // Выбрали файл бэкапа — проверяем и показываем, что в нём, до любых изменений.
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    try { setRestore({ backup: await readBackup(file) }); }
+    catch (e) { setRestore({ error: e instanceof Error ? e.message : String(e) }); }
+  };
+  const merge = async (b: Backup) => {
+    const r = await mergeBackup(b);
+    setRestore({ done: `Готово: добавлено или обновлено ${r.entries} ${plural(r.entries, ENTRIES)} и ${r.activities} ${plural(r.activities, ACTS)}.` });
+  };
+  const replace = async (b: Backup) => {
+    if (!confirm('Стереть все занятия и записи на этом телефоне и заменить их бэкапом?')) return;
+    await replaceWithBackup(b);
+    setRestore({ done: 'Готово: данные заменены бэкапом.' });
+  };
+  const demo = async () => {
+    if (!confirm('Заменить все занятия и записи демо-данными (~5 недель)? Сначала лучше сохранить бэкап.')) return;
+    const { fillDemo } = await import('../../db/demo');
+    await fillDemo();
+  };
 
-  // Оформление открывается поверх «Ещё», как экран в стеке навигации iOS.
+  // Оформление и занятия открываются поверх «Ещё», как экран в стеке навигации iOS.
   if (lookOpen) return <Appearance onBack={() => setLookOpen(false)} />;
+  if (treeOpen) return <Suspense fallback={null}><Activities onBack={() => setTreeOpen(false)} /></Suspense>;
 
   return (
     <div className="screen fit">
@@ -94,50 +113,56 @@ export default function More({ goToday }: { goToday: () => void }) {
 
       <button className="widget pad row-btn" onClick={() => setTreeOpen(true)}>
         <span>Занятия</span>
-        <span className="dim">{state.activities.length} ›</span>
+        <span className="dim">{activeCount} ›</span>
       </button>
 
       <div className="widget pad">
         <div className="btn-row demo">
-          <span className="card-title">Бэкап · 4 дн.</span>
-          <button className="btn small primary" onClick={() => shareBackup(state)}>Сохранить</button>
-          <button className="btn small" disabled>Восстановить</button>
+          <span className="card-title">Бэкап: {backupAge}</span>
+          <button className="btn small primary" onClick={() => void shareBackup()}>Сохранить</button>
+          <button className="btn small" onClick={() => fileInput.current?.click()}>Восстановить</button>
         </div>
+        {/* Невидимый выбор файла: кнопка «Восстановить» нажимает его за нас. */}
+        <input ref={fileInput} type="file" accept="application/json,.json" hidden
+          onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
       </div>
 
       <div className="widget pad small dim about">
         <div className="btn-row demo">
-          <span className="card-title">Демо</span>
-          <button className="btn small" onClick={() => { simulateForgotten(); goToday(); }}>Таймер 5 ч</button>
-          <button className="btn small" onClick={() => { showBackupBanner(); goToday(); }}>Плашка</button>
-          <button className="btn small" onClick={resetDemo}>Сброс</button>
+          <span className="card-title">{data.entries.length} {plural(data.entries.length, ENTRIES)}</span>
+          <button className="btn small" onClick={() => void demo()}>Демо-данные</button>
         </div>
         Eukairo {__APP_VERSION__} · сборка {__BUILD_TIME__}<br />
         На «Домой»: {standalone ? 'да' : 'нет'} · данные защищены: {persisted === null ? '…' : persisted ? 'да' : 'нет'}
       </div>
 
-      {treeOpen && (
-        <Sheet title="Занятия" onClose={() => setTreeOpen(false)}>
-          <div className="tree">{tree(null, 0)}</div>
-          <p className="dim small">Справа — диапазон ползунка таймера, тапни занятие, чтобы поменять. Дети без своего диапазона берут его у родителя. Цвет детей — оттенки цвета корня. Редактор дерева (добавить, перенести, архив) — на этапе ядра.</p>
+      {restore && (
+        <Sheet title="Восстановление" onClose={() => setRestore(null)}>
+          <div className="form">
+            {restore.error && <div className="warn">{restore.error}</div>}
+            {restore.done && <p className="center">{restore.done}</p>}
+            {restore.backup && (
+              <>
+                <p className="center">
+                  Бэкап от {new Date(restore.backup.exportedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}:
+                  {' '}{restore.backup.activities.length} {plural(restore.backup.activities.length, ACTS)}, {restore.backup.entries.length} {plural(restore.backup.entries.length, ENTRIES)}.
+                </p>
+                <button className="btn primary" onClick={() => void merge(restore.backup!)}>Объединить с текущими</button>
+                <p className="dim small center">Новое добавится, совпавшее обновится до более свежей версии. Ничего не удаляется.</p>
+                <button className="btn danger" onClick={() => void replace(restore.backup!)}>Заменить всё</button>
+                <p className="dim small center">Для нового телефона или если данные пропали.</p>
+              </>
+            )}
+            {!restore.backup && <button className="btn" onClick={() => setRestore(null)}>Закрыть</button>}
+          </div>
         </Sheet>
       )}
     </div>
   );
 }
 
-/** Диапазон ползунка таймера у занятия: «от» и «до», шаг 5 минут. */
-function TimerRangeEditor({ id, own, range }: { id: string; own: boolean; range: [number, number] }) {
-  const [lo, hi] = range;
-  return (
-    <div className="range-edit">
-      {!own && <div className="dim small">Сейчас берётся у родителя — подвинь, чтобы задать своё.</div>}
-      <label className="setting-title">Таймер от <span className="setting-value">{shortMin(lo)}</span></label>
-      <input className="slider" type="range" min={5} max={475} step={5} value={lo}
-        onChange={(e) => { const v = Number(e.target.value); setActivityTimer(id, v, Math.max(hi, v + 5)); }} />
-      <label className="setting-title">до <span className="setting-value">{shortMin(hi)}</span></label>
-      <input className="slider" type="range" min={10} max={480} step={5} value={hi}
-        onChange={(e) => { const v = Number(e.target.value); setActivityTimer(id, Math.min(lo, v - 5), v); }} />
-    </div>
-  );
+/** «сегодня», «вчера», «5 дн. назад». */
+function ago(ms: number): string {
+  const d = Math.floor(ms / 86_400_000);
+  return d <= 0 ? 'сегодня' : d === 1 ? 'вчера' : `${d} дн. назад`;
 }

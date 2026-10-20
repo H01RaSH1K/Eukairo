@@ -387,3 +387,21 @@ input.field { -webkit-user-select: text; user-select: text; }
 .about .btn-row.demo { margin-bottom: 8px; }
 @media (max-height: 700px) { .theme-sw { max-width: 38px; } }
 @media (max-height: 700px) { .mode-chips + .setting-hint { display: none; } .toggle-row { margin-top: 6px; } } /* SE: подсказка к режиму — лишняя строка */
+
+/* ——— Занятия (редактор дерева) ——— */
+.activities .tree-widget { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px; }
+.activities .hint { margin: 0; line-height: 1.4; }
+.done-toggle { background: none; padding: 12px 8px 6px; font-size: 14px; }
+.tree-row.archived { opacity: .75; }
+.tree-row.archived .btn.small { padding: 5px 10px; font-size: 13px; }
+.name-row .icon-input { flex: 0 0 56px; text-align: center; font-size: 22px; padding: 8px; }
+.range-edit.flat { margin: 0; }
+.range-edit .setting-toggle .btn.small { padding: 2px 0; }
+.hue-slider {
+  -webkit-appearance: none; appearance: none; height: 14px; border-radius: 7px;
+  background: linear-gradient(90deg, hsl(0 65% 55%), hsl(60 65% 55%), hsl(120 65% 55%), hsl(180 65% 55%), hsl(240 65% 55%), hsl(300 65% 55%), hsl(359 65% 55%));
+}
+.hue-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.dur-chips { justify-content: center; }
+.field input[type='date'] { text-align: right; }
+.btn-row .btn.arrow { flex: 0 0 48px; }

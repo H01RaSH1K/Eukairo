@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, periodRange, startOfLocalDay, startOfNextLocalDay } from './time';
+import { formatDuration, periodRange, plural, startOfLocalDay, startOfNextLocalDay } from './time';
 
 // describe/it ≈ [TestFixture]/[Test] в NUnit.
 describe('startOfLocalDay', () => {
@@ -46,5 +46,12 @@ describe('formatDuration', () => {
     expect(formatDuration(45 * 60_000)).toBe('45 мин');
     expect(formatDuration(3 * 3_600_000)).toBe('3 ч');
     expect(formatDuration(2 * 3_600_000 + 5 * 60_000)).toBe('2 ч 05 мин');
+  });
+});
+
+describe('plural', () => {
+  it('1 запись, 3 записи, 11 записей, 21 запись', () => {
+    const f: [string, string, string] = ['запись', 'записи', 'записей'];
+    expect([1, 3, 5, 11, 12, 21, 22, 25].map((n) => plural(n, f))).toEqual(['запись', 'записи', 'записей', 'записей', 'записей', 'запись', 'записи', 'записей']);
   });
 });

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { HOUR_MS, formatClock, formatTimer, startOfLocalDay } from '../../../domain/time';
 import { timerRange } from '../../../domain/tree';
-import { useMock } from '../../../mock/store';
+import { useData } from '../../../db/store';
 import { shortMin } from '../Dial';
 import type { ControlProps } from './types';
 
@@ -55,7 +55,7 @@ export function DialTray(p: ControlProps) {
 const C = 20, R = 15;
 const RING = `M ${C} ${C - R} A ${R} ${R} 0 1 1 ${C - 0.01} ${C - R}`;
 export function ClockTray(p: ControlProps) {
-  const { entries } = useMock();
+  const { entries } = useData();
   const s = runState(p);
   const day0 = startOfLocalDay(p.now);
   const f = (t: number) => Math.min(1, Math.max(0, (t - day0) / (24 * HOUR_MS)));
