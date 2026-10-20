@@ -3,11 +3,11 @@ import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
 import { pathOf } from '../../domain/tree';
-import { MIN_MS, formatClock, formatDuration, formatTimer, periodRange, type Period } from '../../domain/time';
+import { MIN_MS, addLocalDays, formatClock, formatDuration, formatTimer, periodRange, type Period } from '../../domain/time';
 import {
-  dismissBackupBanner, markForgottenAsked, running, saveEntry, setViz, startTimer, stopTimer, useMock,
+  dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
 } from '../../mock/store';
-import { findVisualization, visualizations } from '../../visualizations/registry';
+import { findVisualization } from '../../visualizations/registry';
 import type { VisualizationPlugin, VisualizationProps } from '../../visualizations/types';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
@@ -28,16 +28,33 @@ const FORGET_AFTER_MS = 180 * MIN_MS;
 
 const titles: Record<Period, string> = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
 
+// Момент внутри периода, сдвинутого на `offset` дней/недель/месяцев.
+function shift(scale: Period, t: number, offset: number): number {
+  if (scale === 'day') return addLocalDays(t, offset);
+  if (scale === 'week') return addLocalDays(t, offset * 7);
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth() + offset, 1).getTime();
+}
+
+function periodTitle(scale: Period, from: number, to: number): string {
+  const fmt = (t: number, o: Intl.DateTimeFormatOptions) => new Date(t).toLocaleDateString('ru-RU', o);
+  if (scale === 'day') return fmt(from, { day: 'numeric', month: 'long' });
+  if (scale === 'week') return `${fmt(from, { day: 'numeric', month: 'short' })} – ${fmt(to - 1, { day: 'numeric', month: 'short' })}`;
+  return fmt(from, { month: 'long', year: 'numeric' });
+}
+
 export default function Today() {
   const state = useMock();
   const { activities, entries } = state;
   const now = useNow(1000);
   const [scale, setScale] = useState<Period>('day');
+  const [offset, setOffset] = useState(0); // 0 = текущий период, -1 = предыдущий…
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
 
   const colors = useMemo(() => activityColors(activities), [activities]);
-  const { from, to } = periodRange(scale, now);
+  const { from, to } = periodRange(scale, shift(scale, now, offset));
+  const isCurrent = offset === 0;
   const spans = toSpans(entries, colors, from, to, now);
   const total = spans.reduce((sum, s) => sum + s.end - s.start, 0);
   const run = running(state);
@@ -60,10 +77,10 @@ export default function Today() {
     <div className="screen">
       <div className="today-head">
         <div>
-          <h1>{titles[scale]}</h1>
-          <p className="dim sub">{scale === 'day' ? date : `полезного: ${formatDuration(total)}`}</p>
+          <h1>{isCurrent ? titles[scale] : periodTitle(scale, from, to)}</h1>
+          <p className="dim sub">{scale === 'day' && isCurrent ? date : `полезного: ${formatDuration(total)}`}</p>
         </div>
-        {scale === 'day' && <div className="today-total">{formatDuration(total)}</div>}
+        {scale === 'day' && isCurrent && <div className="today-total">{formatDuration(total)}</div>}
       </div>
 
       {state.backupBanner && (
@@ -77,8 +94,14 @@ export default function Today() {
       <Segmented
         options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
         value={scale}
-        onChange={setScale}
+        onChange={(v) => { setScale(v); setOffset(0); }}
       />
+
+      <div className="period-nav">
+        <button onClick={() => setOffset(offset - 1)}>‹ раньше</button>
+        {!isCurrent && <button onClick={() => setOffset(0)}>сейчас</button>}
+        <button disabled={isCurrent} onClick={() => setOffset(offset + 1)}>позже ›</button>
+      </div>
 
       <div className="viz">
         <Suspense fallback={null}>
@@ -94,13 +117,7 @@ export default function Today() {
             }}
           />
         </Suspense>
-        <p className="dim viz-caption">Сегмент = час суток. Часы одной записи сливаются в одну фигуру.</p>
-        {/* Только для макетов: быстро сравнить узоры деления. */}
-        <div className="chips-scroll">
-          {visualizations.map((v) => (
-            <button key={v.id} aria-pressed={v.id === plugin.id} onClick={() => setViz(v.id)}>{v.title}</button>
-          ))}
-        </div>
+        <p className="dim viz-caption">Стекло = час суток. Часы одной записи сливаются в одну фигуру. Нарезка у каждого дня своя.</p>
       </div>
 
       {run ? (

@@ -9,9 +9,6 @@ const mosaic = (pattern: PatternId) => () =>
 
 export const visualizations: VisualizationPlugin[] = [
   { id: 'mosaic-glass', title: 'Витраж', load: mosaic('glass') },
-  { id: 'mosaic-shards', title: 'Осколки', load: mosaic('shards') },
-  { id: 'mosaic-hex', title: 'Соты', load: mosaic('hex') },
-  { id: 'mosaic-spiral', title: 'Спираль', load: mosaic('spiral') },
   { id: 'mosaic-rose', title: 'Роза', load: mosaic('rose') },
   { id: 'mosaic-tri', title: 'Треугольники', load: mosaic('tri') },
   { id: 'mosaic-grid', title: 'Сетка', load: mosaic('grid') },

@@ -4,7 +4,7 @@
 // стараемся ставить рядом и на картинке, чтобы длинная запись слилась в одну фигуру.
 import { rng, voronoi, type Pt } from './voronoi';
 
-export type PatternId = 'glass' | 'shards' | 'hex' | 'spiral' | 'rose' | 'tri' | 'grid';
+export type PatternId = 'glass' | 'rose' | 'tri' | 'grid';
 
 export interface Pattern {
   w: number;
@@ -46,12 +46,14 @@ function jittered(days: number, jitter: number, seed: number): Pattern {
   return { w: W, h, cells: voronoi(seeds, W, h, 3 * Math.max(cw, ch)) };
 }
 
-/** Соты: точки рядами со сдвигом на полклетки — получаются шестиугольники. */
-function hex(days: number): Pattern {
+/** Соты: точки рядами со сдвигом на полклетки — получаются неровные шестиугольники. */
+function hex(days: number, seed: number): Pattern {
   const { cols, rows } = dims(days);
   const h = heightFor(cols, rows, days);
   const cw = W / cols, ch = h / rows;
-  const seeds = snake(cols, rows).map(([c, r]): Pt => [(c + (r % 2 ? 0.75 : 0.25)) * cw, (r + 0.5) * ch]);
+  const rand = rng(seed);
+  const wob = () => (rand() - 0.5) * 0.3;
+  const seeds = snake(cols, rows).map(([c, r]): Pt => [(c + (r % 2 ? 0.75 : 0.25) + wob()) * cw, (r + 0.5 + wob()) * ch]);
   return { w: W, h, cells: voronoi(seeds, W, h, 3 * Math.max(cw, ch)) };
 }
 
@@ -59,15 +61,16 @@ function hex(days: number): Pattern {
  * Спираль: точки вдоль спирали Архимеда от центра наружу с равным шагом.
  * Часы занимают круг, а углы квадрата добиваются пустыми «декоративными» стёклами.
  */
-function spiral(days: number): Pattern {
+function spiral(days: number, seed: number): Pattern {
   const n = days * 24;
   const w = W, h = W, R = w / 2;
   const step = Math.sqrt((Math.PI * R * R) / n);      // средний размер стёклышка в круге
   const b = step / (2 * Math.PI);                      // r = b·θ: витки на расстоянии step
   const seeds: Pt[] = [];
+  const turn = rng(seed)() * 2 * Math.PI;              // поворот спирали — свой у каждого периода
   let theta = Math.PI; // начинаем чуть от центра, чтобы первые стёкла не были крошечными
   for (let r = b * theta; r < R * 1.5; r = b * theta) {
-    seeds.push([R + r * Math.sin(theta), R - r * Math.cos(theta)]);
+    seeds.push([R + r * Math.sin(theta + turn), R - r * Math.cos(theta + turn)]);
     theta += step / Math.max(r, step);                 // шаг по дуге ≈ step
   }
   const all = voronoi(seeds, w, h, 3 * step);
@@ -130,17 +133,44 @@ function grid(days: number): Pattern {
   return { w: W, h, cells };
 }
 
-const builders: Record<PatternId, (days: number) => Pattern> = {
-  glass: (d) => jittered(d, 0.6, 11),
-  shards: (d) => jittered(d, 0.98, 5),
-  hex, spiral, rose, tri, grid,
+/**
+ * Витраж: принцип один, а нарезка своя у каждого дня (недели, месяца),
+ * чтобы дни не выглядели одинаково. `seed` — из даты, поэтому у одного
+ * и того же дня нарезка всегда одна и та же.
+ */
+function glass(days: number, seed: number): Pattern {
+  const cuts = [
+    () => jittered(days, 0.6, seed),   // ровные неровные стёкла
+    () => jittered(days, 0.98, seed),  // осколки
+    () => hex(days, seed),             // соты
+    () => spiral(days, seed),          // спираль от центра
+  ];
+  return cuts[seed % cuts.length]();
+}
+
+const builders: Record<PatternId, (days: number, seed: number) => Pattern> = {
+  glass,
+  rose: (d) => rose(d),
+  tri: (d) => tri(d),
+  grid: (d) => grid(d),
 };
 const cache = new Map<string, Pattern>();
 
-export function getPattern(id: PatternId, days = 1): Pattern {
-  const key = `${id}:${days}`;
-  if (!cache.has(key)) cache.set(key, builders[id](days));
+export function getPattern(id: PatternId, days = 1, seed = 0): Pattern {
+  const key = `${id}:${days}:${seed}`;
+  if (!cache.has(key)) {
+    if (cache.size > 60) cache.clear(); // кэш не должен расти бесконечно
+    cache.set(key, builders[id](days, seed));
+  }
   return cache.get(key)!;
+}
+
+/** Число из даты начала периода: одинаковое для одного дня, разное для соседних. */
+export function seedFor(from: number): number {
+  const d = new Date(from);
+  let x = d.getFullYear() * 400 + d.getMonth() * 32 + d.getDate();
+  x = Math.imul(x ^ (x >>> 7), 0x9e3779b1);
+  return (x >>> 0) % 100000;
 }
 
 /**

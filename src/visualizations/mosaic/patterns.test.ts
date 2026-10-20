@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPattern, leadPath, type PatternId } from './patterns';
+import { getPattern, leadPath, seedFor, type PatternId } from './patterns';
 
 const area = (poly: [number, number][]) =>
   Math.abs(poly.reduce((s, p, i) => {
@@ -8,9 +8,10 @@ const area = (poly: [number, number][]) =>
   }, 0)) / 2;
 
 describe('узоры', () => {
-  it.each(['grid', 'glass', 'shards', 'hex', 'spiral', 'tri'] as PatternId[])('%s: сегменты покрывают картину без дыр', (id) => {
-    for (const days of [1, 7, 31]) {
-      const p = getPattern(id, days);
+  it.each(['grid', 'glass', 'tri'] as PatternId[])('%s: сегменты покрывают картину без дыр', (id) => {
+    // seed 0…3 — все четыре нарезки витража
+    for (const [days, seed] of [[1, 0], [1, 1], [1, 2], [1, 3], [7, 2], [31, 3]]) {
+      const p = getPattern(id, days, seed);
       expect(p.cells).toHaveLength(days * 24);
       expect([...p.cells, ...(p.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 1);
     }
@@ -18,6 +19,14 @@ describe('узоры', () => {
 
   it('роза: кольцо на день', () => {
     expect(getPattern('rose', 7).cells).toHaveLength(168);
+  });
+});
+
+describe('seedFor', () => {
+  it('один день — одна нарезка, соседние дни — разные', () => {
+    const a = seedFor(new Date(2026, 9, 20, 0).getTime());
+    expect(seedFor(new Date(2026, 9, 20, 15).getTime())).toBe(a);
+    expect(seedFor(new Date(2026, 9, 21).getTime())).not.toBe(a);
   });
 });
 

@@ -2,10 +2,11 @@ import { useMemo, type ComponentType } from 'react';
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
 import { hourOwners } from './layout';
-import { getPattern, leadPath, type PatternId } from './patterns';
+import { getPattern, leadPath, seedFor, type PatternId } from './patterns';
 import './mosaic.css';
 
-// Мозаика-витраж: период делится на сегменты по узору, сегмент = час
+// Мозаика-витраж: период делится на сегменты, сегмент = час. Нарезка стёкол
+// своя у каждого дня/недели/месяца (зависит от даты), чтобы дни не были одинаковыми
 // (день — 24, неделя — 168, месяц — 24 × дней; всегда одна картина).
 // Час целиком одного цвета — цвета записи, занявшей бо́льшую его часть (от 30 мин).
 // Часы одной записи сливаются в одну фигуру: между ними нет свинцовой линии.
@@ -14,7 +15,7 @@ const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 
 function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
-  const { w, h, cells, decor } = getPattern(pattern, days.length);
+  const { w, h, cells, decor } = getPattern(pattern, days.length, seedFor(from));
   // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
   const owners = days.flatMap((d) => hourOwners(spans, d));
   const ownerIds = owners.map((o) => o?.entryId ?? null);

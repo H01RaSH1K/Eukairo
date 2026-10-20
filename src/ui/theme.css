@@ -224,3 +224,7 @@ input.field { -webkit-user-select: text; user-select: text; }
 .chips-scroll::-webkit-scrollbar { display: none; }
 .chips-scroll button { flex: none; border: 0; border-radius: 16px; padding: 7px 12px; background: var(--surface); color: var(--text-dim); font: inherit; font-size: 13px; }
 .chips-scroll button[aria-pressed='true'] { background: #3a3a43; color: var(--text); }
+.period-nav { display: flex; justify-content: space-between; margin: -4px 0 8px; }
+.period-nav button { border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; padding: 4px 2px; }
+.period-nav button:disabled { opacity: .3; }
+.today-head h1 { text-transform: none; }
