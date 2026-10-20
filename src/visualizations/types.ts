@@ -19,6 +19,7 @@ export interface VisualizationProps {
   to: number;                            // конец периода
   spans: Span[];
   runningEntryId: string | null;         // идущий таймер — можно анимировать рост
+  fill: string;                          // как раскладывать часы (заливка из «Ещё»); стиль может не учитывать
   onSelect: (entryId: string) => void;   // ≈ Action<string>
 }
 

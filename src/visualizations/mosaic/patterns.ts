@@ -6,11 +6,29 @@ import { rng, voronoi, type Pt } from './voronoi';
 
 export type PatternId = 'glass' | 'rose' | 'tri' | 'grid';
 
+/**
+ * Заливка — в каком порядке часы периода раскладываются по картине.
+ * flow — подряд змейкой; rows — день = полоса, часы дней друг под другом;
+ * calendar — день = блок, блоки как в календаре; jar — копилка: только
+ * занятые часы, снизу вверх (пустые пропускаются, их сжимает Mosaic.tsx).
+ */
+export type FillId = 'flow' | 'rows' | 'calendar' | 'jar';
+
 export interface Pattern {
   w: number;
   h: number;
   cells: Pt[][];   // сегменты-часы по порядку
   decor?: Pt[][];  // пустые стёкла для красоты (добивают края), временем не заполняются
+  day?: number[];  // номер дня у каждого сегмента — между днями рисуем толстую линию
+}
+
+/** Раскладка по клеткам сетки: где стоит каждый час и какие клетки пустые. */
+interface Slots {
+  cols: number;
+  rows: number;
+  hours: [number, number][];  // [столбец, строка] для каждого часа по порядку
+  empty: [number, number][];  // клетки без часов (станут декором)
+  day?: number[];             // номер дня у часа (только для rows/calendar)
 }
 
 /**
@@ -39,31 +57,94 @@ function snake(cols: number, rows: number): [number, number][] {
   return out;
 }
 
+/** Подряд: змейка по всей картине; у копилки — снизу вверх. */
+function flowSlots(n: number, aspect: number, fromBottom: boolean): Slots {
+  const { cols, rows } = dims(n, aspect);
+  const hours = snake(cols, rows).map(([c, r]): [number, number] => [c, fromBottom ? rows - 1 - r : r]);
+  return { cols, rows, hours, empty: [] };
+}
+
+/**
+ * По дням: день = полоса из k строк по 24/k часов. Часы не змейкой, а слева направо,
+ * чтобы один и тот же час у всех дней стоял в одном столбце — видно режим дня.
+ */
+function rowSlots(days: number, aspect: number): Slots {
+  let best = 1, bestErr = Infinity;
+  for (const k of [1, 2, 3, 4, 6]) {
+    const err = Math.abs(Math.log(24 / k / (days * k) / aspect));
+    if (err < bestErr) { bestErr = err; best = k; }
+  }
+  const per = 24 / best;
+  const hours: [number, number][] = [], day: number[] = [];
+  for (let d = 0; d < days; d++) {
+    for (let i = 0; i < 24; i++) { hours.push([i % per, d * best + Math.floor(i / per)]); day.push(d); }
+  }
+  return { cols: per, rows: days * best, hours, empty: [], day };
+}
+
+/**
+ * Календарь: день = блок bw × bh часов, блоки сеткой. У месяца — 7 столбцов
+ * (пн…вс), первый день встаёт под свой день недели. `weekday` — 0 = понедельник.
+ */
+function calendarSlots(days: number, aspect: number, weekday: number): Slots {
+  const blocks: [number, number][] = [[4, 6], [6, 4], [3, 8], [8, 3]];
+  const grids: [number, number, number][] = days === 1 ? [[1, 1, 0]]
+    : days === 7 ? [[7, 1, 0], [4, 2, 0], [3, 3, 0], [2, 4, 0]]
+    : [[7, Math.ceil((weekday + days) / 7), weekday]];
+  let best = { bw: 4, bh: 6, gc: 1, gr: 1, off: 0 }, bestErr = Infinity;
+  for (const [bw, bh] of blocks) for (const [gc, gr, off] of grids) {
+    const err = Math.abs(Math.log((gc * bw) / (gr * bh) / aspect));
+    if (err < bestErr) { bestErr = err; best = { bw, bh, gc, gr, off }; }
+  }
+  const { bw, bh, gc, gr, off } = best;
+  const hours: [number, number][] = [], empty: [number, number][] = [], day: number[] = [];
+  for (let b = 0; b < gc * gr; b++) {
+    const d = b - off;
+    const bc = (b % gc) * bw, br = Math.floor(b / gc) * bh;
+    for (let i = 0; i < 24; i++) {
+      const cell: [number, number] = [bc + (i % bw), br + Math.floor(i / bw)];
+      if (d >= 0 && d < days) { hours.push(cell); day.push(d); } else empty.push(cell);
+    }
+  }
+  // Порядок часов — по дням, как и у остальных узоров.
+  return { cols: gc * bw, rows: gr * bh, hours, empty, day };
+}
+
+function slotsFor(fill: FillId, days: number, aspect: number, weekday: number): Slots {
+  if (fill === 'rows') return rowSlots(days, aspect);
+  if (fill === 'calendar') return calendarSlots(days, aspect, weekday);
+  return flowSlots(days * 24, aspect, fill === 'jar');
+}
+
 const W = 100;
 // Ширина картины всегда 100, высота — по форме виджета: картина заполняет его целиком.
 
 // ——— витражи (диаграмма Вороного по разным раскладкам точек) ———
 
 /** Неровный витраж: сетка точек со сдвигом. `jitter` 0…1 — насколько неровно. */
-function jittered(days: number, aspect: number, jitter: number, seed: number): Pattern {
-  const { cols, rows } = dims(days * 24, aspect);
+function jittered(sl: Slots, aspect: number, jitter: number, seed: number): Pattern {
   const h = W / aspect;
-  const cw = W / cols, ch = h / rows;
-  const rand = rng(seed + days);
+  const cw = W / sl.cols, ch = h / sl.rows;
+  const rand = rng(seed + sl.hours.length);
   const pad = (1 - jitter) / 2;
-  const seeds = snake(cols, rows).map(([c, r]): Pt => [(c + pad + rand() * jitter) * cw, (r + pad + rand() * jitter) * ch]);
-  return { w: W, h, cells: voronoi(seeds, W, h, 3 * Math.max(cw, ch)) };
+  const at = ([c, r]: [number, number]): Pt => [(c + pad + rand() * jitter) * cw, (r + pad + rand() * jitter) * ch];
+  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), 3 * Math.max(cw, ch));
 }
 
 /** Соты: точки рядами со сдвигом на полклетки — получаются неровные шестиугольники. */
-function hex(days: number, aspect: number, seed: number): Pattern {
-  const { cols, rows } = dims(days * 24, aspect);
+function hex(sl: Slots, aspect: number, seed: number): Pattern {
   const h = W / aspect;
-  const cw = W / cols, ch = h / rows;
+  const cw = W / sl.cols, ch = h / sl.rows;
   const rand = rng(seed);
   const wob = () => (rand() - 0.5) * 0.3;
-  const seeds = snake(cols, rows).map(([c, r]): Pt => [(c + (r % 2 ? 0.75 : 0.25) + wob()) * cw, (r + 0.5 + wob()) * ch]);
-  return { w: W, h, cells: voronoi(seeds, W, h, 3 * Math.max(cw, ch)) };
+  const at = ([c, r]: [number, number]): Pt => [(c + (r % 2 ? 0.75 : 0.25) + wob()) * cw, (r + 0.5 + wob()) * ch];
+  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), 3 * Math.max(cw, ch));
+}
+
+/** Вороной по точкам часов и пустых клеток: первые — сегменты, вторые — декор. */
+function fromSeeds(sl: Slots, h: number, hours: Pt[], empty: Pt[], reach: number): Pattern {
+  const all = voronoi([...hours, ...empty], W, h, reach);
+  return { w: W, h, cells: all.slice(0, hours.length), decor: all.slice(hours.length), day: sl.day };
 }
 
 /**
@@ -135,14 +216,13 @@ function tri(days: number, aspect: number): Pattern {
   return { w: W, h, cells };
 }
 
-function grid(days: number, aspect: number): Pattern {
-  const { cols, rows } = dims(days * 24, aspect);
+function grid(sl: Slots, aspect: number): Pattern {
   const h = W / aspect;
-  const cw = W / cols, ch = h / rows;
-  const cells = snake(cols, rows).map(([c, r]): Pt[] => [
+  const cw = W / sl.cols, ch = h / sl.rows;
+  const rect = ([c, r]: [number, number]): Pt[] => [
     [c * cw, r * ch], [(c + 1) * cw, r * ch], [(c + 1) * cw, (r + 1) * ch], [c * cw, (r + 1) * ch],
-  ]);
-  return { w: W, h, cells };
+  ];
+  return { w: W, h, cells: sl.hours.map(rect), decor: sl.empty.map(rect), day: sl.day };
 }
 
 /**
@@ -150,32 +230,38 @@ function grid(days: number, aspect: number): Pattern {
  * чтобы дни не выглядели одинаково. `seed` — из даты, поэтому у одного
  * и того же дня нарезка всегда одна и та же.
  */
-function glass(days: number, aspect: number, seed: number): Pattern {
+function glass(sl: Slots, days: number, aspect: number, seed: number, fill: FillId): Pattern {
   const cuts = [
-    () => jittered(days, aspect, 0.6, seed),   // ровные неровные стёкла
-    () => jittered(days, aspect, 0.98, seed),  // осколки
-    () => hex(days, aspect, seed),             // соты
-    () => spiral(days, aspect, seed),          // спираль от центра
+    () => jittered(sl, aspect, 0.6, seed),   // ровные неровные стёкла
+    () => jittered(sl, aspect, 0.98, seed),  // осколки
+    () => hex(sl, aspect, seed),             // соты
+    () => spiral(days, aspect, seed),        // спираль от центра (у копилки заполняется от центра)
   ];
-  return cuts[seed % cuts.length]();
+  // Спираль не умеет раскладывать по дням — у «по дням» и «календаря» её нет.
+  const n = fill === 'rows' || fill === 'calendar' ? 3 : 4;
+  return cuts[seed % n]();
 }
 
-const builders: Record<PatternId, (days: number, aspect: number, seed: number) => Pattern> = {
-  glass,
+type Builder = (days: number, aspect: number, seed: number, fill: FillId, weekday: number) => Pattern;
+const builders: Record<PatternId, Builder> = {
+  glass: (d, a, s, f, wd) => glass(slotsFor(f, d, a, wd), d, a, s, f),
   rose: (d) => rose(d), // роза всегда круглая
   tri: (d, a) => tri(d, a),
-  grid: (d, a) => grid(d, a),
+  grid: (d, a, _s, f, wd) => grid(slotsFor(f, d, a, wd), a),
 };
 const cache = new Map<string, Pattern>();
 
-/** `aspect` — ширина / высота места под картину. */
-export function getPattern(id: PatternId, days = 1, seed = 0, aspect = 0.7): Pattern {
+/**
+ * `aspect` — ширина / высота места под картину,
+ * `weekday` — день недели первого дня (0 = пн), нужен календарю месяца.
+ */
+export function getPattern(id: PatternId, days = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0): Pattern {
   // Округляем форму, чтобы мелкие изменения размера не пересчитывали узор.
   const a = Math.round(Math.min(3, Math.max(0.3, aspect)) * 20) / 20;
-  const key = `${id}:${days}:${seed}:${a}`;
+  const key = `${id}:${days}:${seed}:${a}:${fill}:${weekday}`;
   if (!cache.has(key)) {
     if (cache.size > 60) cache.clear(); // кэш не должен расти бесконечно
-    cache.set(key, builders[id](days, a, seed));
+    cache.set(key, builders[id](days, a, seed, fill, weekday));
   }
   return cache.get(key)!;
 }
@@ -217,6 +303,29 @@ export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
     const u = users.get(key)!;
     const merged = u.length === 2 && owner[u[0]] !== null && owner[u[0]] === owner[u[1]];
     if (!merged) parts.push(`M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
+  }));
+  return parts.join('');
+}
+
+/**
+ * Толстые линии между днями (для «по дням» и «календаря»): рёбра, у которых
+ * с двух сторон разные дни (декор считается отдельным «днём» -1).
+ */
+export function dayBorderPath(cells: Pt[][], day: number[]): string {
+  const r = (v: number) => Math.round(v * 50);
+  const keyOf = (p: Pt, q: Pt) => {
+    const a = `${r(p[0])},${r(p[1])}`, b = `${r(q[0])},${r(q[1])}`;
+    return a < b ? a + '|' + b : b + '|' + a;
+  };
+  const first = new Map<string, number>(); // ребро → день первого сегмента с ним
+  const parts: string[] = [];
+  cells.forEach((poly, i) => poly.forEach((p, k) => {
+    const q = poly[(k + 1) % poly.length];
+    const key = keyOf(p, q);
+    const d = day[i] ?? -1;
+    const seen = first.get(key);
+    if (seen === undefined) first.set(key, d);
+    else if (seen !== d) parts.push(`M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
   }));
   return parts.join('');
 }

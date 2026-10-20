@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPattern, leadPath, seedFor, type PatternId } from './patterns';
+import { getPattern, leadPath, seedFor, type FillId, type PatternId } from './patterns';
 
 const area = (poly: [number, number][]) =>
   Math.abs(poly.reduce((s, p, i) => {
@@ -15,6 +15,24 @@ describe('узоры', () => {
       expect(p.cells).toHaveLength(days * 24);
       expect([...p.cells, ...(p.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 1);
     }
+  });
+
+  it.each(['rows', 'calendar', 'jar'] as FillId[])('заливка %s: часы и декор покрывают картину', (fill) => {
+    for (const id of ['grid', 'glass'] as PatternId[]) {
+      for (const [days, seed, wd] of [[7, 0, 0], [7, 2, 0], [31, 1, 3], [30, 3, 6], [28, 0, 0]]) {
+        const p = getPattern(id, days, seed, 0.85, fill, wd);
+        expect(p.cells).toHaveLength(days * 24);
+        expect([...p.cells, ...(p.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 1);
+      }
+    }
+  });
+
+  it('календарь: месяц с четверга — 3 пустых дня в начале', () => {
+    const p = getPattern('grid', 31, 0, 0.85, 'calendar', 3);
+    expect(p.decor!.length % 24).toBe(0);
+    expect(p.decor!.length / 24).toBe(4); // 5 недель × 7 − 31
+    expect(p.day![0]).toBe(0);
+    expect(p.day!.at(-1)).toBe(30);
   });
 
   it('роза: кольцо на день', () => {

@@ -114,6 +114,7 @@ export default function Today() {
             to={to}
             spans={spans}
             runningEntryId={run?.id ?? null}
+            fill={state.fill}
             onSelect={(id) => {
               const e = entries.find((x) => x.id === id);
               if (e) setSelected({ entry: e, isNew: false });

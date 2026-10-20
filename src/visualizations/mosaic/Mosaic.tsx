@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
 import { hourOwners } from './layout';
-import { getPattern, leadPath, seedFor, type PatternId } from './patterns';
+import { dayBorderPath, getPattern, leadPath, seedFor, type FillId, type PatternId } from './patterns';
 import './mosaic.css';
 
 // Мозаика-витраж: период делится на сегменты, сегмент = час. Нарезка стёкол
@@ -13,7 +13,7 @@ import './mosaic.css';
 
 const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 
-function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: VisualizationProps & { pattern: PatternId }) {
+function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillProp, onSelect }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
   // Меряем место под картину, чтобы узор заполнил виджет целиком.
   // ResizeObserver ≈ подписка на событие «размер изменился».
@@ -29,17 +29,28 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: V
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const { w, h, cells, decor } = getPattern(pattern, days.length, seedFor(from), aspect);
+  const fill = fillProp as FillId;
+  const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
+  const { w, h, cells, decor, day } = getPattern(pattern, days.length, seedFor(from), aspect, fill, weekday);
   // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
-  const owners = days.flatMap((d) => hourOwners(spans, d));
+  const hours = days.flatMap((d) => hourOwners(spans, d));
+  // Копилка: пустые часы выкидываем, занятые ссыпаются в начало (≈ Where + дополнение null).
+  const owners = fill === 'jar'
+    ? [...hours.filter((o) => o !== null), ...hours.filter((o) => o === null)]
+    : hours;
   const ownerIds = owners.map((o) => o?.entryId ?? null);
   // Линии пересчитываем, только когда меняются хозяева часов (≈ кэш по ключу).
   const key = ownerIds.join('|');
   const lead = useMemo(() => leadPath([...cells, ...(decor ?? [])], ownerIds), [cells, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const border = useMemo(() => (day && days.length > 1 ? dayBorderPath([...cells, ...(decor ?? [])], day) : ''), [cells, day, days.length]);
 
   const now = Date.now();
   const dayIdx = days.findIndex((d, i) => now >= d && now < (days[i + 1] ?? to));
-  const nowCell = dayIdx >= 0 ? dayIdx * 24 + Math.floor((now - days[dayIdx]) / HOUR_MS) : -1;
+  // У копилки «сейчас» — последнее занятое стекло, если таймер идёт.
+  const filled = owners.findIndex((o) => o === null);
+  const nowCell = fill === 'jar'
+    ? (runningEntryId && filled > 0 && owners[filled - 1]?.entryId === runningEntryId ? filled - 1 : -1)
+    : dayIdx >= 0 ? dayIdx * 24 + Math.floor((now - days[dayIdx]) / HOUR_MS) : -1;
   const pts = (i: number) => cells[i].map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
 
   return (
@@ -63,6 +74,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: V
         );
       })}
       <path d={lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] }} />
+      {border && <path d={border} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * 2.6 }} />}
       {nowCell >= 0 && nowCell < cells.length && <polygon points={pts(nowCell)} className="glass-now" style={{ strokeWidth: leadWidth[scale] * 0.6 }} />}
     </svg>
     </div>

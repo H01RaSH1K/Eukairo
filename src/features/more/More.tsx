@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { activityColors } from '../../domain/colors';
 import { childrenOf } from '../../domain/tree';
-import { resetDemo, setViz, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
+import { resetDemo, setFill, setViz, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
 import { visualizations } from '../../visualizations/registry';
 import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
+
+const fills = [['calendar', 'Календарь'], ['rows', 'По дням'], ['flow', 'Подряд'], ['jar', 'Копилка']] as const;
 
 // Экран «Ещё»: занятия, стиль, бэкап, служебное. В макете — плюс демо-кнопки.
 export default function More({ goToday }: { goToday: () => void }) {
@@ -40,6 +42,12 @@ export default function More({ goToday }: { goToday: () => void }) {
             <button key={v.id} aria-pressed={state.vizId === v.id} onClick={() => setViz(v.id)}>{v.title}</button>
           ))}
         </div>
+        <div className="card-title sub-title">Заливка недели и месяца</div>
+        <div className="opt-grid four">
+          {fills.map(([id, title]) => (
+            <button key={id} aria-pressed={state.fill === id} onClick={() => setFill(id)}>{title}</button>
+          ))}
+        </div>
       </div>
 
       <button className="widget pad row-btn" onClick={() => setTreeOpen(true)}>
@@ -58,8 +66,8 @@ export default function More({ goToday }: { goToday: () => void }) {
       <div className="widget pad">
         <div className="card-title">Демо (только в макете)</div>
         <div className="btn-row">
-          <button className="btn" onClick={() => { simulateForgotten(); goToday(); }}>Забытый таймер</button>
-          <button className="btn" onClick={() => { showBackupBanner(); goToday(); }}>Плашка бэкапа</button>
+          <button className="btn" onClick={() => { simulateForgotten(); goToday(); }}>Таймер 5 ч</button>
+          <button className="btn" onClick={() => { showBackupBanner(); goToday(); }}>Плашка</button>
           <button className="btn" onClick={resetDemo}>Сброс</button>
         </div>
       </div>
