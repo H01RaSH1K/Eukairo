@@ -115,6 +115,23 @@ export default function Today() {
     else if (!isCurrent) go(offset + 1); // влево — позже
   };
 
+  // Двойной тап по мозаике — фокус (вкл/выкл). Одиночный тап по стеклу открывает запись,
+  // но с задержкой: вдруг следом второй тап, и это фокус, а не просмотр.
+  const DOUBLE_MS = 300;
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  const selectTimer = useRef(0);
+  const doubleAt = useRef(0); // когда был двойной тап: click второго тапа приходит после pointerup
+  useEffect(() => () => clearTimeout(selectTimer.current), []);
+  const onTap = (x: number, y: number) => {
+    const t = performance.now(), l = lastTap.current;
+    if (l && t - l.t < DOUBLE_MS && Math.hypot(x - l.x, y - l.y) < 30) {
+      lastTap.current = null;
+      doubleAt.current = t;
+      clearTimeout(selectTimer.current);
+      focusOn(!focus);
+    } else lastTap.current = { t, x, y };
+  };
+
   const order: Period[] = ['day', 'week', 'month'];
   // Щипок двумя пальцами: свести — крупнее масштаб (день → неделя → месяц), развести — мельче.
   // Храним пальцы по pointerId (≈ Dictionary<int, Vector2>).
@@ -166,7 +183,12 @@ export default function Today() {
       className="widget viz"
       onPointerDown={(e) => { pinchDown(e); swipe.current = { x: e.clientX, y: e.clientY }; }}
       onPointerMove={pinchMove}
-      onPointerUp={(e) => { if (!pinchUp(e)) onSwipeEnd(e.clientX, e.clientY); }}
+      onPointerUp={(e) => {
+        const s0 = swipe.current;
+        if (pinchUp(e)) return;
+        if (s0 && Math.hypot(e.clientX - s0.x, e.clientY - s0.y) < 10) onTap(e.clientX, e.clientY);
+        onSwipeEnd(e.clientX, e.clientY);
+      }}
       onPointerCancel={(e) => { pinchUp(e); swipe.current = null; }}
     >
       {/* key меняется при смене периода → React пересоздаёт обёртку, и её CSS-анимация
@@ -182,7 +204,9 @@ export default function Today() {
             settings={settingsOf(look, scale)}
             onSelect={(id) => {
               const e = entries.find((x) => x.id === id);
-              if (e) setSelected({ entry: e, isNew: false });
+              clearTimeout(selectTimer.current);
+              if (performance.now() - doubleAt.current < 200) return;
+              if (e) selectTimer.current = window.setTimeout(() => setSelected({ entry: e, isNew: false }), DOUBLE_MS);
             }}
           />
         </Suspense>
@@ -235,7 +259,8 @@ export default function Today() {
     </Drawer>
   );
 
-  // Витрина: мозаика под всем на весь экран; сверху — итог крупно, масштаб, кнопка фокуса.
+  // Витрина: мозаика под всем на весь экран; сверху — итог крупно и масштаб.
+  // Фокус (двойной тап по мозаике, в любом виде): только витраж.
   // Без витрины: шапка со стрелками, сегменты, мозаика карточкой.
   const head = design.showcase ? (
     <div className="fb-head">
@@ -249,7 +274,6 @@ export default function Today() {
             <button key={o.id} aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label[0]}</button>
           ))}
         </div>
-        <button className="fb-focus" onClick={() => focusOn(true)} aria-label="Фокус: только витраж">⛶</button>
       </div>
     </div>
   ) : (
@@ -269,7 +293,7 @@ export default function Today() {
 
   // Экран без прокрутки: мозаика забирает всё место, что осталось от остального.
   return (
-    <div className={'screen fit today' + (design.showcase ? ' fullbleed' : '') + (focus ? ' focus' : '')}>
+    <div className={'screen fit today' + (design.showcase || focus ? ' fullbleed' : '') + (focus ? ' focus' : '')}>
       {head}
       {banner}
       {viz}
@@ -281,7 +305,6 @@ export default function Today() {
           <div className="focus-light" />
           {/* табличка, как под картиной в музее */}
           <div className="focus-plaque">{periodName} · {formatDuration(total)}</div>
-          <button className="focus-exit" onClick={() => focusOn(false)} aria-label="Выйти из фокуса">✕</button>
         </>
       )}
 

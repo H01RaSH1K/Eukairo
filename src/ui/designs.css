@@ -168,15 +168,12 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .tiles-actions .btn { margin: 0; }
 .tiles-actions .btn.primary { color: #0d0d10; }
 
-/* ——— Фокус: только витраж, всё остальное спрятано ——— */
+/* ——— Фокус (двойной тап по мозаике): только витраж, всё остальное спрятано ——— */
+.widget.viz { touch-action: manipulation; } /* без зума по двойному тапу в Safari */
 .fb-tools { display: flex; align-items: center; gap: 6px; }
-.fb-focus {
-  width: 36px; height: 36px; border: 0; border-radius: 50%; font-size: 17px; color: var(--text);
-  background: rgba(30,30,36,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-}
 .today.focus { padding: 0 !important; }
 /* шторки (запись, выбор занятия) остаются: тап по куску в фокусе открывает запись */
-.today.focus > :not(.widget.viz):not(.focus-exit):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque) { display: none !important; }
+.today.focus > :not(.widget.viz):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque) { display: none !important; }
 /* Пустые стёкла — не плоские: у каждого свой лёгкий оттенок (--v из Mosaic.tsx) */
 .today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), #8a8fb0 calc(4% + var(--v) * 9%)); transition: fill .6s; }
 .today.focus .glass-fill { filter: saturate(1.15); }
@@ -202,12 +199,6 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 }
 .today.focus .widget.viz::after { display: none; }
 html[data-focus] .tabbar { display: none; }
-.focus-exit {
-  position: absolute !important; top: calc(env(safe-area-inset-top) + 10px); right: 12px; z-index: 2;
-  width: 34px; height: 34px; border: 0; border-radius: 50%; color: var(--text); opacity: .35;
-  background: rgba(30,30,36,.55); font-size: 15px;
-}
-.focus-exit:active { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .viz-anim, .glass-fill, .widget.dial, .focus-light { animation: none !important; }
