@@ -231,7 +231,7 @@ function grid(sl: Slots, aspect: number): Pattern {
  * чтобы дни не выглядели одинаково. `seed` — из даты, поэтому у одного
  * и того же дня нарезка всегда одна и та же.
  */
-function glass(sl: Slots, days: number, aspect: number, seed: number, fill: FillId): Pattern {
+function glass(sl: Slots, days: number, aspect: number, seed: number, fill: FillId, cut: number): Pattern {
   const cuts = [
     () => jittered(sl, aspect, 0.6, seed),   // ровные неровные стёкла
     () => jittered(sl, aspect, 0.98, seed),  // осколки
@@ -240,12 +240,13 @@ function glass(sl: Slots, days: number, aspect: number, seed: number, fill: Fill
   ];
   // Спираль не умеет раскладывать по дням — у «по дням» и «календаря» её нет.
   const n = fill === 'rows' || fill === 'calendar' ? 3 : 4;
-  return cuts[seed % n]();
+  // cut < 0 — «по дате»; иначе выбранная нарезка (спираль там, где её нет, → ровная).
+  return cuts[cut < 0 ? seed % n : cut < n ? cut : 0]();
 }
 
-type Builder = (days: number, aspect: number, seed: number, fill: FillId, weekday: number) => Pattern;
+type Builder = (days: number, aspect: number, seed: number, fill: FillId, weekday: number, cut: number) => Pattern;
 const builders: Record<PatternId, Builder> = {
-  glass: (d, a, s, f, wd) => glass(slotsFor(f, d, a, wd), d, a, s, f),
+  glass: (d, a, s, f, wd, c) => glass(slotsFor(f, d, a, wd), d, a, s, f, c),
   rose: (d) => rose(d), // роза всегда круглая
   tri: (d, a) => tri(d, a),
   grid: (d, a, _s, f, wd) => grid(slotsFor(f, d, a, wd), a),
@@ -254,15 +255,16 @@ const cache = new Map<string, Pattern>();
 
 /**
  * `aspect` — ширина / высота места под картину,
- * `weekday` — день недели первого дня (0 = пн), нужен календарю месяца.
+ * `weekday` — день недели первого дня (0 = пн), нужен календарю месяца,
+ * `cut` — нарезка витража (−1 = по дате).
  */
-export function getPattern(id: PatternId, days = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0): Pattern {
+export function getPattern(id: PatternId, days = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0, cut = -1): Pattern {
   // Округляем форму, чтобы мелкие изменения размера не пересчитывали узор.
   const a = Math.round(Math.min(3, Math.max(0.3, aspect)) * 20) / 20;
-  const key = `${id}:${days}:${seed}:${a}:${fill}:${weekday}`;
+  const key = `${id}:${days}:${seed}:${a}:${fill}:${weekday}:${cut}`;
   if (!cache.has(key)) {
     if (cache.size > 60) cache.clear(); // кэш не должен расти бесконечно
-    cache.set(key, builders[id](days, a, seed, fill, weekday));
+    cache.set(key, builders[id](days, a, seed, fill, weekday, cut));
   }
   return cache.get(key)!;
 }

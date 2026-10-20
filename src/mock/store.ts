@@ -9,32 +9,14 @@ import { demoActivities, makeDemoEntries, newId } from './demoData';
 export interface MockState {
   activities: Activity[];
   entries: Entry[];          // отсортированы по start
-  vizId: string;             // выбранный стиль визуализации
-  fill: string;              // заливка мозаики: flow | rows | calendar | jar | spots
-  spotSize: number;          // число пятен (точек), 1…12
   backupBanner: boolean;     // плашка «давно не было бэкапа»
   forgottenAsked: string | null; // по какой записи уже спросили «таймер ещё идёт?»
 }
 
-const VIZ_KEY = 'eukairo.mock.viz';
-const FILL_KEY = 'eukairo.mock.fill';
-const SPOT_KEY = 'eukairo.mock.spots';
-
 function initial(): MockState {
-  let vizId = 'mosaic-glass';
-  let fill = 'calendar';
-  let spotSize = 5;
-  try {
-    spotSize = Number(localStorage.getItem(SPOT_KEY) ?? spotSize) || spotSize;
-    vizId = localStorage.getItem(VIZ_KEY) ?? vizId;
-    fill = localStorage.getItem(FILL_KEY) ?? fill;
-  } catch { /* приватный режим */ }
   return {
     activities: demoActivities,
     entries: makeDemoEntries(Date.now()),
-    vizId,
-    fill,
-    spotSize,
     backupBanner: true,
     forgottenAsked: null,
   };
@@ -88,21 +70,6 @@ export function deleteEntry(id: string) {
   set({ entries: state.entries.filter((e) => e.id !== id) });
 }
 
-export function setViz(vizId: string) {
-  try { localStorage.setItem(VIZ_KEY, vizId); } catch { /* ничего */ }
-  set({ vizId });
-}
-
-export function setFill(fill: string) {
-  try { localStorage.setItem(FILL_KEY, fill); } catch { /* ничего */ }
-  set({ fill });
-}
-
-export function setSpotSize(spotSize: number) {
-  try { localStorage.setItem(SPOT_KEY, String(spotSize)); } catch { /* ничего */ }
-  set({ spotSize });
-}
-
 export function dismissBackupBanner() { set({ backupBanner: false }); }
 export function markForgottenAsked(id: string) { set({ forgottenAsked: id }); }
 
@@ -118,4 +85,4 @@ export function simulateForgotten() {
 }
 
 export function showBackupBanner() { set({ backupBanner: true }); }
-export function resetDemo() { set({ ...initial(), vizId: state.vizId, fill: state.fill, spotSize: state.spotSize }); }
+export function resetDemo() { set(initial()); }

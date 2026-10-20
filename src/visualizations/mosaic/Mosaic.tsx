@@ -13,7 +13,7 @@ import './mosaic.css';
 
 const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 
-function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillProp, spotSize, onSelect }: VisualizationProps & { pattern: PatternId }) {
+function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onSelect }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
   // Меряем место под картину, чтобы узор заполнил виджет целиком.
   // ResizeObserver ≈ подписка на событие «размер изменился».
@@ -29,18 +29,23 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillPro
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const fill = fillProp as FillId;
+  // Настройки стиля (см. registry.ts). Значения уже с умолчаниями.
+  const fill = settings.fill as FillId;
+  const spotCount = Number(settings.spots);
+  const minMs = Number(settings.threshold) * 60_000;
+  const cut = settings.cut === undefined || settings.cut === 'auto' ? -1 : Number(settings.cut);
+  const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
-  const { w, h, cells, decor, day } = getPattern(pattern, days.length, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday);
+  const { w, h, cells, decor, day } = getPattern(pattern, days.length, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday, cut);
   // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
-  const hours = days.flatMap((d) => hourOwners(spans, d));
+  const hours = days.flatMap((d) => hourOwners(spans, d, 24, minMs));
   // Копилка и пятна: пустые часы выкидываем, занятые раскладываем по-своему.
   // filter ≈ Where; `o is HourOwner` — проверка типа, как в C# pattern matching.
   const filled = hours.filter((o): o is HourOwner => o !== null);
   const seed = seedFor(from);
   const places = useMemo(
-    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, spotSize) : fill === 'jar' ? filled.map((_, i) => i) : null),
-    [fill, cells, seed, spotSize, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, spotCount) : fill === 'jar' ? filled.map((_, i) => i) : null),
+    [fill, cells, seed, spotCount, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
   );
   let owners: (HourOwner | null)[] = hours;
   if (places) {
@@ -82,8 +87,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillPro
           />
         );
       })}
-      <path d={lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] }} />
-      {border && <path d={border} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * 2.6 }} />}
+      <path d={lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK }} />
+      {border && <path d={border} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK * 2.6 }} />}
       {nowCell >= 0 && nowCell < cells.length && <polygon points={pts(nowCell)} className="glass-now" style={{ strokeWidth: leadWidth[scale] * 0.6 }} />}
     </svg>
     </div>

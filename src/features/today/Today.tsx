@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState, type ComponentType } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
@@ -8,21 +8,14 @@ import {
   dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
 } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
-import type { VisualizationPlugin, VisualizationProps } from '../../visualizations/types';
+import { settingsOf, useAppearance } from '../../settings/appearance';
+import { lazyViz } from '../../visualizations/lazy';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
 import { useNow } from '../../ui/useNow';
 import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
 import { shareBackup } from '../more/backup';
-
-// lazy() ≈ загрузить префаб по требованию: код стиля — отдельный файл.
-// Кэшируем, чтобы при перерисовке не создавать компонент заново.
-const lazyCache = new Map<string, ComponentType<VisualizationProps>>();
-function lazyViz(p: VisualizationPlugin) {
-  if (!lazyCache.has(p.id)) lazyCache.set(p.id, lazy(p.load));
-  return lazyCache.get(p.id)!;
-}
 
 const FORGET_AFTER_MS = 180 * MIN_MS;
 
@@ -58,7 +51,8 @@ export default function Today() {
   const spans = toSpans(entries, colors, from, to, now);
   const total = spans.reduce((sum, s) => sum + s.end - s.start, 0);
   const run = running(state);
-  const plugin = findVisualization(state.vizId);
+  const look = useAppearance();
+  const plugin = findVisualization(look.vizId);
   const Viz = lazyViz(plugin);
 
   const name = (id: string) => pathOf(activities, id).map((a) => a.name);
@@ -114,8 +108,7 @@ export default function Today() {
             to={to}
             spans={spans}
             runningEntryId={run?.id ?? null}
-            fill={state.fill}
-            spotSize={state.spotSize}
+            settings={settingsOf(look, plugin.id)}
             onSelect={(id) => {
               const e = entries.find((x) => x.id === id);
               if (e) setSelected({ entry: e, isNew: false });
