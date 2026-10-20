@@ -62,6 +62,8 @@ export default function Stats() {
   );
 }
 
+const short = (s: string) => (s.length > 14 ? s.slice(0, 13) + '…' : s);
+
 function Donut({ activities, colors, focus, setFocus, sum, own }: {
   activities: Activity[];
   colors: Map<string, string>;
@@ -107,8 +109,10 @@ function Donut({ activities, colors, focus, setFocus, sum, own }: {
             acc += len;
             return el;
           })}
-          <text x="100" y="96" textAnchor="middle" className="donut-total">{formatDuration(total)}</text>
-          <text x="100" y="116" textAnchor="middle" className="donut-sub">{focus ? path.at(-1)?.name : 'всего'}</text>
+          {/* Внутри кольца ~100 единиц ширины: часы и минуты — отдельными строками, чтобы не вылезали. */}
+          <text x="100" y="94" textAnchor="middle" className="donut-total">{Math.floor(total / HOUR_MS)} ч</text>
+          <text x="100" y="112" textAnchor="middle" className="donut-min">{Math.floor((total % HOUR_MS) / 60_000)} мин</text>
+          <text x="100" y="128" textAnchor="middle" className="donut-sub">{focus ? short(path.at(-1)!.name) : 'всего'}</text>
         </svg>
       </div>
       {slices.map((s) => (

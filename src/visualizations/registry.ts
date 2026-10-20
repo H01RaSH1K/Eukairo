@@ -1,10 +1,8 @@
 import type { VisualizationPlugin } from './types';
 
 // Новый стиль = папка в visualizations/ + строка здесь.
-// Два варианта мозаики — на сравнение в макетах; после выбора один уйдёт.
 export const visualizations: VisualizationPlugin[] = [
-  { id: 'mosaic-hours', title: 'Мозаика по часам суток', load: () => import('./mosaic/MosaicHours') },
-  { id: 'mosaic-dense', title: 'Мозаика плотная', load: () => import('./mosaic/MosaicDense') },
+  { id: 'mosaic', title: 'Мозаика-витраж', load: () => import('./mosaic/Mosaic') },
 ];
 
 export const defaultVisualization = visualizations[0];

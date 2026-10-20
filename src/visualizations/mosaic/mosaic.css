@@ -1,58 +1,7 @@
-/* ——— общее ——— */
-.mz-piece { position: absolute; top: 0; bottom: 0; }
-.mz-part { height: 100%; flex: none; }
-.live { animation: mz-pulse 1.6s ease-in-out infinite; }
-@keyframes mz-pulse { 50% { filter: brightness(1.35); } }
-
-/* ——— день: 4 × 6 плиток ——— */
-.mz-day { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.mz-tile {
-  position: relative;
-  aspect-ratio: 1.5;
-  border-radius: 9px;
-  background: var(--tile-empty);
-  overflow: hidden;
-  display: flex;
-}
-.mz-tile.now { box-shadow: inset 0 0 0 1.5px var(--text-dim); }
-.mz-tile.dense { aspect-ratio: 1; }
-.mz-label {
-  position: absolute; left: 6px; top: 4px;
-  font-size: 10px; color: rgba(255,255,255,.55);
-  pointer-events: none;
-  text-shadow: 0 0 3px rgba(0,0,0,.6);
-}
-
-/* ——— неделя ——— */
-.mz-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.mz-col { display: flex; flex-direction: column; gap: 2px; }
-.mz-colhead { font-size: 11px; color: var(--text-dim); text-align: center; padding: 2px 0 4px; }
-.mz-col.today .mz-colhead { color: var(--accent); font-weight: 600; }
-.mz-row { position: relative; height: 9px; border-radius: 2px; background: var(--tile-empty); overflow: hidden; }
-.mz-stack { display: flex; flex-direction: column-reverse; gap: 3px; }
-.mz-brick { height: 16px; border-radius: 4px; background: var(--tile-empty); overflow: hidden; display: flex; }
-.mz-week.dense .mz-colhead { padding: 6px 0 0; }
-
-/* ——— месяц, вариант А: витраж ——— */
-.mz-month { display: flex; flex-direction: column; gap: 3px; }
-.mz-strip-row { display: flex; align-items: center; gap: 6px; }
-.mz-strip-day { width: 18px; font-size: 10px; color: var(--text-dim); text-align: right; }
-.mz-strip-row.today .mz-strip-day { color: var(--accent); font-weight: 600; }
-.mz-strip {
-  position: relative; flex: 1; height: 9px; border-radius: 2px; overflow: hidden;
-  background: var(--tile-empty)
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), #33333b calc(25% - 1px) 25%);
-}
-.mz-strip-scale {
-  display: flex; justify-content: space-between;
-  margin-left: 24px; font-size: 9px; color: var(--text-dim);
-}
-
-/* ——— месяц, вариант Б: календарь ——— */
-.mz-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.mz-calhead { font-size: 10px; color: var(--text-dim); text-align: center; }
-.mz-calday { background: var(--surface); border-radius: 6px; padding: 3px; min-width: 0; }
-.mz-calday.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.mz-caldate { display: block; font-size: 9px; color: var(--text-dim); margin-bottom: 2px; }
-.mz-minigrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5px; }
-.mz-mini { aspect-ratio: 1; border-radius: 1.5px; background: var(--tile-empty); overflow: hidden; display: flex; }
+/* Витраж: стёклышки с тёмной «свинцовой» обводкой. */
+.glass { display: block; width: 100%; height: auto; border-radius: 14px; background: #0b0b0e; }
+.glass-empty { fill: #1d1d23; }
+.glass-lead { fill: none; stroke: #0b0b0e; stroke-width: 0.7; stroke-linejoin: round; }
+.live { animation: glass-pulse 1.6s ease-in-out infinite; }
+@keyframes glass-pulse { 50% { filter: brightness(1.35); } }
+@media (prefers-reduced-motion: reduce) { .live { animation: none; } }

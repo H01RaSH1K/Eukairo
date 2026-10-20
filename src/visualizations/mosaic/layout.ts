@@ -2,20 +2,6 @@
 import type { Span } from '../types';
 import { HOUR_MS } from '../../domain/time';
 
-/** Кусок промежутка внутри окна [wStart, wEnd): a, b — доли окна 0…1. */
-export interface Piece { entryId: string; color: string; a: number; b: number }
-
-export function piecesIn(spans: Span[], wStart: number, wEnd: number): Piece[] {
-  const len = wEnd - wStart;
-  const out: Piece[] = [];
-  for (const s of spans) {
-    const a = Math.max(s.start, wStart);
-    const b = Math.min(s.end, wEnd);
-    if (b > a) out.push({ entryId: s.entryId, color: s.color, a: (a - wStart) / len, b: (b - wStart) / len });
-  }
-  return out;
-}
-
 /** Плотная укладка: всё время подряд, без пустот, кирпичами по часу. */
 export interface Brick { parts: { entryId: string; color: string; frac: number }[]; fill: number }
 

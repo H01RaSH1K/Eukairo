@@ -5,9 +5,9 @@ import { toSpans } from '../../domain/spans';
 import { pathOf } from '../../domain/tree';
 import { MIN_MS, formatClock, formatDuration, formatTimer, periodRange, type Period } from '../../domain/time';
 import {
-  dismissBackupBanner, markForgottenAsked, running, saveEntry, setViz, startTimer, stopTimer, useMock,
+  dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
 } from '../../mock/store';
-import { findVisualization, visualizations } from '../../visualizations/registry';
+import { findVisualization } from '../../visualizations/registry';
 import type { VisualizationPlugin, VisualizationProps } from '../../visualizations/types';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
@@ -94,16 +94,7 @@ export default function Today() {
             }}
           />
         </Suspense>
-      </div>
-
-      {/* Только для макетов: быстро сравнить два варианта мозаики. */}
-      <div className="compare">
-        <span className="dim">Макет · вид мозаики:</span>
-        <Segmented
-          options={visualizations.map((v) => ({ id: v.id, label: v.id === 'mosaic-hours' ? 'По часам' : 'Плотно' }))}
-          value={plugin.id}
-          onChange={setViz}
-        />
+        <p className="dim viz-caption">Стёклышко = час полезного времени. Витраж заполняется снизу вверх.</p>
       </div>
 
       {run ? (
