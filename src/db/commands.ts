@@ -102,7 +102,7 @@ export function addActivity(parentId: string | null, name: string, icon?: string
 }
 
 /** Поля, которые правятся напрямую. undefined = убрать своё значение (брать у родителя / авто). */
-export type ActivityPatch = Partial<Pick<Activity, 'name' | 'icon' | 'hue' | 'colorOverride' | 'timerMinMin' | 'timerMaxMin' | 'forgetAfterMin'>>;
+export type ActivityPatch = Partial<Pick<Activity, 'name' | 'icon' | 'hue' | 'colorOverride' | 'timerMinMin' | 'timerMaxMin' | 'forgetAfterMin' | 'need'>>;
 
 export function updateActivity(id: string, patch: ActivityPatch) {
   // Dexie: поле со значением undefined в update удаляется из записи.

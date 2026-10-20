@@ -24,6 +24,9 @@ const demoActivities: Activity[] = [
   a('series', 'eng', 'Сериалы', 1),
   a('sport', null, 'Спорт', 4, { hue: 150, icon: '🏃' }),
   a('read', null, 'Чтение', 5, { hue: 52, icon: '📚' }),
+  // Нужды: в полезное время не идут, их часы вынимаются из мозаики дня.
+  a('sleep', null, 'Сон', 6, { hue: 240, icon: '😴', need: true, timerMinMin: 360, timerMaxMin: 600 }),
+  a('eat', null, 'Еда', 7, { hue: 95, icon: '🍽️', need: true, timerMinMin: 15, timerMaxMin: 60 }),
 ];
 
 // Детерминированный генератор случайных чисел (mulberry32):
@@ -44,10 +47,12 @@ const weekday: Slot[] = [
   ['dog', 7.5, 30, 50, 1],
   ['mail', 9.6, 15, 30, 0.8],
   [['code', 'tasks'], 10, 90, 150, 1],
-  ['calls', 13, 30, 60, 0.6],
+  ['eat', 12.6, 30, 45, 0.9],
+  ['calls', 13.3, 30, 60, 0.6],
   [['design', 'tasks', 'code'], 14.5, 60, 130, 0.9],
   ['cook', 18.7, 30, 60, 0.9],
-  ['dog', 20, 40, 60, 1],
+  ['eat', 19.6, 20, 35, 0.8],
+  ['dog', 20.2, 40, 60, 1],
   [['duo', 'series'], 21.4, 20, 50, 0.8],
   ['read', 22.4, 20, 40, 0.5],
 ];
@@ -56,6 +61,7 @@ const weekend: Slot[] = [
   ['dog', 9, 60, 90, 1],
   ['sport', 11, 50, 80, 0.6],
   ['cook', 13, 40, 80, 0.9],
+  ['eat', 14.4, 30, 45, 0.9],
   ['read', 16, 40, 90, 0.7],
   ['series', 20, 40, 60, 0.7],
   ['dog', 21, 40, 60, 1],
@@ -71,6 +77,20 @@ function makeDemoEntries(now: number): Entry[] {
     const dow = new Date(day).getDay();
     const slots = dow === 0 || dow === 6 ? weekend : weekday;
     let prevEnd = day;
+
+    // Сон: с вечера прошлого дня до утра (в будни раньше).
+    {
+      const last = entries[entries.length - 1];
+      const s = Math.round(Math.max(day - (40 + rand() * 30) * MIN_MS, last ? last.end! + 5 * MIN_MS : 0) / MIN_MS) * MIN_MS;
+      const e = Math.round((day + (slots === weekend ? 8.6 : 7) * HOUR_MS + (rand() - 0.5) * 30 * MIN_MS) / MIN_MS) * MIN_MS;
+      if (s >= now) break;
+      if (e > now) {
+        entries.push({ id: newId(), activityId: 'sleep', start: s, end: null, source: 'timer', updatedAt: now });
+        return entries;
+      }
+      entries.push({ id: newId(), activityId: 'sleep', start: s, end: e, source: 'timer', updatedAt: now });
+      prevEnd = e;
+    }
 
     for (const [act, hour, min, max, p] of slots) {
       if (rand() > p) continue;

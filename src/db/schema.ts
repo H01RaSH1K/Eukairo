@@ -15,6 +15,7 @@ export interface Activity {
   timerMinMin?: number;      // диапазон ползунка таймера, мин; нет → у родителя, иначе 15…120
   timerMaxMin?: number;
   archivedAt?: number;
+  need?: boolean;            // «нужда» (сон, еда…): не полезное время, вынимает часы из мозаики дня; наследуется детьми
   updatedAt: number;
 }
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
-import { pathOf } from '../../domain/tree';
+import { needIds, pathOf } from '../../domain/tree';
 import {
   HOUR_MS, MIN_MS, addLocalDays, formatClock, formatDuration, startOfLocalDay, startOfNextLocalDay,
 } from '../../domain/time';
@@ -31,7 +31,8 @@ export default function Timeline() {
   const dayEnd = startOfNextLocalDay(day);
   const today = startOfLocalDay(now);
   const list = entries.filter((e) => e.start < dayEnd && (e.end ?? now) > day);
-  const total = list.reduce((s, e) => s + Math.min(e.end ?? now, dayEnd) - Math.max(e.start, day), 0);
+  const needs = useMemo(() => needIds(activities), [activities]);
+  const total = list.reduce((s, e) => s + (needs.has(e.activityId) ? 0 : Math.min(e.end ?? now, dayEnd) - Math.max(e.start, day)), 0); // нужды не полезное время
 
   const title =
     day === today ? 'Сегодня'

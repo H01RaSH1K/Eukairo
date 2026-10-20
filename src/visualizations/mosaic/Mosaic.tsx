@@ -8,6 +8,7 @@ import './mosaic.css';
 // Мозаика-витраж: период делится на сегменты, сегмент = час. Нарезка стёкол
 // своя у каждого дня/недели/месяца (зависит от даты), чтобы дни не были одинаковыми
 // (день — 24, неделя — 168, месяц — 24 × дней; всегда одна картина).
+// Часы нужд (сон, еда…) из дня вынимаются: поспал 8 ч — в дне 16 стёкол.
 // Час целиком одного цвета — цвета записи, занявшей бо́льшую его часть (от 30 мин).
 // Часы одной записи сливаются в одну фигуру: между ними нет свинцовой линии.
 
@@ -36,9 +37,13 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const cut = settings.cut === undefined || settings.cut === 'auto' ? -1 : Number(settings.cut);
   const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
-  const { w, h, cells, decor, day } = getPattern(pattern, days.length, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday, cut);
-  // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
-  const hours = days.flatMap((d) => hourOwners(spans, d, 24, minMs));
+  // Хозяева 24 часов каждого дня; часы, где главная — нужда, выкидываем.
+  // `h` — час дня, он нужен, чтобы найти стекло «сейчас».
+  const kept = days.map((d) => hourOwners(spans, d, 24, minMs).map((o, h) => ({ o, h })).filter((x) => !x.o?.need));
+  const counts = kept.map((k) => k.length);
+  const { w, h, cells, decor, day } = getPattern(pattern, counts, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday, cut);
+  // flatMap ≈ SelectMany: оставшиеся часы всех дней подряд.
+  const hours = kept.flatMap((k) => k.map((x) => x.o));
   // Копилка и пятна: пустые часы выкидываем, занятые раскладываем по-своему.
   // filter ≈ Where; `o is HourOwner` — проверка типа, как в C# pattern matching.
   const filled = hours.filter((o): o is HourOwner => o !== null);
@@ -64,7 +69,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const last = filled.length - 1;
   const nowCell = places
     ? (runningEntryId && last >= 0 && filled[last].entryId === runningEntryId ? places[last] : -1)
-    : dayIdx >= 0 ? dayIdx * 24 + Math.floor((now - days[dayIdx]) / HOUR_MS) : -1;
+    : dayIdx >= 0 ? nowIndex(kept, dayIdx, Math.floor((now - days[dayIdx]) / HOUR_MS)) : -1;
   const pts = (i: number) => cells[i].map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
 
   return (
@@ -97,6 +102,12 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
     </svg>
     </div>
   );
+}
+
+/** Номер стекла часа `hour` дня `dayIdx` среди оставшихся часов (−1 — этот час вынут как нужда). */
+function nowIndex(kept: { h: number }[][], dayIdx: number, hour: number): number {
+  const i = kept[dayIdx].findIndex((x) => x.h === hour);
+  return i < 0 ? -1 : kept.slice(0, dayIdx).reduce((s, k) => s + k.length, 0) + i;
 }
 
 /** Плагин с выбранным узором (каждый узор — отдельная строка в реестре). */

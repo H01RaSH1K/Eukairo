@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react';
 import type { Activity, Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
-import { childrenOf, pathOf, rootOf, subtreeIds } from '../../domain/tree';
+import { childrenOf, needIds, pathOf, rootOf, subtreeIds } from '../../domain/tree';
 import { HOUR_MS, dayStarts, formatDuration, periodRange, type Period } from '../../domain/time';
 import { useData } from '../../db/store';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
 
-// Время каждого занятия (только собственные записи) внутри [from, to).
-function ownTotals(entries: Entry[], from: number, to: number, now: number) {
+// Время каждого занятия (только собственные записи) внутри [from, to). Нужды не считаем.
+function ownTotals(entries: Entry[], from: number, to: number, now: number, needs: Set<string>) {
   const m = new Map<string, number>();
   for (const e of entries) {
+    if (needs.has(e.activityId)) continue;
     const ms = Math.min(e.end ?? now, to) - Math.max(e.start, from);
     if (ms > 0) m.set(e.activityId, (m.get(e.activityId) ?? 0) + ms);
   }
@@ -23,15 +24,19 @@ export default function Stats() {
   const [period, setPeriod] = useState<Period>('week');
   const [focus, setFocus] = useState<string | null>(null); // какой узел раскрыт в круговой
   const colors = useMemo(() => activityColors(activities), [activities]);
+  const needs = useMemo(() => needIds(activities), [activities]);
+  // Сводки — только про полезное время: нужды убираем из дерева (их итог — строкой под общим).
+  const useful = useMemo(() => activities.filter((a) => !needs.has(a.id)), [activities, needs]);
 
   const { from, to } = periodRange(period, now);
   const prev = periodRange(period, from - 1);
-  const own = ownTotals(entries, from, to, now);
+  const own = ownTotals(entries, from, to, now, needs);
+  const needMs = entries.reduce((s, e) => s + (needs.has(e.activityId) ? Math.max(0, Math.min(e.end ?? now, to) - Math.max(e.start, from)) : 0), 0);
   // Время узла = свои записи + все потомки.
   const sum = (id: string) => [...subtreeIds(activities, id)].reduce((s, x) => s + (own.get(x) ?? 0), 0);
   const total = [...own.values()].reduce((a, b) => a + b, 0);
   // Сравниваем с тем же отрезком прошлого периода («к этому моменту»).
-  const prevTotal = [...ownTotals(entries, prev.from, prev.from + (now - from), now).values()].reduce((a, b) => a + b, 0);
+  const prevTotal = [...ownTotals(entries, prev.from, prev.from + (now - from), now, needs).values()].reduce((a, b) => a + b, 0);
   const delta = total - prevTotal;
 
   const prevName = { day: 'вчера', week: 'прошлой неделе', month: 'прошлому месяцу' }[period];
@@ -50,13 +55,14 @@ export default function Stats() {
         <div className={delta >= 0 ? 'up' : 'down'}>
           {delta >= 0 ? '▲' : '▼'} {formatDuration(Math.abs(delta))} {period === 'day' ? 'к вчера на это время' : `к ${prevName} на этот момент`}
         </div>
+        {needMs > 0 && <div className="dim small">нужды: {formatDuration(needMs)} — не в счёт</div>}
       </div>
 
-      <Donut activities={activities} colors={colors} focus={focus} setFocus={setFocus} sum={sum} own={own} />
+      <Donut activities={useful} colors={colors} focus={focus} setFocus={setFocus} sum={sum} own={own} />
 
       <div className="widget pad bars-widget">
         <div className="card-title">{period === 'day' ? 'По часам' : 'По дням'}</div>
-        <Bars period={period} from={from} to={to} entries={entries} activities={activities} colors={colors} now={now} />
+        <Bars period={period} from={from} to={to} entries={entries.filter((e) => !needs.has(e.activityId))} activities={useful} colors={colors} now={now} />
       </div>
     </div>
   );
