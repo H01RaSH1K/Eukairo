@@ -314,10 +314,12 @@ input.field { -webkit-user-select: text; user-select: text; }
 .apply-all { align-self: flex-start; padding-left: 0; }
 
 /* ——— полукруг таймера ——— */
-.widget.dial { position: relative; padding: 10px 12px 12px; }
+.widget.dial { position: relative; padding: 10px 12px 4px; }
+/* На широком экране полукруг не растёт бесконечно. */
+.dial-svg { max-width: 420px; margin: 0 auto; }
 .dial-svg { display: block; width: 100%; height: auto; touch-action: none; overflow: visible; }
 .dial-track { fill: none; stroke: #2a2a31; stroke-width: 12; stroke-linecap: round; }
-.dial-fill { fill: none; stroke-width: 12; stroke-linecap: round; transition: d .15s; }
+.dial-fill { fill: none; stroke-width: 12; stroke-linecap: round; }
 .dial-fill.free { animation: glass-pulse 1.6s ease-in-out infinite; }
 .dial-handle { fill: #fff; stroke-width: 4; }
 .dial-svg.running .dial-handle { display: none; }

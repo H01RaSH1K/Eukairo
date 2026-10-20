@@ -5,16 +5,14 @@ import { MIN_MS, formatClock, formatTimer } from '../../domain/time';
 // Полукруг внизу «Сегодня». По дуге — ползунок длительности (диапазон свой у занятия),
 // в середине — занятие и кнопки. Пока таймер идёт, дуга показывает, сколько прошло.
 
-const CX = 100, CY = 100, R = 84; // геометрия во «внутренних» единицах SVG (viewBox 200 × 112)
+const CX = 100, CY = 100, R = 84; // геометрия во «внутренних» единицах SVG (viewBox 200 × 120)
 
 /** Точка на дуге: t = 0 — левый край, t = 1 — правый, через верх. */
 const at = (t: number): [number, number] => [CX - R * Math.cos(t * Math.PI), CY - R * Math.sin(t * Math.PI)];
 
-/** SVG-путь дуги от левого края до доли t. */
-function arc(t: number): string {
-  const [x, y] = at(Math.min(Math.max(t, 0.0001), 1));
-  return `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
-}
+// Вся дуга слева направо через верх. Закрашенную часть рисуем той же дугой,
+// обрезая штрихом: pathLength = 1, штрих длиной t — ровно доля дуги, без пересчёта пути.
+const ARC = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
 
 /** «45 мин», «1 ч», «1 ч 30». */
 export function shortMin(min: number): string {
@@ -47,7 +45,7 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
     if (e.type === 'pointerdown') e.currentTarget.setPointerCapture(e.pointerId);
     const box = svg.current!.getBoundingClientRect();
     const x = ((e.clientX - box.left) / box.width) * 200;
-    const y = ((e.clientY - box.top) / box.height) * 112;
+    const y = ((e.clientY - box.top) / box.height) * 120;
     let a = Math.atan2(CY - y, x - CX);            // 0 справа, π слева
     if (a < 0) a = x < CX ? Math.PI : 0;           // ниже центра — прижимаем к краю
     const value = lo + (1 - a / Math.PI) * (hi - lo);
@@ -62,13 +60,18 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
     <div className="widget dial">
       <svg
         ref={svg}
-        viewBox="0 0 200 112"
+        viewBox="0 0 200 120"
         className={'dial-svg' + (run ? ' running' : '')}
         onPointerDown={drag}
         onPointerMove={drag}
       >
-        <path d={arc(1)} className="dial-track" />
-        <path d={arc(progress)} className={'dial-fill' + (run && !planned ? ' free' : '')} style={{ stroke: color }} />
+        <path d={ARC} className="dial-track" />
+        <path
+          d={ARC}
+          pathLength={1}
+          className={'dial-fill' + (run && !planned ? ' free' : '')}
+          style={{ stroke: color, strokeDasharray: `${Math.min(Math.max(progress, 0), 1)} 2` }}
+        />
         {!run && <circle cx={hx} cy={hy} r={8} className="dial-handle" style={{ stroke: color }} />}
         {!run && (
           <>
