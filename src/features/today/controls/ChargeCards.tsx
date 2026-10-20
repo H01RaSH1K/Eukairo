@@ -60,6 +60,18 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
   };
   useEffect(() => () => { if (hold.current) clearTimeout(hold.current.timer); }, []);
 
+  // Когда карточка схвачена, палец вбок не должен листать ленту: иначе браузер забирает
+  // жест себе (pointercancel) и зарядка сбрасывается. React вешает touchmove «пассивным»,
+  // где preventDefault не работает, поэтому слушаем вручную с passive: false.
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const block = (e: TouchEvent) => { if (hold.current?.y0 != null && e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => el.removeEventListener('touchmove', block);
+  }, []);
+
   const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
   const runColor = run ? colors.get(run.activityId) ?? '#888' : '';
 
@@ -75,7 +87,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
           <button className="charge-stop" onClick={() => stopTimer()}>■</button>
         </div>
       )}
-      <div className={'charge-strip' + (run ? ' disabled' : '')}>
+      <div ref={strip} className={'charge-strip' + (run ? ' disabled' : '') + (charging ? ' locked' : '')}>
         {quick.slice(0, 8).map((id) => {
           const [lo, hi] = timerRange(activities, id);
           const c = charging?.id === id ? charging : null;

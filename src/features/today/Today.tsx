@@ -6,6 +6,7 @@ import { pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
 import { ChargeCards } from './controls/ChargeCards';
 import { ClockRing } from './controls/ClockRing';
+import { ChargeTray, ClockTray, DialTray, TilesTray } from './controls/Trays';
 import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
@@ -215,6 +216,11 @@ export default function Today() {
         onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
       />
     );
+  const tray =
+    design.mode === 'clock' ? <ClockTray {...control} />
+    : design.mode === 'charge' ? <ChargeTray {...control} />
+    : design.mode === 'tiles' ? <TilesTray {...control} />
+    : <DialTray {...control} />;
   const drawer = (
     <Drawer
       open={drawerOpen}
@@ -223,6 +229,7 @@ export default function Today() {
       now={now}
       color={colors.get(run?.activityId ?? dialId) ?? '#888'}
       label={name(run?.activityId ?? dialId).at(-1) ?? ''}
+      tray={tray}
     >
       {body}
     </Drawer>
