@@ -16,6 +16,9 @@ export default function More({ goToday }: { goToday: () => void }) {
   const [treeOpen, setTreeOpen] = useState(false);
   const [lookOpen, setLookOpen] = useState(false);
   const look = useAppearance();
+  // Один стиль на всё — пишем его; разные — «свой у каждого».
+  const ids = new Set([look.day.vizId, look.week.vizId, look.month.vizId]);
+  const lookSummary = ids.size === 1 ? findVisualization(look.day.vizId).title : 'свой у Д/Н/М';
 
   // useEffect(…, []) ≈ Start() в Unity: выполнится один раз после появления экрана.
   useEffect(() => {
@@ -42,7 +45,7 @@ export default function More({ goToday }: { goToday: () => void }) {
 
       <button className="widget pad row-btn" onClick={() => setLookOpen(true)}>
         <span>Оформление</span>
-        <span className="dim">{findVisualization(look.vizId).title} ›</span>
+        <span className="dim">{lookSummary} ›</span>
       </button>
 
       <button className="widget pad row-btn" onClick={() => setTreeOpen(true)}>

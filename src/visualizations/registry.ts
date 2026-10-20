@@ -13,7 +13,7 @@ const fill = (ids: string[]): SettingDef => ({
   id: 'fill',
   kind: 'choice',
   title: 'Заливка',
-  hint: 'Как часы недели и месяца раскладываются по картине',
+  hint: 'Как часы раскладываются по картине',
   default: ids[0],
   options: [
     { id: 'calendar', title: 'Календарь', hint: 'День — блок, блоки как в календаре пн–вс' },

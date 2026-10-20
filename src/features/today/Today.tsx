@@ -52,7 +52,7 @@ export default function Today() {
   const total = spans.reduce((sum, s) => sum + s.end - s.start, 0);
   const run = running(state);
   const look = useAppearance();
-  const plugin = findVisualization(look.vizId);
+  const plugin = findVisualization(look[scale].vizId); // у каждого масштаба свой стиль
   const Viz = lazyViz(plugin);
 
   const name = (id: string) => pathOf(activities, id).map((a) => a.name);
@@ -108,7 +108,7 @@ export default function Today() {
             to={to}
             spans={spans}
             runningEntryId={run?.id ?? null}
-            settings={settingsOf(look, plugin.id)}
+            settings={settingsOf(look, scale)}
             onSelect={(id) => {
               const e = entries.find((x) => x.id === id);
               if (e) setSelected({ entry: e, isNew: false });
