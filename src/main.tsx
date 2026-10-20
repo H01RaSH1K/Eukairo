@@ -5,6 +5,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { platform } from './platform';
 import { startStore } from './db/store';
+import { installNoBounce } from './ui/noBounce';
 import './ui/theme.css';
 import './ui/designs.css';
 import './ui/themes.css';
@@ -12,6 +13,7 @@ import './settings/design'; // ставит дизайн до первой от�
 
 // Открываем базу сразу, параллельно с первой отрисовкой.
 startStore();
+installNoBounce();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
