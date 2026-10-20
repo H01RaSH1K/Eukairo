@@ -1,0 +1,19 @@
+// Точка входа (≈ Program.Main).
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
+import App from './App';
+import { platform } from './platform';
+import './ui/theme.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
+
+// Service worker кэширует приложение для офлайна и тихо ставит обновления.
+registerSW({ immediate: true });
+
+// Просим не чистить наши данные. Не ждём ответа: на старт не влияет.
+void platform.persistStorage();

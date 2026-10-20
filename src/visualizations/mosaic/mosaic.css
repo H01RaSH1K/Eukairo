@@ -1,0 +1,13 @@
+.mosaic {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.mosaic-tile {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--tile-empty);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse; /* заполняется снизу вверх */
+}
