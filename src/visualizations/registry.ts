@@ -34,7 +34,7 @@ const growth: SettingDef = {
   id: 'growth', kind: 'choice', title: 'Рост пятен', default: 'round',
   options: [
     { id: 'round', title: 'Кругом', hint: 'Пятно растёт от центра ровным кругом' },
-    { id: 'random', title: 'Как упадёт', hint: 'Каждое новое стекло — в случайном месте, лишь бы касалось пятна' },
+    { id: 'random', title: 'Неровно', hint: 'Сплошное пятно с неровным краем: свои выступы и впадины у каждого' },
   ],
   showIf: { id: 'fill', equals: ['spots'] },
 };

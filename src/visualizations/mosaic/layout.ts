@@ -67,19 +67,21 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
 
   const free = new Set(c.map((_, i) => i)); // ≈ HashSet<int>
   const out: number[] = [];
-  if (growth === 'random') {
-    randomGrowth(cells, c, centers, sizes, filled, free, out, seed);
-    return out;
-  }
-
-  // Рост «кругом»: следующее стекло — свободное, ближайшее к предыдущему и поближе к центру пятна.
-  // Так часы одной записи встают рядом и сливаются, а пятно остаётся круглым.
+  // Рост: следующее стекло — свободное, ближайшее к предыдущему и поближе к центру пятна.
+  // Так часы одной записи встают рядом и сливаются, а пятно растёт сплошным, без дыр.
+  // «Кругом» — расстояние до центра обычное, пятно круглое. «Неровно» — расстояние
+  // искажено по направлению (у пятна свои выступы и впадины), форма сложнее круга.
   sizes.forEach((size, s) => {
+    const reach = growth === 'random' ? blobShape(rng(seed * 31 + s)) : () => 1;
+    const toCenter = (p: Pt) => {
+      const dx = p[0] - centers[s][0], dy = p[1] - centers[s][1];
+      return Math.hypot(dx, dy) / reach(Math.atan2(dy, dx));
+    };
     let prev = centers[s];
     for (let k = 0; k < size && free.size; k++) {
       let best = -1, bestScore = Infinity;
       for (const i of free) {
-        const score = dist(c[i], prev) + 0.6 * dist(c[i], centers[s]);
+        const score = dist(c[i], prev) + 0.6 * toCenter(c[i]);
         if (score < bestScore) { bestScore = score; best = i; }
       }
       free.delete(best);
@@ -91,64 +93,13 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
 }
 
 /**
- * Рост «как упадёт»: новое стекло — случайное свободное стекло, касающееся пятна.
- * Чтобы запись не рассыпалась, её следующие часы берутся из соседей самой записи;
- * новая запись прилипает к пятну в случайном месте.
+ * Случайная неровная форма: «радиус» пятна в зависимости от угла.
+ * Сумма нескольких волн (2, 3 и 5 выступов) со случайной силой и поворотом —
+ * получается клякса, а не круг. Не меньше 0.3, поэтому пятно не рвётся.
  */
-function randomGrowth(
-  cells: Pt[][], c: Pt[], centers: Pt[], sizes: number[], filled: HourOwner[],
-  free: Set<number>, out: number[], seed: number,
-) {
-  const near = neighbours(cells);
-  // Первое стекло пятна — ближайшее к его центру.
-  const nearest = (p: Pt) => {
-    let best = -1, bestD = Infinity;
-    for (const i of free) {
-      const d = Math.hypot(c[i][0] - p[0], c[i][1] - p[1]);
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    return best;
-  };
-  // Случайный свободный сосед любого из стёкол `from`.
-  const pickNear = (from: number[], rand: () => number) => {
-    const options = [...new Set(from.flatMap((i) => near[i]))].filter((i) => free.has(i));
-    return options.length ? options[Math.floor(rand() * options.length)] : -1;
-  };
-
-  let h = 0; // номер занятого часа по порядку (во всех пятнах)
-  sizes.forEach((size, s) => {
-    // У каждого пятна свой генератор: соседние пятна не меняют его форму.
-    const rand = rng(seed * 31 + s);
-    const spot: number[] = [];
-    let run: number[] = [];
-    for (let k = 0; k < size && free.size; k++, h++) {
-      const newRun = h === 0 || filled[h - 1].entryId !== filled[h].entryId;
-      if (newRun) run = [];
-      let cell = spot.length === 0 ? nearest(centers[s]) : -1;
-      if (cell < 0 && run.length) cell = pickNear(run, rand);  // продолжаем запись
-      if (cell < 0) cell = pickNear(spot, rand);               // прилипаем к пятну
-      if (cell < 0) cell = nearest(centers[s]);                // пятно зажато — куда получится
-      free.delete(cell);
-      spot.push(cell); run.push(cell); out.push(cell);
-    }
-  });
-}
-
-/** Соседи каждого стекла — те, с кем у него общее ребро (≈ список смежности графа). */
-function neighbours(cells: Pt[][]): number[][] {
-  const r = (v: number) => Math.round(v * 50);
-  const key = (p: Pt, q: Pt) => {
-    const a = `${r(p[0])},${r(p[1])}`, b = `${r(q[0])},${r(q[1])}`;
-    return a < b ? a + '|' + b : b + '|' + a;
-  };
-  const byEdge = new Map<string, number[]>();
-  cells.forEach((poly, i) => poly.forEach((p, k) => {
-    const e = key(p, poly[(k + 1) % poly.length]);
-    byEdge.set(e, [...(byEdge.get(e) ?? []), i]);
-  }));
-  const out = cells.map((): number[] => []);
-  for (const users of byEdge.values()) if (users.length === 2) { out[users[0]].push(users[1]); out[users[1]].push(users[0]); }
-  return out;
+function blobShape(rand: () => number): (angle: number) => number {
+  const waves = [2, 3, 5].map((k) => ({ k, amp: (0.25 + rand() * 0.25) / Math.sqrt(k - 1), phase: rand() * 2 * Math.PI }));
+  return (a) => Math.max(0.3, 1 + waves.reduce((sum, w) => sum + w.amp * Math.cos(w.k * a + w.phase), 0));
 }
 
 function centroid(poly: Pt[]): Pt {

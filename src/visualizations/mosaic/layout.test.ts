@@ -30,16 +30,15 @@ describe('spotPlaces', () => {
   });
 });
 
-describe('spotPlaces «как упадёт»', () => {
-  it('пятно связное: каждое стекло касается уже занятого', () => {
-    const cells = Array.from({ length: 144 }, (_, i): [number, number][] => {
-      const x = (i % 12) * 10, y = Math.floor(i / 12) * 10;
+describe('spotPlaces «неровно»', () => {
+  it('часы на своих местах и форма отличается от круга', () => {
+    const cells = Array.from({ length: 400 }, (_, i): [number, number][] => {
+      const x = (i % 20) * 10, y = Math.floor(i / 20) * 10;
       return [[x, y], [x + 10, y], [x + 10, y + 10], [x, y + 10]];
     });
-    const filled = Array.from({ length: 20 }, (_, i) => ({ entryId: 'e' + Math.floor(i / 3), color: '#fff' }));
-    const places = spotPlaces(cells, filled, 7, 1, 'random');
-    expect(new Set(places).size).toBe(20);
-    const touches = (a: number, b: number) => Math.abs((a % 12) - (b % 12)) + Math.abs(Math.floor(a / 12) - Math.floor(b / 12)) === 1;
-    places.slice(1).forEach((p, k) => expect(places.slice(0, k + 1).some((q) => touches(p, q))).toBe(true));
+    const filled = Array.from({ length: 60 }, (_, i) => ({ entryId: 'e' + Math.floor(i / 3), color: '#fff' }));
+    const blob = spotPlaces(cells, filled, 7, 1, 'random');
+    expect(new Set(blob).size).toBe(60);
+    expect(blob).not.toEqual(spotPlaces(cells, filled, 7, 1, 'round'));
   });
 });
