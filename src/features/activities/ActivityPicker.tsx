@@ -5,12 +5,13 @@ import { Sheet } from '../../ui/Sheet';
 
 // Выбор занятия из дерева. Тап по строке — выбрать (любой узел, и родитель тоже),
 // тап по стрелке — раскрыть детей.
-export function ActivityPicker({ activities, colors, title, onPick, onClose }: {
+export function ActivityPicker({ activities, colors, title, onPick, onClose, footer }: {
   activities: Activity[];
   colors: Map<string, string>;
   title: string;
   onPick: (id: string) => void;
   onClose: () => void;
+  footer?: ReactNode;   // доп. кнопка под деревом
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (id: string) => {
@@ -40,6 +41,7 @@ export function ActivityPicker({ activities, colors, title, onPick, onClose }: {
   return (
     <Sheet title={title} onClose={onClose}>
       <div className="tree">{rows(null, 0)}</div>
+      {footer}
     </Sheet>
   );
 }

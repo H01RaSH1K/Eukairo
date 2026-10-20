@@ -37,7 +37,7 @@ export default function Stats() {
   const prevName = { day: 'вчера', week: 'прошлой неделе', month: 'прошлому месяцу' }[period];
 
   return (
-    <div className="screen">
+    <div className="screen fit">
       <h1>Сводки</h1>
       <Segmented
         options={[{ id: 'day', label: 'Сегодня' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
@@ -45,7 +45,7 @@ export default function Stats() {
         onChange={(p) => { setPeriod(p); setFocus(null); }}
       />
 
-      <div className="card">
+      <div className="widget pad stat-total">
         <div className="big">{formatDuration(total)}</div>
         <div className={delta >= 0 ? 'up' : 'down'}>
           {delta >= 0 ? '▲' : '▼'} {formatDuration(Math.abs(delta))} {period === 'day' ? 'к вчера на это время' : `к ${prevName} на этот момент`}
@@ -54,7 +54,7 @@ export default function Stats() {
 
       <Donut activities={activities} colors={colors} focus={focus} setFocus={setFocus} sum={sum} own={own} />
 
-      <div className="card">
+      <div className="widget pad bars-widget">
         <div className="card-title">{period === 'day' ? 'По часам' : 'По дням'}</div>
         <Bars period={period} from={from} to={to} entries={entries} activities={activities} colors={colors} now={now} />
       </div>
@@ -81,6 +81,10 @@ function Donut({ activities, colors, focus, setFocus, sum, own }: {
   }
   slices.sort((a, b) => b.ms - a.ms);
   const total = slices.reduce((s, x) => s + x.ms, 0);
+  // В легенду влезает 6 строк; остальное — одной строкой «Прочее».
+  const legend = slices.length > 6
+    ? [...slices.slice(0, 5), { id: 'rest', label: 'Прочее', ms: slices.slice(5).reduce((a, x) => a + x.ms, 0), color: '#555', drill: false }]
+    : slices;
 
   const R = 70;
   const C = 2 * Math.PI * R;
@@ -88,12 +92,12 @@ function Donut({ activities, colors, focus, setFocus, sum, own }: {
   const path = focus ? pathOf(activities, focus) : [];
 
   return (
-    <div className="card">
+    <div className="widget pad donut-widget">
       <div className="card-title crumbs">
         <button onClick={() => setFocus(null)}>Все занятия</button>
         {path.map((a) => <span key={a.id}> › <button onClick={() => setFocus(a.id)}>{a.name}</button></span>)}
       </div>
-      <div className="donut-wrap">
+      <div className="donut-row">
         <svg viewBox="0 0 200 200" className="donut">
           {/* Каждый сектор — окружность с пунктиром нужной длины (stroke-dasharray). */}
           {slices.map((s) => {
@@ -110,20 +114,20 @@ function Donut({ activities, colors, focus, setFocus, sum, own }: {
             return el;
           })}
           {/* Внутри кольца ~100 единиц ширины: часы и минуты — отдельными строками, чтобы не вылезали. */}
-          <text x="100" y="94" textAnchor="middle" className="donut-total">{Math.floor(total / HOUR_MS)} ч</text>
-          <text x="100" y="112" textAnchor="middle" className="donut-min">{Math.floor((total % HOUR_MS) / 60_000)} мин</text>
-          <text x="100" y="128" textAnchor="middle" className="donut-sub">{focus ? short(path.at(-1)!.name) : 'всего'}</text>
+          <text x="100" y="92" textAnchor="middle" className="donut-total">{Math.floor(total / HOUR_MS)} ч</text>
+          <text x="100" y="114" textAnchor="middle" className="donut-min">{Math.floor((total % HOUR_MS) / 60_000)} мин</text>
+          <text x="100" y="134" textAnchor="middle" className="donut-sub">{focus ? short(path.at(-1)!.name) : 'всего'}</text>
         </svg>
-      </div>
-      {slices.map((s) => (
+        <div className="legend-list">
+      {legend.map((s) => (
         <div key={s.id} className={'legend' + (s.drill ? ' drill' : '')} onClick={() => s.drill && setFocus(s.id)}>
           <span className="dot" style={{ background: s.color }} />
           <span className="legend-name">{s.label}</span>
-          <span className="dim">{Math.round((s.ms / total) * 100)}%</span>
-          <span className="legend-time">{formatDuration(s.ms)}</span>
-          <span className="dim">{s.drill ? '›' : ''}</span>
+          <span className="legend-time">{formatDuration(s.ms)}{s.drill ? ' ›' : ''}</span>
         </div>
       ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -148,7 +152,7 @@ function Bars({ period, from, to, entries, activities, colors, now }: {
   });
   const max = Math.max(period === 'day' ? HOUR_MS : 4 * HOUR_MS, ...data.map((m) => [...m.values()].reduce((x, y) => x + y, 0)));
 
-  const W = 320, H = 140, gap = buckets.length > 10 ? 2 : 6;
+  const W = 320, H = 80, gap = buckets.length > 10 ? 2 : 6;
   const bw = (W - gap * (buckets.length - 1)) / buckets.length;
 
   return (
@@ -174,9 +178,6 @@ function Bars({ period, from, to, entries, activities, colors, now }: {
           );
         })}
       </svg>
-      <div className="bar-legend">
-        {roots.map((r) => <span key={r.id}><span className="dot" style={{ background: colors.get(r.id) }} />{r.name}</span>)}
-      </div>
     </>
   );
 }

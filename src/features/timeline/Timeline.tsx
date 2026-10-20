@@ -65,7 +65,7 @@ export default function Timeline() {
   });
 
   return (
-    <div className="screen">
+    <div className="screen fit">
       <div className="day-nav">
         <button onClick={() => setDay(addLocalDays(day, -1))}>‹</button>
         <div className="center">
@@ -75,7 +75,7 @@ export default function Timeline() {
         <button disabled={day >= today} onClick={() => setDay(addLocalDays(day, 1))}>›</button>
       </div>
 
-      <div className="entries">{rows.length ? rows : <p className="dim center">Записей нет</p>}</div>
+      <div className="widget entries">{rows.length ? rows : <p className="dim center">Записей нет</p>}</div>
 
       <button
         className="fab"

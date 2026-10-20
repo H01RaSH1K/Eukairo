@@ -73,15 +73,30 @@ export default function Today() {
 
   const forgotten = run && now - run.start > FORGET_AFTER_MS && state.forgottenAsked !== run.id ? run : null;
 
+  const newRetro = () => setSelected({
+    entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: quick[0] ?? 'work', start: now - 60 * MIN_MS, end: now, source: 'manual', updatedAt: now },
+    isNew: true,
+  });
+
+  // Экран без прокрутки: шапка и виджеты снизу фиксированной высоты,
+  // мозаика забирает всё оставшееся место.
   return (
-    <div className="screen">
+    <div className="screen fit">
       <div className="today-head">
-        <div>
+        <button className="nav-arrow" onClick={() => setOffset(offset - 1)}>‹</button>
+        <div className="today-title" onClick={() => setOffset(0)}>
           <h1>{isCurrent ? titles[scale] : periodTitle(scale, from, to)}</h1>
-          <p className="dim sub">{scale === 'day' && isCurrent ? date : `полезного: ${formatDuration(total)}`}</p>
+          <div className="dim sub">{scale === 'day' && isCurrent ? date : isCurrent ? 'тапни ‹ чтобы листать' : 'тапни, чтобы вернуться'}</div>
         </div>
-        {scale === 'day' && isCurrent && <div className="today-total">{formatDuration(total)}</div>}
+        <button className="nav-arrow" disabled={isCurrent} onClick={() => setOffset(offset + 1)}>›</button>
+        <div className="today-total">{formatDuration(total)}</div>
       </div>
+
+      <Segmented
+        options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
+        value={scale}
+        onChange={(v) => { setScale(v); setOffset(0); }}
+      />
 
       {state.backupBanner && (
         <div className="banner">
@@ -91,19 +106,7 @@ export default function Today() {
         </div>
       )}
 
-      <Segmented
-        options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
-        value={scale}
-        onChange={(v) => { setScale(v); setOffset(0); }}
-      />
-
-      <div className="period-nav">
-        <button onClick={() => setOffset(offset - 1)}>‹ раньше</button>
-        {!isCurrent && <button onClick={() => setOffset(0)}>сейчас</button>}
-        <button disabled={isCurrent} onClick={() => setOffset(offset + 1)}>позже ›</button>
-      </div>
-
-      <div className="viz">
+      <div className="widget viz">
         <Suspense fallback={null}>
           <Viz
             scale={scale}
@@ -117,49 +120,33 @@ export default function Today() {
             }}
           />
         </Suspense>
-        <p className="dim viz-caption">Стекло = час суток. Часы одной записи сливаются в одну фигуру. Нарезка у каждого дня своя.</p>
       </div>
 
       {run ? (
-        <div className="timer" style={{ background: colors.get(run.activityId) }} onClick={() => setSelected({ entry: run, isNew: false })}>
+        <div className="widget timer" style={{ background: colors.get(run.activityId) }} onClick={() => setSelected({ entry: run, isNew: false })}>
           <div className="timer-info">
-            <div className="timer-path">{name(run.activityId).slice(0, -1).join(' › ')}</div>
             <div className="timer-name">{name(run.activityId).at(-1)}</div>
-            <div className="timer-since">с {formatClock(run.start)}</div>
+            <div className="timer-path">{[...name(run.activityId).slice(0, -1), `с ${formatClock(run.start)}`].join(' › ')}</div>
           </div>
           <div className="timer-clock">{formatTimer(now - run.start)}</div>
           <button className="timer-stop" onClick={(e) => { e.stopPropagation(); stopTimer(); }}>■</button>
         </div>
       ) : (
-        <div className="timer idle">Ничего не идёт. Тапни занятие, чтобы начать.</div>
+        <div className="widget timer idle">Ничего не идёт. Тапни занятие ниже.</div>
       )}
 
-      <div className="quick">
-        {quick.map((id) => {
+      <div className="widget quick">
+        {quick.slice(0, 5).map((id) => {
           const active = run?.activityId === id;
-          const path = name(id);
           return (
             <button key={id} className={'chip' + (active ? ' active' : '')} onClick={() => (active ? stopTimer() : startTimer(id))}>
               <span className="dot" style={{ background: colors.get(id) }} />
-              <span className="chip-text">
-                <span>{path.at(-1)}</span>
-                {path.length > 1 && <small className="dim">{path.at(-2)}</small>}
-              </span>
+              <span className="chip-text">{name(id).at(-1)}</span>
             </button>
           );
         })}
-        <button className="chip more" onClick={() => setPicking(true)}>Все занятия…</button>
+        <button className="chip more" onClick={() => setPicking(true)}>Ещё…</button>
       </div>
-
-      <button
-        className="btn ghost"
-        onClick={() => setSelected({
-          entry: { id: crypto.randomUUID?.() ?? String(Date.now()), activityId: quick[0] ?? 'work', start: now - 60 * MIN_MS, end: now, source: 'manual', updatedAt: now },
-          isNew: true,
-        })}
-      >
-        ＋ Добавить задним числом
-      </button>
 
       {picking && (
         <ActivityPicker
@@ -168,6 +155,7 @@ export default function Today() {
           title="Запустить таймер"
           onPick={(id) => { startTimer(id); setPicking(false); }}
           onClose={() => setPicking(false)}
+          footer={<button className="btn ghost" onClick={() => { setPicking(false); newRetro(); }}>＋ Добавить запись задним числом</button>}
         />
       )}
 
