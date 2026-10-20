@@ -17,6 +17,18 @@ export function isHidden(all: Activity[], id: string): boolean {
   return path.length === 0 || path.some((a) => a.archivedAt);
 }
 
+/** Нужда ли занятие: флаг на нём самом или на ком-то из предков. */
+export function isNeed(all: Activity[], id: string): boolean {
+  return pathOf(all, id).some((a) => a.need);
+}
+
+/** id всех занятий-нужд (с потомками) — чтобы быстро проверять записи. */
+export function needIds(all: Activity[]): Set<string> {
+  const ids = new Set<string>();
+  for (const a of all) if (a.need) for (const x of subtreeIds(all, a.id)) ids.add(x);
+  return ids;
+}
+
 /** Можно ли сделать `newParentId` родителем `id` (не в себя и не в своего потомка). */
 export function canMoveTo(all: Activity[], id: string, newParentId: string | null): boolean {
   return newParentId === null || !subtreeIds(all, id).has(newParentId);

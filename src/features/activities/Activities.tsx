@@ -5,7 +5,7 @@ import {
 } from '../../db/commands';
 import { useData } from '../../db/store';
 import { activityColors } from '../../domain/colors';
-import { childrenOf, forgetAfter, isHidden, pathOf, subtreeIds, timerRange } from '../../domain/tree';
+import { childrenOf, forgetAfter, isHidden, isNeed, pathOf, subtreeIds, timerRange } from '../../domain/tree';
 import { Sheet } from '../../ui/Sheet';
 import { shortMin } from '../today/Dial';
 import { ActivityPicker } from './ActivityPicker';
@@ -34,6 +34,7 @@ export default function Activities({ onBack }: { onBack: () => void }) {
       <div key={a.id} className="tree-row" style={{ paddingLeft: 8 + depth * 20 }} onClick={() => setEditing(a.id)}>
         <span className="dot" style={{ background: colors.get(a.id) }} />
         <span className="tree-name">{a.icon && depth === 0 ? `${a.icon} ` : ''}{a.name}</span>
+        {a.need && <span className="need-tag">нужда</span>}
         <span className="dim small">{timerRange(activities, a.id).map(shortMin).join(' – ')}</span>
       </div>,
       ...tree(a.id, depth + 1),
@@ -74,7 +75,7 @@ export default function Activities({ onBack }: { onBack: () => void }) {
 
       <p className="dim small hint">
         Тапни занятие, чтобы изменить. Цвет детей — оттенки цвета корня; диапазон таймера и порог «забытого таймера»
-        без своего значения берутся у родителя. «Завершить» прячет проект из выбора, а история и сводки остаются.
+        без своего значения берутся у родителя. «Нужда» — не в счёт полезного. «Завершить» прячет проект из выбора, а история и сводки остаются.
       </p>
 
       {edited && <ActivitySheet key={edited.id} a={edited} isNew={edited.id === fresh} all={activities} color={colors.get(edited.id) ?? '#888'}
@@ -95,6 +96,7 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
   const [lo, hi] = timerRange(all, a.id);
   const ownTimer = a.timerMinMin !== undefined || a.timerMaxMin !== undefined;
   const forget = forgetAfter(all, a.id);
+  const needByParent = !a.need && a.parentId !== null && isNeed(all, a.parentId);
 
   const commitName = () => { if (name.trim() && name.trim() !== a.name) void updateActivity(a.id, { name: name.trim() }); };
   const close = () => { commitName(); onClose(); };
@@ -152,6 +154,17 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
           <input className="slider" type="range" min={30} max={720} step={30} value={forget} aria-label="Порог забытого таймера"
             onChange={(e) => void updateActivity(a.id, { forgetAfterMin: Number(e.target.value) })} />
         </div>
+
+        <label className="range-edit flat setting-toggle need-toggle">
+          <span>
+            <span className="setting-title">Нужда</span>
+            <span className="setting-hint">
+              {needByParent ? 'Как у родителя' : 'Сон, еда: не в счёт полезного, часы вынимаются из мозаики дня'}
+            </span>
+          </span>
+          <input type="checkbox" checked={a.need || needByParent} disabled={needByParent}
+            onChange={(e) => void updateActivity(a.id, { need: e.target.checked || undefined })} />
+        </label>
 
         <div className="btn-row">
           <button className="btn" onClick={() => { commitName(); onAddChild(); }}>＋ Подзанятие</button>

@@ -35,6 +35,22 @@ describe('узоры', () => {
     expect(p.day!.at(-1)).toBe(30);
   });
 
+  it('нужды: у дня меньше стёкол, картина всё равно без дыр', () => {
+    for (const id of ['grid', 'glass', 'tri', 'rose'] as PatternId[]) {
+      for (const fill of ['flow', 'rows', 'calendar', 'jar'] as FillId[]) {
+        for (const counts of [[16], [13], [1], [0], [16, 14, 24, 0, 9, 17, 15]]) {
+          for (const seed of [0, 1, 2, 3]) {
+            const p = getPattern(id, counts, seed, 0.62, fill);
+            const n = counts.reduce((a, b) => a + b, 0);
+            expect(p.cells).toHaveLength(n);
+            if (id !== 'rose') expect([...p.cells, ...(p.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 1);
+            if (p.day) expect(p.day).toHaveLength(n);
+          }
+        }
+      }
+    }
+  });
+
   it('роза: кольцо на день', () => {
     expect(getPattern('rose', 7).cells).toHaveLength(168);
   });

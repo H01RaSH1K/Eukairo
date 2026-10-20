@@ -42,3 +42,10 @@ describe('spotPlaces «неровно»', () => {
     expect(blob).not.toEqual(spotPlaces(cells, filled, 7, 1, 'round'));
   });
 });
+
+describe('hourOwners и нужды', () => {
+  it('у часа нужды хозяин помечен need — мозаика его вынимает', () => {
+    const o = hourOwners([{ ...span('s', 0, 8 * H), need: true }, span('w', 8 * H, 10 * H)], 0, 24);
+    expect(o.filter((x) => !x?.need)).toHaveLength(16);
+  });
+});

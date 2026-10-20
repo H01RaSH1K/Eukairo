@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity } from '../db/schema';
-import { timerRange } from './tree';
+import { isNeed, needIds, timerRange } from './tree';
 
 const a = (id: string, parentId: string | null, extra: Partial<Activity> = {}): Activity =>
   ({ id, parentId, name: id, order: 0, updatedAt: 0, ...extra });
@@ -12,5 +12,14 @@ describe('timerRange', () => {
     expect(timerRange(tree, 'code')).toEqual([25, 240]);
     expect(timerRange(tree, 'calls')).toEqual([25, 60]);
     expect(timerRange(tree, 'dog')).toEqual([15, 120]);
+  });
+});
+
+describe('нужды', () => {
+  const tree = [a('sleep', null, { need: true }), a('nap', 'sleep'), a('work', null), a('lunch', 'work', { need: true })];
+  it('флаг наследуется детьми', () => {
+    expect(isNeed(tree, 'nap')).toBe(true);
+    expect(isNeed(tree, 'work')).toBe(false);
+    expect([...needIds(tree)].sort()).toEqual(['lunch', 'nap', 'sleep']);
   });
 });

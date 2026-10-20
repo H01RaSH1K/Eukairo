@@ -4,7 +4,7 @@ import { HOUR_MS } from '../../domain/time';
 import { rng, type Pt } from './voronoi';
 
 /** Хозяин часа: запись, занявшая больше всего времени в этом часе, если хотя бы полчаса. */
-export interface HourOwner { entryId: string; color: string }
+export interface HourOwner { entryId: string; color: string; need?: boolean }
 
 export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = HOUR_MS / 2): (HourOwner | null)[] {
   return Array.from({ length: count }, (_, h) => {
@@ -14,7 +14,7 @@ export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = 
     let bestMs = 0;
     for (const s of spans) {
       const ms = Math.min(s.end, b) - Math.max(s.start, a);
-      if (ms > bestMs) { bestMs = ms; best = { entryId: s.entryId, color: s.color }; }
+      if (ms > bestMs) { bestMs = ms; best = { entryId: s.entryId, color: s.color, need: s.need }; }
     }
     return bestMs >= minMs ? best : null;
   });
