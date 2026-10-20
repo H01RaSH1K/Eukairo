@@ -39,4 +39,4 @@ src/
 
 ## Авторы
 
-Код написал Claude (Anthropic). [H01RaSH1K](https://github.com/H01RaSH1K) просто рядом стоял: придумал идею, выбирал, ругал макеты и нажимал «Merge».
+Идея и продукт — [H01RaSH1K](https://github.com/H01RaSH1K). Код написан с Claude (Anthropic).
