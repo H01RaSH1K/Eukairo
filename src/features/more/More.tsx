@@ -5,7 +5,7 @@ import { shortMin } from '../today/Dial';
 import { resetDemo, setActivityTimer, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
 import { useAppearance } from '../../settings/appearance';
-import { designs, setDesign, useDesign } from '../../settings/design';
+import { modes, setDesign, useDesign } from '../../settings/design';
 import Appearance from '../appearance/Appearance';
 import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
@@ -55,12 +55,17 @@ export default function More({ goToday }: { goToday: () => void }) {
       </button>
 
       <div className="widget pad">
+        <div className="setting-title">Управление таймером</div>
         <div className="chips design-chips">
-          {designs.map((d) => (
-            <button key={d.id} aria-pressed={design === d.id} onClick={() => setDesign(d.id)}>{d.title}</button>
+          {modes.map((m) => (
+            <button key={m.id} aria-pressed={design.mode === m.id} onClick={() => setDesign({ mode: m.id })}>{m.title}</button>
           ))}
         </div>
-        <div className="setting-hint">{designs.find((d) => d.id === design)!.hint}</div>
+        <div className="setting-hint">{modes.find((m) => m.id === design.mode)!.hint}</div>
+        <label className="toggle-row">
+          <span>Витрина <span className="dim small">— мозаика на весь экран</span></span>
+          <input type="checkbox" checked={design.showcase} onChange={(e) => setDesign({ showcase: e.target.checked })} />
+        </label>
       </div>
 
       <button className="widget pad row-btn" onClick={() => setTreeOpen(true)}>

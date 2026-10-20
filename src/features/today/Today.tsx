@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
@@ -6,7 +6,8 @@ import { pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
 import { ChargeCards } from './controls/ChargeCards';
 import { ClockRing } from './controls/ClockRing';
-import { PullSheet } from './controls/PullSheet';
+import { Drawer } from './controls/Drawer';
+import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
 import { MIN_MS, addLocalDays, formatClock, formatDuration, periodRange, type Period } from '../../domain/time';
 import {
@@ -14,7 +15,7 @@ import {
 } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
 import { settingsOf, useAppearance } from '../../settings/appearance';
-import { useDesign } from '../../settings/design';
+import { setFocus, useDesign } from '../../settings/design';
 import { lazyViz } from '../../visualizations/lazy';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
@@ -64,6 +65,11 @@ export default function Today() {
   const run = running(state);
   const look = useAppearance();
   const design = useDesign();
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [focus, setFocusState] = useState(false);
+  const focusOn = (on: boolean) => { setFocus(on); setFocusState(on); };
+  // ушли с экрана — фокус снимаем, иначе таб-бар останется спрятанным
+  useEffect(() => () => setFocus(false), []);
   const plugin = findVisualization(look[scale].vizId); // у каждого масштаба свой стиль
   const Viz = lazyViz(plugin);
 
@@ -183,77 +189,86 @@ export default function Today() {
     </div>
   );
 
-  const dial = (
-    <Dial
-      name={name(dialId).at(-1) ?? ''}
-      color={colors.get(dialId) ?? '#888'}
-      range={range}
-      minutes={minutes}
-      onMinutes={(m) => setMinutesFor({ ...minutesFor, [dialId]: m })}
+  // ——— управление таймером: режим из «Ещё», всегда внутри сворачиваемой панели ———
+  const control: ControlProps = {
+    activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
+    run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
+    name: (id) => name(id).at(-1) ?? '',
+  };
+  const body =
+    design.mode === 'clock' ? <ClockRing {...control} />
+    : design.mode === 'charge' ? <ChargeCards {...control} />
+    : design.mode === 'tiles' ? <Tiles {...control} />
+    : (
+      <Dial
+        name={name(dialId).at(-1) ?? ''}
+        color={colors.get(dialId) ?? '#888'}
+        range={range}
+        minutes={minutes}
+        onMinutes={(m) => setMinutesFor({ ...minutesFor, [dialId]: m })}
+        run={run}
+        now={now}
+        onPick={() => setPicking(true)}
+        onStart={() => startTimer(dialId, minutes * MIN_MS)}
+        onStartFree={() => startTimer(dialId)}
+        onStop={() => stopTimer()}
+        onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
+      />
+    );
+  const drawer = (
+    <Drawer
+      open={drawerOpen}
+      onOpen={setDrawerOpen}
       run={run}
       now={now}
-      onPick={() => setPicking(true)}
-      onStart={() => startTimer(dialId, minutes * MIN_MS)}
-      onStartFree={() => startTimer(dialId)}
-      onStop={() => stopTimer()}
-      onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
-    />
+      color={colors.get(run?.activityId ?? dialId) ?? '#888'}
+      label={name(run?.activityId ?? dialId).at(-1) ?? ''}
+    >
+      {body}
+    </Drawer>
   );
 
-  let layout: ReactNode;
-  if (design === 'clock' || design === 'charge' || design === 'pull') {
-    // Мозаика во весь экран; сверху — только итог и масштаб, внизу — свой способ управления.
-    const control: ControlProps = {
-      activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
-      run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
-      name: (id) => name(id).at(-1) ?? '',
-    };
-    layout = (
-      <>
-        <div className="fb-head">
-          <div className="fb-left" onClick={() => go(0)}>
-            <div className="fb-title">{periodName}</div>
-            <div className="fb-total">{formatDuration(total)}</div>
-          </div>
-          <div className="fb-scales">
-            {scales.map((o) => (
-              <button key={o.id} aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label[0]}</button>
-            ))}
-          </div>
+  // Витрина: мозаика под всем на весь экран; сверху — итог крупно, масштаб, кнопка фокуса.
+  // Без витрины: шапка со стрелками, сегменты, мозаика карточкой.
+  const head = design.showcase ? (
+    <div className="fb-head">
+      <div className="fb-left" onClick={() => go(0)}>
+        <div className="fb-title">{periodName}</div>
+        <div className="fb-total">{formatDuration(total)}</div>
+      </div>
+      <div className="fb-tools">
+        <div className="fb-scales">
+          {scales.map((o) => (
+            <button key={o.id} aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label[0]}</button>
+          ))}
         </div>
-        {banner}
-        {viz}
-        {design === 'clock' && <ClockRing {...control} />}
-        {design === 'charge' && <ChargeCards {...control} />}
-        {design === 'pull' && <PullSheet {...control} />}
-      </>
-    );
-  } else {
-    // Классика и Витрина: шапка со стрелками, сегменты, мозаика, полукруг.
-    // (Витрина отличается тем, что мозаика под всем на весь экран — это делает CSS.)
-    layout = (
-      <>
-        <div className="today-head">
-          <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
-          <div className="today-title" onClick={() => go(0)}>
-            <h1>{periodName}</h1>
-            <div className="dim sub">{scale === 'day' && isCurrent ? date : isCurrent ? 'свайп или ‹ — листать' : 'тапни, чтобы вернуться'}</div>
-          </div>
-          <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
-          <div className="today-total">{formatDuration(total)}</div>
+        <button className="fb-focus" onClick={() => focusOn(true)} aria-label="Фокус: только витраж">⛶</button>
+      </div>
+    </div>
+  ) : (
+    <>
+      <div className="today-head">
+        <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
+        <div className="today-title" onClick={() => go(0)}>
+          <h1>{periodName}</h1>
+          <div className="dim sub">{scale === 'day' && isCurrent ? date : isCurrent ? 'свайп или ‹ — листать' : 'тапни, чтобы вернуться'}</div>
         </div>
-        <Segmented options={[...scales]} value={scale} onChange={pickScale} />
-        {banner}
-        {viz}
-        {dial}
-      </>
-    );
-  }
+        <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
+        <div className="today-total">{formatDuration(total)}</div>
+      </div>
+      <Segmented options={[...scales]} value={scale} onChange={pickScale} />
+    </>
+  );
 
   // Экран без прокрутки: мозаика забирает всё место, что осталось от остального.
   return (
-    <div className={'screen fit today lay-' + design + (design === 'classic' ? '' : ' fullbleed')}>
-      {layout}
+    <div className={'screen fit today' + (design.showcase ? ' fullbleed' : '') + (focus ? ' focus' : '')}>
+      {head}
+      {banner}
+      {viz}
+      {drawer}
+      {/* в фокусе — только витраж и едва заметная кнопка выхода */}
+      {focus && <button className="focus-exit" onClick={() => focusOn(false)} aria-label="Выйти из фокуса">✕</button>}
 
       {picking && (
         <ActivityPicker
