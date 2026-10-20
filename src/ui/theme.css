@@ -29,8 +29,8 @@
   --on-accent: #062420;              /* текст на акцентной кнопке */
   --on-color: #0d0d10;               /* текст на цвете занятия */
   --glass-tint: #8a8fb0;             /* оттенок пустых стёкол в фокусе */
-  --light-warm: rgba(255,236,200,.22); /* свет сквозь витраж в фокусе */
-  --light-cool: rgba(170,200,255,.16);
+  --light-warm: rgba(255,236,200,.12); /* свет сквозь витраж в фокусе */
+  --light-cool: rgba(170,200,255,.09);
   --light-blend: screen;
   --plaque: rgba(255,255,255,.45);
   --tabbar-h: 56px;
@@ -405,3 +405,10 @@ input.field { -webkit-user-select: text; user-select: text; }
 .dur-chips { justify-content: center; }
 .field input[type='date'] { text-align: right; }
 .btn-row .btn.arrow { flex: 0 0 48px; }
+
+/* Недостача высоты окна в iOS-приложении (ui/viewport.ts, обычно 0) */
+html, body { overflow: hidden; }
+#root { height: calc(100% + var(--vp-gap, 0px)); }
+.tabbar { bottom: calc(0px - var(--vp-gap, 0px)); }
+.sheet-backdrop { bottom: calc(0px - var(--vp-gap, 0px)); }
+.fab { bottom: calc(env(safe-area-inset-bottom) + var(--tabbar-h) + 16px - var(--vp-gap, 0px)); }

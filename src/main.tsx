@@ -9,6 +9,7 @@ import './ui/theme.css';
 import './ui/designs.css';
 import './ui/themes.css';
 import './settings/design'; // ставит дизайн до первой отрисовки
+import './ui/viewport'; // чинит высоту окна в iOS-приложении с «Домой»
 
 // Открываем базу сразу, параллельно с первой отрисовкой.
 startStore();
