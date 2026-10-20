@@ -17,7 +17,7 @@ export interface MockState {
 const VIZ_KEY = 'eukairo.mock.viz';
 
 function initial(): MockState {
-  let vizId = 'mosaic';
+  let vizId = 'mosaic-glass';
   try { vizId = localStorage.getItem(VIZ_KEY) ?? vizId; } catch { /* приватный режим */ }
   return {
     activities: demoActivities,

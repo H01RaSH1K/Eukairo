@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { packBricks } from './layout';
+import { hourOwners } from './layout';
 
 const H = 3_600_000;
 const span = (id: string, start: number, end: number) => ({ entryId: id, activityId: id, color: id, start, end });
 
-describe('packBricks', () => {
-  it('укладывает 1,5 ч + 1 ч в три кирпича', () => {
-    const b = packBricks([span('a', 0, 1.5 * H), span('b', 5 * H, 6 * H)], 0, 24 * H);
-    expect(b).toHaveLength(3);
-    expect(b[1].parts.map((p) => [p.entryId, p.frac])).toEqual([['a', 0.5], ['b', 0.5]]);
-    expect(b[2].fill).toBeCloseTo(0.5);
+describe('hourOwners', () => {
+  it('час достаётся записи, занявшей большую часть, и только если ≥ 30 мин', () => {
+    const o = hourOwners([span('a', 0, 0.4 * H), span('b', 0.4 * H, 1.3 * H)], 0, 3);
+    expect(o.map((x) => x?.entryId ?? null)).toEqual(['b', null, null]);
   });
 });

@@ -34,35 +34,18 @@ function clipHalf(poly: Pt[], a: Pt, b: Pt): Pt[] {
   return out;
 }
 
-export interface Cell { poly: Pt[]; minY: number; maxY: number; minX: number; maxX: number }
-
-/**
- * cols × rows стёклышек в прямоугольнике w × h.
- * Порядок — снизу вверх: так экран заполняется, как сосуд.
- */
-export function makeCells(cols: number, rows: number, w: number, h: number, seed = 7): Cell[] {
-  const rand = rng(seed);
-  const cw = w / cols;
-  const ch = h / rows;
-  const seeds: Pt[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      seeds.push([(c + 0.15 + rand() * 0.7) * cw, (r + 0.15 + rand() * 0.7) * ch]);
-    }
-  }
+/** Ячейки Вороного для точек `seeds` в прямоугольнике w × h — в том же порядке, что и точки. */
+export function voronoi(seeds: Pt[], w: number, h: number, reach: number): Pt[][] {
   const rect: Pt[] = [[0, 0], [w, 0], [w, h], [0, h]];
-  const cells = seeds.map((s) => {
+  return seeds.map((s) => {
     let poly = rect;
     for (const o of seeds) {
-      // Соседи дальше двух клеток на форму не влияют — пропускаем ради скорости.
-      if (o === s || Math.abs(o[0] - s[0]) > 2.5 * cw || Math.abs(o[1] - s[1]) > 2.5 * ch) continue;
+      // Далёкие точки на форму ячейки не влияют — пропускаем ради скорости.
+      if (o === s || Math.abs(o[0] - s[0]) > reach || Math.abs(o[1] - s[1]) > reach) continue;
       poly = clipHalf(poly, s, o);
     }
-    const xs = poly.map((p) => p[0]);
-    const ys = poly.map((p) => p[1]);
-    return { poly, seed: s, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+    return poly;
   });
-  // Снизу вверх по центру стёклышка: «уровень» заполнения получается неровным, как у витража.
-  cells.sort((a, b) => b.seed[1] - a.seed[1]);
-  return cells.map(({ poly, minX, maxX, minY, maxY }) => ({ poly, minX, maxX, minY, maxY }));
 }
+
+export { rng };

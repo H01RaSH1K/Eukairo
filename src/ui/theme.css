@@ -219,4 +219,4 @@ input.field { -webkit-user-select: text; user-select: text; }
 .field.time input { text-align: left; font-size: 20px; padding: 0; width: 100%; }
 .field.time .field-value { font-size: 20px; }
 .field-row > * { flex: 1; }
-.viz-caption { font-size: 12px; text-align: center; margin: 6px 0 0; }
+.viz-caption { font-size: 12px; text-align: center; margin: 6px 0 8px; }

@@ -5,9 +5,9 @@ import { toSpans } from '../../domain/spans';
 import { pathOf } from '../../domain/tree';
 import { MIN_MS, formatClock, formatDuration, formatTimer, periodRange, type Period } from '../../domain/time';
 import {
-  dismissBackupBanner, markForgottenAsked, running, saveEntry, startTimer, stopTimer, useMock,
+  dismissBackupBanner, markForgottenAsked, running, saveEntry, setViz, startTimer, stopTimer, useMock,
 } from '../../mock/store';
-import { findVisualization } from '../../visualizations/registry';
+import { findVisualization, visualizations } from '../../visualizations/registry';
 import type { VisualizationPlugin, VisualizationProps } from '../../visualizations/types';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
@@ -94,7 +94,13 @@ export default function Today() {
             }}
           />
         </Suspense>
-        <p className="dim viz-caption">Стёклышко = час полезного времени. Витраж заполняется снизу вверх.</p>
+        <p className="dim viz-caption">Сегмент = час суток. Часы одной записи сливаются в одну фигуру.</p>
+        {/* Только для макетов: быстро сравнить узоры деления. */}
+        <Segmented
+          options={visualizations.map((v) => ({ id: v.id, label: v.title.split(' ')[0] }))}
+          value={plugin.id}
+          onChange={setViz}
+        />
       </div>
 
       {run ? (
