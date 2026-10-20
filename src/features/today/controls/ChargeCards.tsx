@@ -5,43 +5,52 @@ import { startTimer, stopTimer } from '../../../mock/store';
 import { shortMin } from '../Dial';
 import type { ControlProps } from './types';
 
-// «Зарядка»: занятия — крупные карточки в ленте. Держишь палец на карточке — она
-// заливается цветом снизу вверх, и длительность растёт (чем дольше держишь, тем быстрее).
-// Отпустил — таймер на набранное время. Короткий тап — без лимита.
+// «Зарядка»: занятия — крупные карточки в ленте. Нажал и чуть подержал — карточка
+// «схватилась»: дальше палец вверх — больше времени, вниз — меньше (заливка ходит за пальцем).
+// Отпустил — таймер на выбранное время. Короткий тап — без лимита.
 // Пока таймер идёт, сверху висит его полоса; тап по ней — стоп.
 
-const HOLD_MS = 280; // короче — это тап
+const HOLD_MS = 280;   // короче — это тап
+const STEP_PX = 12;    // столько пикселей пальцем = 5 минут
 
 export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpenRun, name }: ControlProps) {
   const [charging, setCharging] = useState<{ id: string; minutes: number } | null>(null);
-  const hold = useRef<{ id: string; t0: number; x: number; y: number; frame: number } | null>(null);
+  // y0 и m0 — где был палец и сколько было минут в момент «схватывания» (null — ещё не схватили)
+  const hold = useRef<{ id: string; x: number; y: number; timer: number; el: HTMLElement; pointer: number; y0: number | null; m0: number } | null>(null);
 
-  // Пока держим — каждый кадр пересчитываем минуты (≈ Update() в Unity).
-  const tick = () => {
-    const h = hold.current;
-    if (!h) return;
-    const held = performance.now() - h.t0;
-    if (held > HOLD_MS) {
-      const [lo, hi] = timerRange(activities, h.id);
-      // 5 минут за шаг; шаг ускоряется: первые — по 0.25 с, дальше быстрее
-      const steps = Math.floor(Math.pow((held - HOLD_MS) / 250, 1.35));
-      setCharging({ id: h.id, minutes: Math.min(hi, lo + steps * 5) });
-    }
-    h.frame = requestAnimationFrame(tick);
+  const minutesAt = (id: string, m0: number, dy: number) => {
+    const [lo, hi] = timerRange(activities, id);
+    // вверх — dy < 0 — больше; шаг 5 минут, в пределах диапазона занятия
+    return Math.min(hi, Math.max(lo, m0 + Math.round(-dy / STEP_PX) * 5));
   };
-  const down = (id: string, e: PointerEvent) => {
+  const down = (id: string, e: PointerEvent<HTMLDivElement>) => {
     if (run) return;
-    hold.current = { id, t0: performance.now(), x: e.clientX, y: e.clientY, frame: requestAnimationFrame(tick) };
+    const el = e.currentTarget, pointer = e.pointerId;
+    const h = { id, x: e.clientX, y: e.clientY, el, pointer, y0: null as number | null, m0: 0, timer: 0 };
+    // подержал — схватили: старт с середины диапазона, палец дальше двигает время
+    h.timer = window.setTimeout(() => {
+      const [lo, hi] = timerRange(activities, id);
+      h.m0 = Math.round((lo + hi) / 10) * 5;
+      h.y0 = h.y;
+      el.setPointerCapture(pointer); // палец может уйти за карточку — она всё равно наша
+      setCharging({ id, minutes: h.m0 });
+    }, HOLD_MS);
+    hold.current = h;
   };
   const move = (e: PointerEvent) => {
     const h = hold.current;
-    // палец поехал вбок до «зарядки» — это прокрутка ленты, а не нажатие
-    if (h && !charging && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) end(false);
+    if (!h) return;
+    if (h.y0 === null) {
+      // палец поехал до «схватывания» — это прокрутка ленты, а не нажатие
+      if (Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) end(false);
+      return;
+    }
+    setCharging({ id: h.id, minutes: minutesAt(h.id, h.m0, e.clientY - h.y0) });
   };
   const end = (fire: boolean) => {
     const h = hold.current;
     if (!h) return;
-    cancelAnimationFrame(h.frame);
+    clearTimeout(h.timer);
     hold.current = null;
     if (fire) {
       if (charging) startTimer(h.id, charging.minutes * MIN_MS);
@@ -49,7 +58,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
     }
     setCharging(null);
   };
-  useEffect(() => () => { if (hold.current) cancelAnimationFrame(hold.current.frame); }, []);
+  useEffect(() => () => { if (hold.current) clearTimeout(hold.current.timer); }, []);
 
   const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
   const runColor = run ? colors.get(run.activityId) ?? '#888' : '';
@@ -79,7 +88,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
               onPointerDown={(e) => down(id, e)}
               onPointerMove={move}
               onPointerUp={() => end(true)}
-              onPointerLeave={() => end(false)}
+              onPointerLeave={() => { if (!charging) end(false); }}
               onPointerCancel={() => end(false)}
               onContextMenu={(e) => e.preventDefault()}
             >
@@ -92,7 +101,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
         })}
         <button className="charge-card more" onClick={onMore}>Все занятия…</button>
       </div>
-      {!run && <div className="charge-hint dim">тап — без лимита · держи — набрать время</div>}
+      {!run && <div className="charge-hint dim">тап — без лимита · подержи и веди ↑↓</div>}
     </div>
   );
 }
