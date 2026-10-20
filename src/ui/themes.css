@@ -1,0 +1,84 @@
+/* Темы: только палитра и материал стекла (цвет свинца, пустых стёкол, свет в фокусе).
+   Компоновку и анимации задают designs.css и режимы — тема их не трогает.
+   «Ночь» — это значения по умолчанию в theme.css (:root). */
+
+/* ——— Бумага: тёплый светлый лист, свинец как тушь, заголовки с засечками ——— */
+html[data-theme='paper'] {
+  color-scheme: light;
+  --bg: #f4efe6; --surface: #fffaf1; --tile-empty: #ece4d6;
+  --text: #2b2620; --text-dim: #8a7f70; --accent: #b5523b;
+  --chip: #ece4d6; --control: #e6dccb; --selected: #dccfb9; --line: #e0d6c4;
+  --bar: rgba(250,245,236,.92);
+  --glass-empty: #e9e0d0; --glass-decor: #efe7da; --glass-lead: #3a3128;
+  --font-display: Georgia, 'Times New Roman', serif;
+  --frost: rgba(255,250,241,.72); --frost-soft: rgba(255,250,241,.62); --edge: rgba(0,0,0,.08);
+  --veil: 244 239 230; --ink-shadow: rgba(255,250,241,.9);
+  --soft: rgba(0,0,0,.05); --soft-2: rgba(0,0,0,.08); --grip: rgba(0,0,0,.2);
+  --banner: #e7eadb; --sheet: #fffaf1; --sheet-grab: #d6cbb8; --on-accent: #fff;
+  --glass-tint: #c9a77a; --light-warm: rgba(255,190,110,.28); --light-cool: rgba(140,170,220,.18); --light-blend: multiply;
+  --plaque: rgba(43,38,32,.5);
+}
+html[data-theme='paper'] h1, html[data-theme='paper'] .fb-total, html[data-theme='paper'] .dial-value,
+html[data-theme='paper'] .today-total { font-family: var(--font-display); font-weight: 500; }
+
+/* ——— Неон: чёрное стекло, светящийся свинец ——— */
+html[data-theme='neon'] {
+  --bg: #07070b; --surface: #0e0e16; --tile-empty: #13131d;
+  --text: #eafffb; --text-dim: #6f8a90; --accent: #3cf2d8;
+  --chip: #141420; --control: #171724; --selected: #1f2a33; --line: #1c2a30;
+  --glass-empty: #0c0c13; --glass-decor: #09090e; --glass-lead: #19c9b4;
+  --edge: rgba(60,242,216,.18); --veil: 7 7 11;
+  --banner: #0f2a28; --sheet: #0e0e16; --sheet-grab: #1f3a3a;
+  --glass-tint: #3cf2d8; --light-warm: rgba(255,60,200,.14); --light-cool: rgba(60,242,216,.16);
+  --plaque: rgba(60,242,216,.55);
+}
+html[data-theme='neon'] .glass-lead { filter: drop-shadow(0 0 2px #3cf2d8); }
+html[data-theme='neon'] .fb-total, html[data-theme='neon'] .today-total,
+html[data-theme='neon'] .dial-value { text-shadow: 0 0 12px rgba(60,242,216,.6); }
+html[data-theme='neon'] .drawer, html[data-theme='neon'] .widget { box-shadow: 0 0 0 1px var(--edge), 0 0 22px rgba(60,242,216,.06); }
+
+/* ——— Собор: глубокая синева, позолоченный свинец ——— */
+html[data-theme='cathedral'] {
+  --bg: #0b1026; --surface: #141a36; --tile-empty: #1a2144;
+  --text: #f3ecd9; --text-dim: #9a97b0; --accent: #e0b04f;
+  --chip: #1b2246; --control: #1e2650; --selected: #2b3463; --line: #232b55;
+  --bar: rgba(16,21,48,.92);
+  --glass-empty: #172046; --glass-decor: #10162f; --glass-lead: #b8913e;
+  --font-display: Georgia, 'Times New Roman', serif;
+  --frost: rgba(18,24,56,.62); --frost-soft: rgba(26,33,72,.58); --edge: rgba(224,176,79,.18);
+  --veil: 8 11 30; --banner: #2a2a3e; --sheet: #141a36; --sheet-grab: #3a4170; --on-accent: #1a1405;
+  --glass-tint: #6a78c8; --light-warm: rgba(255,210,120,.24); --light-cool: rgba(120,140,255,.18);
+  --plaque: rgba(224,176,79,.6);
+}
+html[data-theme='cathedral'] h1, html[data-theme='cathedral'] .fb-total, html[data-theme='cathedral'] .dial-value { font-family: var(--font-display); font-weight: 500; }
+html[data-theme='cathedral'] .fb-title, html[data-theme='cathedral'] .focus-plaque { color: var(--accent); }
+
+/* ——— Иней: холодный светлый, свинец серо-голубой ——— */
+html[data-theme='frost'] {
+  color-scheme: light;
+  --bg: #eef2f6; --surface: #ffffff; --tile-empty: #e3e9f0;
+  --text: #1d2430; --text-dim: #7b8594; --accent: #3a7bd5;
+  --chip: #e6ecf3; --control: #dfe6ee; --selected: #d0dae6; --line: #dde4ec;
+  --bar: rgba(246,248,251,.9);
+  --glass-empty: #dde5ee; --glass-decor: #e8edf3; --glass-lead: #8796ab;
+  --frost: rgba(255,255,255,.66); --frost-soft: rgba(255,255,255,.58); --edge: rgba(30,50,80,.1);
+  --veil: 238 242 246; --ink-shadow: rgba(255,255,255,.9);
+  --soft: rgba(30,50,80,.05); --soft-2: rgba(30,50,80,.09); --grip: rgba(30,50,80,.22);
+  --banner: #dcebf3; --sheet: #ffffff; --sheet-grab: #cbd5e1; --on-accent: #fff;
+  --glass-tint: #9fb6d6; --light-warm: rgba(255,255,255,.6); --light-cool: rgba(200,225,255,.5); --light-blend: soft-light;
+  --plaque: rgba(29,36,48,.45);
+}
+
+/* ——— Закат: тёмный сливовый, тёплый акцент ——— */
+html[data-theme='dusk'] {
+  --bg: #1a1020; --surface: #251828; --tile-empty: #2c1d30;
+  --text: #fbe9e0; --text-dim: #a88f96; --accent: #ff8a5c;
+  --chip: #2c1d30; --control: #301f34; --selected: #432b45; --line: #33223a;
+  --bar: rgba(32,20,38,.92);
+  --glass-empty: #2a1a2e; --glass-decor: #1f1424; --glass-lead: #0e0810;
+  --frost: rgba(38,22,40,.6); --frost-soft: rgba(48,30,52,.55); --edge: rgba(255,170,130,.12);
+  --veil: 20 10 22; --banner: #3a2228; --sheet: #251828; --sheet-grab: #4f3550; --on-accent: #2a0f05;
+  --glass-tint: #c47a8a; --light-warm: rgba(255,150,90,.26); --light-cool: rgba(190,120,255,.16);
+  --plaque: rgba(255,170,130,.55);
+}
+html[data-theme='dusk'] body { background: linear-gradient(to bottom, #241226, #1a1020 40%, #2a1418); }

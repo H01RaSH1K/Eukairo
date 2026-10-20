@@ -17,10 +17,10 @@
 /* затемнение сверху и снизу, чтобы текст и панели читались поверх стекла */
 .today.fullbleed .widget.viz::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(to bottom, rgba(10,10,14,.85) 0, rgba(10,10,14,0) 22%, rgba(10,10,14,0) 55%, rgba(10,10,14,.75) 100%);
+  background: linear-gradient(to bottom, rgb(var(--veil) / .85) 0, rgb(var(--veil) / 0) 22%, rgb(var(--veil) / 0) 55%, rgb(var(--veil) / .75) 100%);
 }
 .today.fullbleed > :not(.widget.viz):not(.sheet-backdrop) { position: relative; z-index: 1; }
-.today.fullbleed .banner { background: rgba(29,51,48,.7); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.today.fullbleed .banner { background: color-mix(in srgb, var(--banner) 70%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 /* стёкла встают на место по одному: задержка по порядку (--d из Mosaic.tsx) */
 .today.fullbleed .glass-fill:not(.live) {
   transform-box: fill-box; transform-origin: center;
@@ -29,23 +29,23 @@
 }
 @keyframes piece-in { from { transform: scale(.2); opacity: 0; } }
 .frost {
-  background: rgba(22,22,27,.58); border: 1px solid rgba(255,255,255,.08);
+  background: var(--frost); border: 1px solid var(--edge);
   backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 /* таб-бар — плавающая «таблетка» */
-html[data-showcase] { --bar: rgba(18, 18, 22, 0.55); }
+html[data-showcase] { --bar: var(--frost-soft); }
 html[data-showcase] .tabbar {
   left: 14px; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 8px);
-  height: var(--tabbar-h); padding: 0; border: 1px solid rgba(255,255,255,.08); border-radius: 22px;
+  height: var(--tabbar-h); padding: 0; border: 1px solid var(--edge); border-radius: 22px;
   backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) + var(--tabbar-h) + 22px); }
 
 /* Шапка новых компоновок: итог крупно слева, масштаб — три кнопки справа */
-.fb-head { display: flex; align-items: flex-end; justify-content: space-between; text-shadow: 0 1px 10px rgba(0,0,0,.8); }
+.fb-head { display: flex; align-items: flex-end; justify-content: space-between; text-shadow: 0 1px 10px var(--ink-shadow); }
 .fb-title { font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; }
 .fb-total { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
-.fb-scales { display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(30,30,36,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.fb-scales { display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--frost-soft); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .fb-scales button { width: 34px; height: 30px; border: 0; border-radius: 999px; background: none; color: var(--text-dim); font: inherit; font-size: 14px; font-weight: 600; }
 .fb-scales button[aria-pressed='true'] { background: var(--selected); color: var(--text); }
 
@@ -56,15 +56,15 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .clock-chips button:last-child { margin-right: auto; }
 .clock-chips button {
   flex: none; border: 0; border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 13px; color: var(--text);
-  background: rgba(30,30,36,.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: var(--frost-soft); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   display: flex; align-items: center; gap: 6px;
 }
 .clock-chips button[aria-pressed='true'] { box-shadow: inset 0 0 0 1.5px var(--c); }
 .clock-chips button:disabled { opacity: .45; }
 .clock-face { position: relative; width: min(78vw, 300px, 40vh); aspect-ratio: 1; }
-.clock-face::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: rgba(18,18,22,.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.clock-face::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--frost); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .clock-svg { position: relative; display: block; width: 100%; height: 100%; touch-action: none; overflow: visible; }
-.ring-track { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 14; }
+.ring-track { fill: none; stroke: var(--edge); stroke-width: 14; }
 .ring-arc { fill: none; stroke-width: 14; }
 .ring-arc.ghost { opacity: .45; }
 .ring-arc.past { opacity: .8; stroke-dasharray: none; }
@@ -88,7 +88,7 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .charge-card {
   position: relative; flex: none; width: 112px; height: 132px; border-radius: 22px; overflow: hidden;
   scroll-snap-align: start; padding: 12px; display: flex; flex-direction: column; justify-content: flex-end;
-  background: rgba(22,22,27,.6); border: 1px solid rgba(255,255,255,.08);
+  background: var(--frost); border: 1px solid var(--edge);
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
   touch-action: pan-x; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   transition: transform .15s;
@@ -100,15 +100,15 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .charge-name { font-size: 15px; font-weight: 600; line-height: 1.2; }
 .charge-value { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .charge-card.charging .charge-value { font-size: 26px; font-weight: 700; color: var(--text); }
-.charge-card.charging .charge-name, .charge-card.charging .charge-until { color: #0d0d10; }
-.charge-card.charging .charge-value { color: #0d0d10; }
+.charge-card.charging .charge-name, .charge-card.charging .charge-until { color: var(--on-color); }
+.charge-card.charging .charge-value { color: var(--on-color); }
 .charge-until { font-size: 11px; }
-.charge-card.more { border: 1px dashed rgba(255,255,255,.2); color: var(--text-dim); font: inherit; font-size: 14px; justify-content: center; }
-.charge-hint { text-align: center; font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+.charge-card.more { border: 1px dashed var(--grip); color: var(--text-dim); font: inherit; font-size: 14px; justify-content: center; }
+.charge-hint { text-align: center; font-size: 12px; text-shadow: 0 1px 6px var(--ink-shadow); }
 .charge-run {
   position: relative; display: grid; grid-template-columns: 1fr auto auto; grid-template-rows: auto auto; align-items: center;
   column-gap: 10px; padding: 12px 12px 12px 16px; border-radius: 22px; overflow: hidden;
-  background: rgba(22,22,27,.6); border: 1px solid rgba(255,255,255,.08);
+  background: var(--frost); border: 1px solid var(--edge);
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
 }
 .charge-run-fill { position: absolute; inset: 0 auto 0 0; background: var(--c); opacity: .35; transition: width 1s linear; }
@@ -116,13 +116,13 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .charge-run-name { grid-row: 1; border: 0; background: none; color: var(--text); font: inherit; font-size: 16px; font-weight: 600; text-align: left; padding: 0; }
 .charge-run-sub { grid-row: 2; grid-column: 1; font-size: 12px; color: var(--text-dim); }
 .charge-run-time { grid-row: 1 / 3; grid-column: 2; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.charge-stop { grid-row: 1 / 3; grid-column: 3; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: var(--text); font-size: 15px; }
+.charge-stop { grid-row: 1 / 3; grid-column: 3; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--soft-2); color: var(--text); font-size: 15px; }
 
 /* ——— Шторка: сворачиваемая панель для любого режима ——— */
 .screen.fit > .drawer { margin-top: auto; }
 .drawer { position: relative; border-radius: 24px; overflow: hidden; background: var(--surface); }
 .today.fullbleed .drawer {
-  background: rgba(22,22,27,.62); border: 1px solid rgba(255,255,255,.08);
+  background: var(--frost); border: 1px solid var(--edge);
   backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
   animation: rise .5s cubic-bezier(.2,.9,.3,1.1) both;
 }
@@ -137,7 +137,7 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .drawer.dragging .drawer-body { transition: none; }
 .drawer-bar { position: relative; padding: 6px 16px 8px; touch-action: none; cursor: grab; }
 .drawer:not(.open) .drawer-bar { padding-bottom: 12px; }
-.drawer-grip { width: 38px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.25); margin: 0 auto; }
+.drawer-grip { width: 38px; height: 5px; border-radius: 3px; background: var(--grip); margin: 0 auto; }
 .drawer:not(.open) .drawer-grip { margin-bottom: 8px; }
 .drawer-row { display: flex; align-items: center; gap: 9px; }
 .drawer-name { flex: 1; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -166,7 +166,7 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .tiles-big { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
 .tiles-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
 .tiles-actions .btn { margin: 0; }
-.tiles-actions .btn.primary { color: #0d0d10; }
+.tiles-actions .btn.primary { color: var(--on-color); }
 
 /* ——— Фокус (двойной тап по мозаике): только витраж, всё остальное спрятано ——— */
 .widget.viz { touch-action: manipulation; } /* без зума по двойному тапу в Safari */
@@ -175,14 +175,14 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 /* шторки (запись, выбор занятия) остаются: тап по куску в фокусе открывает запись */
 .today.focus > :not(.widget.viz):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque) { display: none !important; }
 /* Пустые стёкла — не плоские: у каждого свой лёгкий оттенок (--v из Mosaic.tsx) */
-.today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), #8a8fb0 calc(4% + var(--v) * 9%)); transition: fill .6s; }
+.today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), var(--glass-tint) calc(4% + var(--v) * 9%)); transition: fill .6s; }
 .today.focus .glass-fill { filter: saturate(1.15); }
 /* Свет: два мягких пятна плывут по витражу (screen — светлеет только то, что под ним) */
 .focus-light {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: screen;
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: var(--light-blend);
   background:
-    radial-gradient(circle at 30% 25%, rgba(255,236,200,.22), transparent 45%),
-    radial-gradient(circle at 75% 70%, rgba(170,200,255,.16), transparent 40%);
+    radial-gradient(circle at 30% 25%, var(--light-warm), transparent 45%),
+    radial-gradient(circle at 75% 70%, var(--light-cool), transparent 40%);
   background-size: 200% 200%;
   animation: light-drift 38s ease-in-out infinite alternate;
 }
@@ -193,8 +193,8 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 }
 .focus-plaque {
   position: absolute !important; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 2;
-  text-align: center; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.45);
-  text-shadow: 0 1px 8px rgba(0,0,0,.9); pointer-events: none;
+  text-align: center; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--plaque);
+  text-shadow: 0 1px 8px var(--ink-shadow); pointer-events: none;
   animation: fade-in 1.2s .6s ease-out both;
 }
 .today.focus .widget.viz::after { display: none; }
@@ -222,11 +222,11 @@ html[data-focus] .tabbar { display: none; }
 .tray-time { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tray-arc { flex: none; width: 56px; height: 32px; overflow: visible; }
 .tray-ring { flex: none; width: 40px; height: 40px; overflow: visible; }
-.ring-track-mini { stroke: rgba(255,255,255,.1); }
+.ring-track-mini { stroke: var(--soft-2); }
 /* Зарядка */
-.tray-battery { position: relative; border-radius: 14px; padding: 6px 12px; overflow: hidden; background: rgba(255,255,255,.06); }
+.tray-battery { position: relative; border-radius: 14px; padding: 6px 12px; overflow: hidden; background: var(--soft); }
 .tray-battery::after { /* «плюсик» батарейки */
-  content: ''; position: absolute; right: 0; top: 35%; bottom: 35%; width: 3px; border-radius: 2px 0 0 2px; background: rgba(255,255,255,.25);
+  content: ''; position: absolute; right: 0; top: 35%; bottom: 35%; width: 3px; border-radius: 2px 0 0 2px; background: var(--grip);
 }
 .tray-battery-fill { position: absolute; inset: 0 auto 0 0; background: var(--c); opacity: .45; transition: width 1s linear; }
 .tray-battery > :not(.tray-battery-fill) { position: relative; }
@@ -234,7 +234,7 @@ html[data-focus] .tabbar { display: none; }
 .tray-cards .tray-card {
   flex: 1; min-width: 0; height: 40px; border-radius: 10px; padding: 0 7px; display: flex; align-items: flex-end; padding-bottom: 7px;
   font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
-  background: linear-gradient(to top, color-mix(in srgb, var(--c) 55%, transparent) 0 6px, rgba(255,255,255,.06) 6px);
+  background: linear-gradient(to top, color-mix(in srgb, var(--c) 55%, transparent) 0 6px, var(--soft) 6px);
 }
 /* Плитки */
 .tray-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }

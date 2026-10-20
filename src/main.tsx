@@ -6,6 +6,7 @@ import App from './App';
 import { platform } from './platform';
 import './ui/theme.css';
 import './ui/designs.css';
+import './ui/themes.css';
 import './settings/design'; // ставит дизайн до первой отрисовки
 
 createRoot(document.getElementById('root')!).render(

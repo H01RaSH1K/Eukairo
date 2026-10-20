@@ -14,6 +14,25 @@
   --glass-decor: #16161b; /* декоративное стекло */
   --glass-lead: #0b0b0e;  /* свинцовые линии */
   --font-display: inherit; /* шрифт крупных заголовков */
+  /* Ниже — токены для тем (ui/themes.css переопределяет их под [data-theme]) */
+  --frost: rgba(22,22,27,.6);        /* матовые панели поверх мозаики */
+  --frost-soft: rgba(30,30,36,.55);  /* матовые таблетки, чипы */
+  --edge: rgba(255,255,255,.08);     /* тонкая кромка панелей */
+  --veil: 10 10 14;                  /* затемнение у краёв витрины (r g b) */
+  --ink-shadow: rgba(0,0,0,.8);      /* тень текста поверх стекла */
+  --soft: rgba(255,255,255,.06);     /* едва заметная подложка */
+  --soft-2: rgba(255,255,255,.12);
+  --grip: rgba(255,255,255,.25);     /* ручки, пунктир */
+  --banner: #1d3330;
+  --sheet: #1f1f25;
+  --sheet-grab: #4a4a52;
+  --on-accent: #062420;              /* текст на акцентной кнопке */
+  --on-color: #0d0d10;               /* текст на цвете занятия */
+  --glass-tint: #8a8fb0;             /* оттенок пустых стёкол в фокусе */
+  --light-warm: rgba(255,236,200,.22); /* свет сквозь витраж в фокусе */
+  --light-cool: rgba(170,200,255,.16);
+  --light-blend: screen;
+  --plaque: rgba(255,255,255,.45);
   --tabbar-h: 56px;
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
@@ -95,7 +114,7 @@ body {
   background: var(--control); color: var(--text);
   font: inherit; font-size: 16px;
 }
-.btn.primary { background: var(--accent); color: #062420; font-weight: 600; }
+.btn.primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .btn.danger { color: #ff6b6b; }
 .btn.ghost { background: none; color: var(--accent); }
 .btn.small { width: auto; padding: 7px 12px; margin: 0; font-size: 14px; }
@@ -117,12 +136,12 @@ body {
 }
 .sheet {
   width: 100%; max-height: 88vh; overflow-y: auto;
-  background: #1f1f25;
+  background: var(--sheet);
   border-radius: 16px 16px 0 0;
   padding: 8px 16px calc(env(safe-area-inset-bottom) + 16px);
   animation: slide-up .25s cubic-bezier(.2,.8,.2,1);
 }
-.sheet-grabber { width: 36px; height: 5px; border-radius: 3px; background: #4a4a52; margin: 0 auto 8px; }
+.sheet-grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--sheet-grab); margin: 0 auto 8px; }
 .sheet-title { font-size: 18px; text-align: center; margin: 4px 0 12px; }
 @keyframes slide-up { from { transform: translateY(100%); } }
 @keyframes fade { from { opacity: 0; } }
@@ -158,7 +177,7 @@ input.field { -webkit-user-select: text; user-select: text; }
 .compare .segmented { flex: 1; margin: 0; }
 .compare .segmented button { font-size: 12px; padding: 5px 4px; }
 
-.banner { display: flex; align-items: center; gap: 10px; background: #1d3330; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.banner { display: flex; align-items: center; gap: 10px; background: var(--banner); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
 .banner span { flex: 1; font-size: 14px; }
 .banner-x { border: 0; background: none; color: var(--text-dim); font-size: 16px; }
 
@@ -198,7 +217,7 @@ input.field { -webkit-user-select: text; user-select: text; }
 .fab {
   position: fixed; right: 20px; bottom: calc(env(safe-area-inset-bottom) + var(--tabbar-h) + 16px);
   width: 56px; height: 56px; border-radius: 50%; border: 0;
-  background: var(--accent); color: #062420; font-size: 28px;
+  background: var(--accent); color: var(--on-accent); font-size: 28px;
   box-shadow: 0 6px 20px rgba(0,0,0,.4);
 }
 
@@ -345,7 +364,7 @@ input.field { -webkit-user-select: text; user-select: text; }
 .dial-value { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 4px; }
 .dial-sub { font-size: 12px; }
 .dial-buttons { display: flex; gap: 8px; margin-top: 6px; }
-.dial-go { border: 0; border-radius: 999px; padding: 9px 26px; font: inherit; font-weight: 600; font-size: 16px; color: #0d0d10; }
+.dial-go { border: 0; border-radius: 999px; padding: 9px 26px; font: inherit; font-weight: 600; font-size: 16px; color: var(--on-color); }
 .dial-go.stop { background: var(--selected); color: var(--text); margin-top: 6px; }
 .dial-free { border: 0; border-radius: 999px; width: 40px; background: var(--chip); color: var(--text); font-size: 20px; }
 .tree-row .tree-name { flex: 1; }
@@ -354,3 +373,15 @@ input.field { -webkit-user-select: text; user-select: text; }
 .design-chips button { padding: 6px 10px; font-size: 13px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; font-size: 15px; }
 .toggle-row input { width: 44px; height: 26px; accent-color: var(--accent); }
+
+/* Выбор темы в «Ещё»: образцы-витражи */
+.theme-swatches { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.theme-swatches button { border: 0; background: none; padding: 0; color: var(--text-dim); font: inherit; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.theme-sw { width: 100%; max-width: 46px; aspect-ratio: 1; border-radius: 9px; display: block; }
+.theme-swatches button[aria-pressed='true'] { color: var(--text); }
+.theme-swatches button[aria-pressed='true'] .theme-sw { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.look-row { background: none; padding: 0; margin-bottom: 8px; }
+.mode-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mode-chips button { padding: 6px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.about .btn-row.demo { margin-bottom: 8px; }
+@media (max-height: 700px) { .theme-sw { max-width: 38px; } }

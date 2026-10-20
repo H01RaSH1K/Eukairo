@@ -5,7 +5,7 @@ import { shortMin } from '../today/Dial';
 import { resetDemo, setActivityTimer, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
 import { useAppearance } from '../../settings/appearance';
-import { modes, setDesign, useDesign } from '../../settings/design';
+import { modes, setDesign, themes, useDesign } from '../../settings/design';
 import Appearance from '../appearance/Appearance';
 import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
@@ -49,14 +49,34 @@ export default function More({ goToday }: { goToday: () => void }) {
     <div className="screen fit">
       <h1>Ещё</h1>
 
-      <button className="widget pad row-btn" onClick={() => setLookOpen(true)}>
-        <span>Оформление</span>
-        <span className="dim">{lookSummary} ›</span>
-      </button>
+      {/* Оформление: строка-кнопка к настройкам мозаики и тут же — тема */}
+      <div className="widget pad">
+        <button className="row-btn look-row" onClick={() => setLookOpen(true)}>
+          <span>Оформление</span>
+          <span className="dim">{lookSummary} ›</span>
+        </button>
+        <div className="theme-swatches">
+          {themes.map((t) => (
+            <button key={t.id} aria-pressed={design.theme === t.id} onClick={() => setDesign({ theme: t.id })}>
+              {/* образец — крошечный витраж в цветах темы: фон, пустые стёкла, свинец, акцентное стекло */}
+              <svg viewBox="0 0 40 40" className="theme-sw">
+                <rect width="40" height="40" fill={t.sw[0]} />
+                <polygon points="2,2 24,2 18,20 2,16" fill={t.sw[1]} />
+                <polygon points="24,2 38,2 38,22 18,20" fill={t.sw[3]} />
+                <polygon points="2,16 18,20 22,38 2,38" fill={t.sw[3]} opacity=".55" />
+                <polygon points="18,20 38,22 38,38 22,38" fill={t.sw[1]} />
+                <path d="M2 16 L18 20 L24 2 M18 20 L38 22 M18 20 L22 38" stroke={t.sw[2]} strokeWidth="2.5" fill="none" strokeLinejoin="round" />
+                <rect x="1" y="1" width="38" height="38" rx="7" fill="none" stroke={t.sw[2]} strokeWidth="2.5" />
+              </svg>
+              <span>{t.title}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="widget pad">
         <div className="setting-title">Управление таймером</div>
-        <div className="chips design-chips">
+        <div className="chips design-chips mode-chips">
           {modes.map((m) => (
             <button key={m.id} aria-pressed={design.mode === m.id} onClick={() => setDesign({ mode: m.id })}>{m.title}</button>
           ))}
@@ -74,25 +94,22 @@ export default function More({ goToday }: { goToday: () => void }) {
       </button>
 
       <div className="widget pad">
-        <div className="card-title">Бэкап · последний 4 дня назад</div>
-        <div className="btn-row">
-          <button className="btn primary" onClick={() => shareBackup(state)}>Сохранить в Файлы</button>
-          <button className="btn" disabled>Восстановить</button>
+        <div className="btn-row demo">
+          <span className="card-title">Бэкап · 4 дн.</span>
+          <button className="btn small primary" onClick={() => shareBackup(state)}>Сохранить</button>
+          <button className="btn small" disabled>Восстановить</button>
         </div>
       </div>
 
-      <div className="widget pad">
+      <div className="widget pad small dim about">
         <div className="btn-row demo">
           <span className="card-title">Демо</span>
           <button className="btn small" onClick={() => { simulateForgotten(); goToday(); }}>Таймер 5 ч</button>
           <button className="btn small" onClick={() => { showBackupBanner(); goToday(); }}>Плашка</button>
           <button className="btn small" onClick={resetDemo}>Сброс</button>
         </div>
-      </div>
-
-      <div className="widget pad small dim about">
         Eukairo {__APP_VERSION__} · сборка {__BUILD_TIME__}<br />
-        С экрана «Домой»: {standalone ? 'да' : 'нет'} · хранилище защищено: {persisted === null ? '…' : persisted ? 'да' : 'нет'}
+        На «Домой»: {standalone ? 'да' : 'нет'} · данные защищены: {persisted === null ? '…' : persisted ? 'да' : 'нет'}
       </div>
 
       {treeOpen && (
