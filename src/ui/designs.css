@@ -19,7 +19,7 @@
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to bottom, rgba(10,10,14,.85) 0, rgba(10,10,14,0) 22%, rgba(10,10,14,0) 55%, rgba(10,10,14,.75) 100%);
 }
-.today.fullbleed > :not(.widget.viz) { position: relative; z-index: 1; }
+.today.fullbleed > :not(.widget.viz):not(.sheet-backdrop) { position: relative; z-index: 1; }
 .today.fullbleed .banner { background: rgba(29,51,48,.7); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 /* стёкла встают на место по одному: задержка по порядку (--d из Mosaic.tsx) */
 .today.fullbleed .glass-fill:not(.live) {
@@ -174,7 +174,8 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
   background: rgba(30,30,36,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .today.focus { padding: 0 !important; }
-.today.focus > :not(.widget.viz):not(.focus-exit) { display: none !important; }
+/* шторки (запись, выбор занятия) остаются: тап по куску в фокусе открывает запись */
+.today.focus > :not(.widget.viz):not(.focus-exit):not(.sheet-backdrop) { display: none !important; }
 .today.focus .widget.viz::after { display: none; }
 html[data-focus] .tabbar { display: none; }
 .focus-exit {
