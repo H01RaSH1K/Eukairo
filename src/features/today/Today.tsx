@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans } from '../../domain/spans';
@@ -10,6 +10,7 @@ import {
 } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
 import { settingsOf, useAppearance } from '../../settings/appearance';
+import { useDesign } from '../../settings/design';
 import { lazyViz } from '../../visualizations/lazy';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
@@ -48,7 +49,7 @@ export default function Today() {
   const [chosen, setChosen] = useState<string | null>(null);
   // Куда листали в последний раз — для анимации «страница справа / слева».
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
-  const go = (next: number) => { setDir(next > offset ? 'fwd' : 'back'); setOffset(next); };
+  const go = (next: number) => { if (next === offset) return; setDir(next > offset ? 'fwd' : 'back'); setOffset(next); };
   const [minutesFor, setMinutesFor] = useState<Record<string, number>>({});
 
   const colors = useMemo(() => activityColors(activities), [activities]);
@@ -58,6 +59,7 @@ export default function Today() {
   const total = spans.reduce((sum, s) => sum + s.end - s.start, 0);
   const run = running(state);
   const look = useAppearance();
+  const design = useDesign();
   const plugin = findVisualization(look[scale].vizId); // у каждого масштаба свой стиль
   const Viz = lazyViz(plugin);
 
@@ -90,38 +92,43 @@ export default function Today() {
     isNew: true,
   });
 
-  // Экран без прокрутки: шапка и виджеты снизу фиксированной высоты,
-  // мозаика забирает всё оставшееся место.
-  return (
-    <div className="screen fit today">
-      <div className="today-head">
-        <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
-        <div className="today-title" onClick={() => setOffset(0)}>
-          <h1>{isCurrent ? titles[scale] : periodTitle(scale, from, to)}</h1>
-          <div className="dim sub">{scale === 'day' && isCurrent ? date : isCurrent ? 'тапни ‹ чтобы листать' : 'тапни, чтобы вернуться'}</div>
-        </div>
-        <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
-        <div className="today-total">{formatDuration(total)}</div>
-      </div>
+  // Свайп по мозаике влево/вправо — листать периоды (во всех компоновках).
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const onSwipeEnd = (x: number, y: number) => {
+    const s0 = swipe.current;
+    swipe.current = null;
+    if (!s0) return;
+    const dx = x - s0.x, dy = y - s0.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+    if (dx > 0) go(offset - 1);          // вправо — раньше
+    else if (!isCurrent) go(offset + 1); // влево — позже
+  };
 
-      <Segmented
-        options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
-        value={scale}
-        onChange={(v) => { setScale(v); setOffset(0); }}
-      />
+  const periodName = isCurrent ? titles[scale] : periodTitle(scale, from, to);
+  const scales = [{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }] as const;
+  const order: Period[] = ['day', 'week', 'month'];
+  const pickScale = (v: Period) => { setDir(order.indexOf(v) > order.indexOf(scale) ? 'fwd' : 'back'); setScale(v); setOffset(0); };
 
-      {state.backupBanner && (
-        <div className="banner">
-          <span>Бэкап не делали 4 дня</span>
-          <button className="btn small primary" onClick={() => shareBackup(state)}>Сохранить</button>
-          <button className="banner-x" onClick={dismissBackupBanner}>✕</button>
-        </div>
-      )}
+  // ——— общие куски экрана; компоновка ниже расставляет их по-разному ———
 
-      <div className="widget viz">
-        {/* key меняется при смене периода → React пересоздаёт обёртку, и её CSS-анимация
-            проигрывается заново (листание, появление стёкол — зависит от дизайна). */}
-        <div className={'viz-anim ' + dir} key={`${scale}:${offset}`}>
+  const banner = state.backupBanner && (
+    <div className="banner">
+      <span>Бэкап не делали 4 дня</span>
+      <button className="btn small primary" onClick={() => shareBackup(state)}>Сохранить</button>
+      <button className="banner-x" onClick={dismissBackupBanner}>✕</button>
+    </div>
+  );
+
+  const viz = (
+    <div
+      className="widget viz"
+      onPointerDown={(e) => { swipe.current = { x: e.clientX, y: e.clientY }; }}
+      onPointerUp={(e) => onSwipeEnd(e.clientX, e.clientY)}
+      onPointerCancel={() => { swipe.current = null; }}
+    >
+      {/* key меняется при смене периода → React пересоздаёт обёртку, и её CSS-анимация
+          проигрывается заново (листание, появление стёкол — зависит от компоновки). */}
+      <div className={'viz-anim ' + dir} key={`${scale}:${offset}`}>
         <Suspense fallback={null}>
           <Viz
             scale={scale}
@@ -136,23 +143,102 @@ export default function Today() {
             }}
           />
         </Suspense>
-        </div>
       </div>
+    </div>
+  );
 
-      <Dial
-        name={name(dialId).at(-1) ?? ''}
-        color={colors.get(dialId) ?? '#888'}
-        range={range}
-        minutes={minutes}
-        onMinutes={(m) => setMinutesFor({ ...minutesFor, [dialId]: m })}
-        run={run}
-        now={now}
-        onPick={() => setPicking(true)}
-        onStart={() => startTimer(dialId, minutes * MIN_MS)}
-        onStartFree={() => startTimer(dialId)}
-        onStop={() => stopTimer()}
-        onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
-      />
+  const dial = (
+    <Dial
+      name={name(dialId).at(-1) ?? ''}
+      color={colors.get(dialId) ?? '#888'}
+      range={range}
+      minutes={minutes}
+      onMinutes={(m) => setMinutesFor({ ...minutesFor, [dialId]: m })}
+      run={run}
+      now={now}
+      onPick={() => setPicking(true)}
+      onStart={() => startTimer(dialId, minutes * MIN_MS)}
+      onStartFree={() => startTimer(dialId)}
+      onStop={() => stopTimer()}
+      onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
+    />
+  );
+
+  let layout: ReactNode;
+  if (design === 'diary') {
+    // Дневник: без карточек, экран как страница. Сверху — дата и итог крупным
+    // заголовком, масштаб — строкой слов, мозаика — «иллюстрация», внизу навигация словами.
+    const step = { day: 'день', week: 'неделя', month: 'месяц' }[scale];
+    layout = (
+      <>
+        <div className="diary-top">
+          <div className="diary-date">{scale === 'day' && isCurrent ? date : periodName}</div>
+          <div className="diary-total" onClick={() => go(0)}>{formatDuration(total)}</div>
+          <div className="diary-scale">
+            {scales.map((o) => (
+              <button key={o.id} aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label.toLowerCase()}</button>
+            ))}
+          </div>
+        </div>
+        {banner}
+        {viz}
+        <div className="diary-nav">
+          <button onClick={() => go(offset - 1)}>‹ прошлый {step}</button>
+          {!isCurrent && <button className="accent" onClick={() => go(0)}>сейчас</button>}
+          <button disabled={isCurrent} onClick={() => go(offset + 1)}>следующий ›</button>
+        </div>
+        {dial}
+      </>
+    );
+  } else if (design === 'panel') {
+    // Панель: строка состояния сверху, слева вертикальная шкала Д/Н/М со стрелками,
+    // справа мозаика в рамке с угловыми скобками, внизу полукруг.
+    layout = (
+      <>
+        <div className="panel-status">
+          <span className="panel-title" onClick={() => go(0)}>{periodName}</span>
+          <b className="panel-total">{formatDuration(total)}</b>
+        </div>
+        {banner}
+        <div className="panel-main">
+          <div className="panel-rail">
+            <button className="panel-step" onClick={() => go(offset - 1)} aria-label="Раньше">▲</button>
+            {scales.map((o) => (
+              <button key={o.id} className="panel-scale" aria-pressed={o.id === scale} onClick={() => pickScale(o.id)}>{o.label[0]}</button>
+            ))}
+            <button className="panel-step" disabled={isCurrent} onClick={() => go(offset + 1)} aria-label="Позже">▼</button>
+          </div>
+          {viz}
+        </div>
+        {dial}
+      </>
+    );
+  } else {
+    // Классика и Витрина: шапка со стрелками, сегменты, мозаика, полукруг.
+    // (Витрина отличается расстановкой поверх мозаики — это делает CSS.)
+    layout = (
+      <>
+        <div className="today-head">
+          <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
+          <div className="today-title" onClick={() => go(0)}>
+            <h1>{periodName}</h1>
+            <div className="dim sub">{scale === 'day' && isCurrent ? date : isCurrent ? 'свайп или ‹ — листать' : 'тапни, чтобы вернуться'}</div>
+          </div>
+          <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
+          <div className="today-total">{formatDuration(total)}</div>
+        </div>
+        <Segmented options={[...scales]} value={scale} onChange={pickScale} />
+        {banner}
+        {viz}
+        {dial}
+      </>
+    );
+  }
+
+  // Экран без прокрутки: мозаика забирает всё место, что осталось от остального.
+  return (
+    <div className={'screen fit today ' + design}>
+      {layout}
 
       {picking && (
         <ActivityPicker
