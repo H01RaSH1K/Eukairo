@@ -284,5 +284,7 @@ input.field { -webkit-user-select: text; user-select: text; }
 .donut-row .donut-min { font-size: 17px; }
 .donut-row .donut-sub { font-size: 14px; }
 .widget .card-title.sub-title { margin-top: 8px; }
-.opt-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.opt-grid.four button { padding: 7px 2px; font-size: 13px; }
+.opt-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.opt-grid.three button { padding: 7px 2px; font-size: 13px; }
+.btn-row.demo { align-items: center; }
+.btn-row.demo .card-title { margin: 0 auto 0 0; }

@@ -10,9 +10,10 @@ export type PatternId = 'glass' | 'rose' | 'tri' | 'grid';
  * Заливка — в каком порядке часы периода раскладываются по картине.
  * flow — подряд змейкой; rows — день = полоса, часы дней друг под другом;
  * calendar — день = блок, блоки как в календаре; jar — копилка: только
- * занятые часы, снизу вверх (пустые пропускаются, их сжимает Mosaic.tsx).
+ * занятые часы, снизу вверх (пустые пропускаются, их сжимает Mosaic.tsx);
+ * spots — пятна: занятые часы липнут в несколько пятен (раскладывает layout.ts).
  */
-export type FillId = 'flow' | 'rows' | 'calendar' | 'jar';
+export type FillId = 'flow' | 'rows' | 'calendar' | 'jar' | 'spots';
 
 export interface Pattern {
   w: number;

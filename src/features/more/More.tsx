@@ -6,7 +6,7 @@ import { visualizations } from '../../visualizations/registry';
 import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
 
-const fills = [['calendar', 'Календарь'], ['rows', 'По дням'], ['flow', 'Подряд'], ['jar', 'Копилка']] as const;
+const fills = [['calendar', 'Календарь'], ['rows', 'По дням'], ['flow', 'Подряд'], ['jar', 'Копилка'], ['spots', 'Пятна']] as const;
 
 // Экран «Ещё»: занятия, стиль, бэкап, служебное. В макете — плюс демо-кнопки.
 export default function More({ goToday }: { goToday: () => void }) {
@@ -42,8 +42,8 @@ export default function More({ goToday }: { goToday: () => void }) {
             <button key={v.id} aria-pressed={state.vizId === v.id} onClick={() => setViz(v.id)}>{v.title}</button>
           ))}
         </div>
-        <div className="card-title sub-title">Заливка недели и месяца</div>
-        <div className="opt-grid four">
+        <div className="card-title sub-title">Заливка</div>
+        <div className="opt-grid three">
           {fills.map(([id, title]) => (
             <button key={id} aria-pressed={state.fill === id} onClick={() => setFill(id)}>{title}</button>
           ))}
@@ -64,11 +64,11 @@ export default function More({ goToday }: { goToday: () => void }) {
       </div>
 
       <div className="widget pad">
-        <div className="card-title">Демо (только в макете)</div>
-        <div className="btn-row">
-          <button className="btn" onClick={() => { simulateForgotten(); goToday(); }}>Таймер 5 ч</button>
-          <button className="btn" onClick={() => { showBackupBanner(); goToday(); }}>Плашка</button>
-          <button className="btn" onClick={resetDemo}>Сброс</button>
+        <div className="btn-row demo">
+          <span className="card-title">Демо</span>
+          <button className="btn small" onClick={() => { simulateForgotten(); goToday(); }}>Таймер 5 ч</button>
+          <button className="btn small" onClick={() => { showBackupBanner(); goToday(); }}>Плашка</button>
+          <button className="btn small" onClick={resetDemo}>Сброс</button>
         </div>
       </div>
 

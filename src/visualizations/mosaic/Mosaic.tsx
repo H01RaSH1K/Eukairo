@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
-import { hourOwners } from './layout';
+import { hourOwners, spotPlaces, type HourOwner } from './layout';
 import { dayBorderPath, getPattern, leadPath, seedFor, type FillId, type PatternId } from './patterns';
 import './mosaic.css';
 
@@ -31,13 +31,22 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillPro
   }, []);
   const fill = fillProp as FillId;
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
-  const { w, h, cells, decor, day } = getPattern(pattern, days.length, seedFor(from), aspect, fill, weekday);
+  const { w, h, cells, decor, day } = getPattern(pattern, days.length, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday);
   // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
   const hours = days.flatMap((d) => hourOwners(spans, d));
-  // Копилка: пустые часы выкидываем, занятые ссыпаются в начало (≈ Where + дополнение null).
-  const owners = fill === 'jar'
-    ? [...hours.filter((o) => o !== null), ...hours.filter((o) => o === null)]
-    : hours;
+  // Копилка и пятна: пустые часы выкидываем, занятые раскладываем по-своему.
+  // filter ≈ Where; `o is HourOwner` — проверка типа, как в C# pattern matching.
+  const filled = hours.filter((o): o is HourOwner => o !== null);
+  const seed = seedFor(from);
+  const places = useMemo(
+    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, days.length) : fill === 'jar' ? filled.map((_, i) => i) : null),
+    [fill, cells, seed, days.length, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  let owners: (HourOwner | null)[] = hours;
+  if (places) {
+    owners = cells.map(() => null);
+    places.forEach((cell, k) => { owners[cell] = filled[k]; });
+  }
   const ownerIds = owners.map((o) => o?.entryId ?? null);
   // Линии пересчитываем, только когда меняются хозяева часов (≈ кэш по ключу).
   const key = ownerIds.join('|');
@@ -46,10 +55,10 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillPro
 
   const now = Date.now();
   const dayIdx = days.findIndex((d, i) => now >= d && now < (days[i + 1] ?? to));
-  // У копилки «сейчас» — последнее занятое стекло, если таймер идёт.
-  const filled = owners.findIndex((o) => o === null);
-  const nowCell = fill === 'jar'
-    ? (runningEntryId && filled > 0 && owners[filled - 1]?.entryId === runningEntryId ? filled - 1 : -1)
+  // У копилки и пятен «сейчас» — стекло последнего занятого часа, если таймер идёт.
+  const last = filled.length - 1;
+  const nowCell = places
+    ? (runningEntryId && last >= 0 && filled[last].entryId === runningEntryId ? places[last] : -1)
     : dayIdx >= 0 ? dayIdx * 24 + Math.floor((now - days[dayIdx]) / HOUR_MS) : -1;
   const pts = (i: number) => cells[i].map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
 
