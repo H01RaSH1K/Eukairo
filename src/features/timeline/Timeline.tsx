@@ -11,7 +11,8 @@ import { useDesign } from '../../settings/design';
 import { useNow } from '../../ui/useNow';
 import { EntrySheet } from './EntrySheet';
 
-const GAP_MIN_MS = 20 * MIN_MS; // пустоты короче не показываем
+const GAP_MIN_MS = 20 * MIN_MS; // пустоты между записями короче не показываем
+const EDGE_GAP_MIN_MS = MIN_MS; // а в начале и в конце дня показываем почти любые
 
 // Высота строки — по длительности: час = PX_PER_HOUR пикселей. Снизу ограничено,
 // чтобы короткая запись осталась читаемой; длинную пустоту (ночь) ограничиваем сверху.
@@ -45,8 +46,8 @@ export default function Timeline() {
 
   // Собираем строки: пустота, запись, пустота, запись… пустота до конца дня (или до «сейчас»).
   const rows: ReactNode[] = [];
-  const gap = (from: number, to: number) => {
-    if (to - from < GAP_MIN_MS) return;
+  const gap = (from: number, to: number, min = GAP_MIN_MS) => {
+    if (to - from < min) return;
     rows.push(
       <button key={'gap' + from} className="gap" style={feedByDuration ? { height: heightOf(to - from, 34, 3 * PX_PER_HOUR) } : undefined} onClick={() => draft(from, to)}>
         Пусто {formatClock(from)}–{to === dayEnd ? '24:00' : formatClock(to)} · {formatDuration(to - from)} <b>＋</b>
@@ -56,7 +57,7 @@ export default function Timeline() {
   let cursor = day; // где кончилась предыдущая запись
   list.forEach((e) => {
     const end = e.end ?? now;
-    gap(cursor, e.start);
+    gap(cursor, e.start, cursor === day ? EDGE_GAP_MIN_MS : GAP_MIN_MS);
     cursor = Math.max(cursor, end);
     const path = pathOf(activities, e.activityId).map((a) => a.name);
     rows.push(
@@ -74,7 +75,7 @@ export default function Timeline() {
       </div>,
     );
   });
-  gap(cursor, Math.min(now, dayEnd));
+  gap(cursor, Math.min(now, dayEnd), EDGE_GAP_MIN_MS);
 
   return (
     <div className="screen fit">
