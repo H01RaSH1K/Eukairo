@@ -11,19 +11,19 @@ export interface MockState {
   entries: Entry[];          // отсортированы по start
   vizId: string;             // выбранный стиль визуализации
   fill: string;              // заливка мозаики: flow | rows | calendar | jar | spots
-  spotSize: number;          // размер пятен, 1…10
+  spotSize: number;          // число пятен (точек), 1…12
   backupBanner: boolean;     // плашка «давно не было бэкапа»
   forgottenAsked: string | null; // по какой записи уже спросили «таймер ещё идёт?»
 }
 
 const VIZ_KEY = 'eukairo.mock.viz';
 const FILL_KEY = 'eukairo.mock.fill';
-const SPOT_KEY = 'eukairo.mock.spot';
+const SPOT_KEY = 'eukairo.mock.spots';
 
 function initial(): MockState {
   let vizId = 'mosaic-glass';
   let fill = 'calendar';
-  let spotSize = 3;
+  let spotSize = 5;
   try {
     spotSize = Number(localStorage.getItem(SPOT_KEY) ?? spotSize) || spotSize;
     vizId = localStorage.getItem(VIZ_KEY) ?? vizId;

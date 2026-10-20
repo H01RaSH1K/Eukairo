@@ -39,8 +39,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, fill: fillPro
   const filled = hours.filter((o): o is HourOwner => o !== null);
   const seed = seedFor(from);
   const places = useMemo(
-    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, days.length, spotSize) : fill === 'jar' ? filled.map((_, i) => i) : null),
-    [fill, cells, seed, days.length, spotSize, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (fill === 'spots' ? spotPlaces(cells, filled, seed, spotSize) : fill === 'jar' ? filled.map((_, i) => i) : null),
+    [fill, cells, seed, spotSize, hours.map((o) => o?.entryId ?? '').join('|')], // eslint-disable-line react-hooks/exhaustive-deps
   );
   let owners: (HourOwner | null)[] = hours;
   if (places) {

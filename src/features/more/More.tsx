@@ -45,11 +45,11 @@ export default function More({ goToday }: { goToday: () => void }) {
         <div className="sub-title-row">
           <div className="card-title sub-title">Заливка</div>
           {state.fill === 'spots' && (
-            // Ползунок размера пятен — в строке заголовка, чтобы экран не вырос.
+            // Ползунок числа пятен — в строке заголовка, чтобы экран не вырос.
             // onChange срабатывает на каждом шаге — мозаика пересобирается сразу.
             <label className="slider-row">
-              <span className="dim">размер</span>
-              <input type="range" min={1} max={10} value={state.spotSize} onChange={(e) => setSpotSize(Number(e.target.value))} />
+              <span className="dim">точек</span>
+              <input type="range" min={1} max={12} value={state.spotSize} onChange={(e) => setSpotSize(Number(e.target.value))} />
               <span className="dim">{state.spotSize}</span>
             </label>
           )}

@@ -21,29 +21,32 @@ export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = 
 }
 
 /**
- * Заливка пятнами: занятые часы собираются в несколько пятен.
- * Подряд идущие записи (несколько в пятне) липнут друг к другу, пятна разбросаны по картине.
+ * Заливка пятнами: выбираем `count` точек-центров, занятые часы делим между ними
+ * примерно (но не ровно) поровну и наращиваем вокруг каждой точки.
  * Возвращает номер стекла для каждого занятого часа (в том же порядке, что `filled`).
- * Центры пятен зависят только от `seed`, поэтому за день пятна не прыгают, а растут.
+ * Центры зависят только от `seed`, поэтому за день точки не прыгают, а пятна растут.
  */
-export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, days = 1, size = 3): number[] {
+export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, count = 5): number[] {
   const c = cells.map(centroid);
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const rand = rng(seed + 17);
 
-  // Пятна: подряд идущие записи; сколько их в пятне — от ползунка `size` (1…10)
-  // и длины периода. При size 3: у дня 3–6, у недели 5–8, у месяца 12–15.
-  // Запись = отрезок часов одного entryId.
-  const base = Math.max(1, Math.round(size * (1 + days / 10)));
-  const pick = () => base + Math.floor(rand() * 4);
-  const sizes: number[] = [];
-  let runs = 0, want = pick();
-  filled.forEach((o, i) => {
-    const newRun = i === 0 || filled[i - 1].entryId !== o.entryId;
-    if (newRun && ++runs > want) { runs = 1; want = pick(); sizes.push(0); }
-    if (!sizes.length) sizes.push(0);
-    sizes[sizes.length - 1]++;
-  });
+  // Доли пятен: случайный вес 0.7…1.3 у каждого, нормируем — получаем границы по часам.
+  const weights = Array.from({ length: count }, () => 0.7 + rand() * 0.6);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  const bounds = weights.map((w) => (acc += w) / sum * filled.length);
+  // Запись (отрезок часов одного entryId) не рвём между пятнами: она целиком идёт
+  // в то пятно, куда попадает её середина. Так часы одной записи сливаются.
+  const sizes = new Array<number>(count).fill(0);
+  for (let i = 0; i < filled.length;) {
+    let j = i;
+    while (j < filled.length && filled[j].entryId === filled[i].entryId) j++;
+    const mid = (i + j) / 2;
+    const spot = Math.max(0, bounds.findIndex((b) => mid <= b));
+    sizes[spot] += j - i;
+    i = j;
+  }
 
   // Центры: каждый следующий — самый далёкий от прежних из 8 случайных стёкол,
   // не у самого края (чтобы пятно не обрезалось рамкой).

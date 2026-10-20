@@ -20,7 +20,7 @@ export interface VisualizationProps {
   spans: Span[];
   runningEntryId: string | null;         // идущий таймер — можно анимировать рост
   fill: string;                          // как раскладывать часы (заливка из «Ещё»); стиль может не учитывать
-  spotSize: number;                      // размер пятен для заливки «Пятна», 1…10
+  spotSize: number;                      // сколько пятен у заливки «Пятна», 1…12
   onSelect: (entryId: string) => void;   // ≈ Action<string>
 }
 

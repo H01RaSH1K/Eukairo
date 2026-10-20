@@ -19,7 +19,7 @@ describe('spotPlaces', () => {
     });
     // 30 записей по 2 часа
     const filled = Array.from({ length: 60 }, (_, i) => ({ entryId: 'e' + Math.floor(i / 2), color: '#fff' }));
-    const places = spotPlaces(cells, filled, 42, 7);
+    const places = spotPlaces(cells, filled, 42, 4);
     expect(new Set(places).size).toBe(60);
     // два часа одной записи — соседи по сетке (расстояние между центрами 10)
     const near = filled.filter((_, i) => i % 2 === 0).filter((_, k) => {
