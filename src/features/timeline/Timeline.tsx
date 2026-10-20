@@ -43,18 +43,21 @@ export default function Timeline() {
       isNew: true,
     });
 
-  // Собираем строки: запись, пустота, запись…
+  // Собираем строки: пустота, запись, пустота, запись… пустота до конца дня (или до «сейчас»).
   const rows: ReactNode[] = [];
-  list.forEach((e, i) => {
+  const gap = (from: number, to: number) => {
+    if (to - from < GAP_MIN_MS) return;
+    rows.push(
+      <button key={'gap' + from} className="gap" style={feedByDuration ? { height: heightOf(to - from, 34, 3 * PX_PER_HOUR) } : undefined} onClick={() => draft(from, to)}>
+        Пусто {formatClock(from)}–{to === dayEnd ? '24:00' : formatClock(to)} · {formatDuration(to - from)} <b>＋</b>
+      </button>,
+    );
+  };
+  let cursor = day; // где кончилась предыдущая запись
+  list.forEach((e) => {
     const end = e.end ?? now;
-    const prevEnd = i === 0 ? null : list[i - 1].end ?? now;
-    if (prevEnd !== null && e.start - prevEnd >= GAP_MIN_MS) {
-      rows.push(
-        <button key={'gap' + e.id} className="gap" style={feedByDuration ? { height: heightOf(e.start - prevEnd, 34, 3 * PX_PER_HOUR) } : undefined} onClick={() => draft(prevEnd, e.start)}>
-          Пусто {formatClock(prevEnd)}–{formatClock(e.start)} · {formatDuration(e.start - prevEnd)} <b>＋</b>
-        </button>,
-      );
-    }
+    gap(cursor, e.start);
+    cursor = Math.max(cursor, end);
     const path = pathOf(activities, e.activityId).map((a) => a.name);
     rows.push(
       <div key={e.id} className="entry" style={feedByDuration ? { height: heightOf(end - e.start, 56) } : undefined} onClick={() => setSelected({ entry: e, isNew: false })}>
@@ -71,6 +74,7 @@ export default function Timeline() {
       </div>,
     );
   });
+  gap(cursor, Math.min(now, dayEnd));
 
   return (
     <div className="screen fit">
