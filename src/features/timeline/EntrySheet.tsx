@@ -3,41 +3,64 @@ import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { findOverlaps } from '../../domain/overlaps';
 import { pathOf } from '../../domain/tree';
-import { HOUR_MS, MIN_MS, formatClock, formatDuration, startOfLocalDay } from '../../domain/time';
-import { deleteEntry, saveEntry, stopTimer, useMock } from '../../mock/store';
+import { MIN_MS, addLocalDays, formatClock, formatDuration, startOfLocalDay } from '../../domain/time';
+import { deleteEntry, saveEntry, stopTimer } from '../../db/commands';
+import { useData } from '../../db/store';
 import { Sheet } from '../../ui/Sheet';
 import { ActivityPicker } from '../activities/ActivityPicker';
 
-// «14:05» → мс внутри дня `base`.
+// «14:05» → момент внутри дня `base` (через календарь, чтобы перевод часов не сдвигал время).
 function parseClock(base: number, s: string): number {
   const [h, m] = s.split(':').map(Number);
-  return base + h * HOUR_MS + m * MIN_MS;
+  const d = new Date(base);
+  d.setHours(h, m, 0, 0);
+  return d.getTime();
 }
+
+// Дата для <input type="date">: «2026-10-20» по местному времени, и обратно.
+const toDateStr = (t: number) => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const fromDateStr = (s: string) => {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+};
+
+const QUICK_DURATIONS = [15, 30, 60, 90, 120]; // минуты: «начало + длительность» в одно касание
 
 // Правка существующей записи или ввод новой задним числом.
 export function EntrySheet({ entry, isNew, onClose }: { entry: Entry; isNew: boolean; onClose: () => void }) {
-  const { activities, entries } = useMock();
+  const { activities, entries } = useData();
   const colors = useMemo(() => activityColors(activities), [activities]);
   const [activityId, setActivityId] = useState(entry.activityId);
+  const [dateStr, setDateStr] = useState(toDateStr(entry.start));
   const [startStr, setStartStr] = useState(formatClock(entry.start));
   const [endStr, setEndStr] = useState(entry.end === null ? '' : formatClock(entry.end));
   const [note, setNote] = useState(entry.note ?? '');
   const [picking, setPicking] = useState(false);
 
   const isRunning = entry.end === null;
-  const base = startOfLocalDay(entry.start);
+  const base = dateStr ? fromDateStr(dateStr) : startOfLocalDay(entry.start);
   const now = Date.now();
   const start = parseClock(base, startStr);
   let end = isRunning ? now : parseClock(base, endStr);
-  if (end <= start) end += 24 * HOUR_MS; // конец раньше начала → это уже следующий день
-  const valid = !Number.isNaN(start) && !Number.isNaN(end) && end > start;
+  if (end <= start && !isRunning) end = parseClock(addLocalDays(base, 1), endStr); // конец раньше начала → это уже следующий день
+  const known = activities.some((a) => a.id === activityId);
+  const problem =
+    Number.isNaN(start) || Number.isNaN(end) ? 'Проверь время'
+    : !known ? 'Выбери занятие'
+    : end > now + MIN_MS ? 'Это ещё не наступило — конец в будущем'
+    : end <= start ? 'Начало позже, чем сейчас'
+    : null;
+  const valid = problem === null;
 
   const others = entries.filter((e) => e.id !== entry.id);
   const conflicts = valid ? findOverlaps(others, start, end, now) : [];
   const name = (id: string) => pathOf(activities, id).map((a) => a.name).join(' › ');
 
   const save = () => {
-    saveEntry({ ...entry, activityId, start, end: isRunning ? null : end, note: note || undefined });
+    void saveEntry({ ...entry, activityId, start, end: isRunning ? null : end, note: note || undefined });
     onClose();
   };
 
@@ -49,6 +72,11 @@ export function EntrySheet({ entry, isNew, onClose }: { entry: Entry; isNew: boo
           <span className="field-value">{name(activityId)}</span>
           <span className="dim">›</span>
         </button>
+
+        <label className="field">
+          <span className="dim">Дата</span>
+          <input type="date" value={dateStr} max={toDateStr(now)} onChange={(e) => setDateStr(e.target.value)} />
+        </label>
 
         <div className="field-row">
           <label className="field time">
@@ -62,7 +90,16 @@ export function EntrySheet({ entry, isNew, onClose }: { entry: Entry; isNew: boo
               : <input type="time" value={endStr} onChange={(e) => setEndStr(e.target.value)} />}
           </label>
         </div>
-        <p className="dim center">{valid ? formatDuration(end - start) : 'Проверь время'}</p>
+        {!isRunning && (
+          <div className="chips dur-chips">
+            {QUICK_DURATIONS.map((m) => (
+              <button key={m} aria-pressed={valid && end - start === m * MIN_MS} onClick={() => setEndStr(formatClock(start + m * MIN_MS))}>
+                {m < 60 ? `${m} мин` : `${m / 60} ч`.replace('.5', ',5')}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="dim center">{valid ? formatDuration(end - start) : problem}</p>
 
         <input className="field" placeholder="Заметка" value={note} onChange={(e) => setNote(e.target.value)} />
 
