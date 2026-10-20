@@ -30,6 +30,15 @@ const spots: SettingDef = {
   showIf: { id: 'fill', equals: ['spots'] },
 };
 
+const growth: SettingDef = {
+  id: 'growth', kind: 'choice', title: 'Рост пятен', default: 'round',
+  options: [
+    { id: 'round', title: 'Кругом', hint: 'Пятно растёт от центра ровным кругом' },
+    { id: 'random', title: 'Как упадёт', hint: 'Каждое новое стекло — в случайном месте, лишь бы касалось пятна' },
+  ],
+  showIf: { id: 'fill', equals: ['spots'] },
+};
+
 const threshold: SettingDef = {
   id: 'threshold', kind: 'range', title: 'Час закрашивается от', min: 10, max: 50, step: 5, default: 30, unit: 'мин',
   hint: 'Сколько минут записи нужно, чтобы стекло часа стало её цвета',
@@ -56,19 +65,19 @@ const freeFills = ['spots', 'flow', 'jar'];
 export const visualizations: VisualizationPlugin[] = [
   {
     id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
-    settings: [fill(allFills), spots, cut, threshold, lead], load: mosaic('glass'),
+    settings: [fill(allFills), spots, growth, cut, threshold, lead], load: mosaic('glass'),
   },
   {
     id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
-    settings: [fill(freeFills), spots, threshold, lead], load: mosaic('rose'),
+    settings: [fill(freeFills), spots, growth, threshold, lead], load: mosaic('rose'),
   },
   {
     id: 'mosaic-tri', title: 'Треугольники', description: 'Час — треугольник, пары складываются в ромбы',
-    settings: [fill(freeFills), spots, threshold, lead], load: mosaic('tri'),
+    settings: [fill(freeFills), spots, growth, threshold, lead], load: mosaic('tri'),
   },
   {
     id: 'mosaic-grid', title: 'Сетка', description: 'Ровные клетки — проще всего читать',
-    settings: [fill(allFills), spots, threshold, lead], load: mosaic('grid'),
+    settings: [fill(allFills), spots, growth, threshold, lead], load: mosaic('grid'),
   },
 ];
 
