@@ -386,3 +386,4 @@ input.field { -webkit-user-select: text; user-select: text; }
 .mode-chips button { padding: 6px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .about .btn-row.demo { margin-bottom: 8px; }
 @media (max-height: 700px) { .theme-sw { max-width: 38px; } }
+@media (max-height: 700px) { .mode-chips + .setting-hint { display: none; } .toggle-row { margin-top: 6px; } } /* SE: подсказка к режиму — лишняя строка */

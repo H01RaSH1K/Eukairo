@@ -6,6 +6,7 @@ import {
   HOUR_MS, MIN_MS, addLocalDays, formatClock, formatDuration, startOfLocalDay, startOfNextLocalDay,
 } from '../../domain/time';
 import { useMock } from '../../mock/store';
+import { useDesign } from '../../settings/design';
 import { useNow } from '../../ui/useNow';
 import { EntrySheet } from './EntrySheet';
 
@@ -23,6 +24,7 @@ export default function Timeline() {
   const [day, setDay] = useState(() => startOfLocalDay(Date.now()));
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const colors = useMemo(() => activityColors(activities), [activities]);
+  const { feedByDuration } = useDesign(); // настройка в «Ещё»: высота по длительности или одинаковая
 
   const dayEnd = startOfNextLocalDay(day);
   const today = startOfLocalDay(now);
@@ -47,14 +49,14 @@ export default function Timeline() {
     const prevEnd = i === 0 ? null : list[i - 1].end ?? now;
     if (prevEnd !== null && e.start - prevEnd >= GAP_MIN_MS) {
       rows.push(
-        <button key={'gap' + e.id} className="gap" style={{ height: heightOf(e.start - prevEnd, 34, 3 * PX_PER_HOUR) }} onClick={() => draft(prevEnd, e.start)}>
+        <button key={'gap' + e.id} className="gap" style={feedByDuration ? { height: heightOf(e.start - prevEnd, 34, 3 * PX_PER_HOUR) } : undefined} onClick={() => draft(prevEnd, e.start)}>
           Пусто {formatClock(prevEnd)}–{formatClock(e.start)} · {formatDuration(e.start - prevEnd)} <b>＋</b>
         </button>,
       );
     }
     const path = pathOf(activities, e.activityId).map((a) => a.name);
     rows.push(
-      <div key={e.id} className="entry" style={{ height: heightOf(end - e.start, 56) }} onClick={() => setSelected({ entry: e, isNew: false })}>
+      <div key={e.id} className="entry" style={feedByDuration ? { height: heightOf(end - e.start, 56) } : undefined} onClick={() => setSelected({ entry: e, isNew: false })}>
         <span className="entry-bar" style={{ background: colors.get(e.activityId) }} />
         <div className="entry-main">
           <div>{path.at(-1)}</div>

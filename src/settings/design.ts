@@ -28,6 +28,7 @@ export interface Design {
   mode: ModeId;
   showcase: boolean; // витрина: мозаика на весь экран, панели из матового стекла
   theme: ThemeId;
+  feedByDuration: boolean; // Лента: высота записи по длительности (иначе все одинаковые)
 }
 
 const KEY = 'eukairo.design';
@@ -41,16 +42,17 @@ function load(): Design {
         mode: modes.some((m) => m.id === d.mode) ? d.mode! : 'dial',
         showcase: d.showcase ?? true,
         theme: themes.some((t) => t.id === d.theme) ? d.theme! : 'night',
+        feedByDuration: d.feedByDuration ?? true,
       };
     }
     // старые значения, когда витрина была отдельным режимом
-    const old: Record<string, Omit<Design, 'theme'>> = {
+    const old: Record<string, Pick<Design, 'mode' | 'showcase'>> = {
       classic: { mode: 'dial', showcase: false }, immersive: { mode: 'dial', showcase: true },
       clock: { mode: 'clock', showcase: true }, charge: { mode: 'charge', showcase: true }, pull: { mode: 'tiles', showcase: true },
     };
-    if (raw && old[raw]) return { ...old[raw], theme: 'night' };
+    if (raw && old[raw]) return { ...old[raw], theme: 'night', feedByDuration: true };
   } catch { /* приватный режим */ }
-  return { mode: 'dial', showcase: true, theme: 'night' };
+  return { mode: 'dial', showcase: true, theme: 'night', feedByDuration: true };
 }
 
 let current = load();

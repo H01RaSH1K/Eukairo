@@ -72,6 +72,10 @@ export default function More({ goToday }: { goToday: () => void }) {
             </button>
           ))}
         </div>
+        <label className="toggle-row">
+          <span>Лента <span className="dim small">— высота по длительности</span></span>
+          <input type="checkbox" checked={design.feedByDuration} onChange={(e) => setDesign({ feedByDuration: e.target.checked })} />
+        </label>
       </div>
 
       <div className="widget pad">
