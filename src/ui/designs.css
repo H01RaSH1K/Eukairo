@@ -10,7 +10,8 @@
 /* ——— Витрина (галочка в «Ещё», для любого режима): мозаика под всем ——— */
 .today.fullbleed { position: relative; overflow: clip; } /* clip: без скрытой прокрутки, которую мог бы сдвинуть фокус */
 .today.fullbleed .widget.viz {
-  position: absolute; inset: 0; z-index: 0;
+  /* сверху — от низа строки состояния: под часами стекло не рисуем (и в фокусе так же) */
+  position: absolute; inset: env(safe-area-inset-top) 0 0; z-index: 0;
   border-radius: 0; padding: 0; background: var(--bg);
   touch-action: none; /* щипок и свайп — наши, не масштаб страницы */
 }
@@ -35,7 +36,7 @@
 /* таб-бар — плавающая «таблетка» */
 html[data-showcase] { --bar: var(--frost-soft); }
 html[data-showcase] .tabbar {
-  left: 14px; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 8px);
+  left: 14px; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 8px - var(--vp-gap, 0px));
   height: var(--tabbar-h); padding: 0; border: 1px solid var(--edge); border-radius: 22px;
   backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
@@ -175,7 +176,7 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 /* шторки (запись, выбор занятия) остаются: тап по куску в фокусе открывает запись */
 .today.focus > :not(.widget.viz):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque) { display: none !important; }
 /* Пустые стёкла — не плоские: у каждого свой лёгкий оттенок (--v из Mosaic.tsx) */
-.today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), var(--glass-tint) calc(4% + var(--v) * 9%)); transition: fill .6s; }
+.today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), var(--glass-tint) calc(var(--v) * 6%)); transition: fill .6s; }
 .today.focus .glass-fill { filter: saturate(1.15); }
 /* Свет: два мягких пятна плывут по витражу (screen — светлеет только то, что под ним) */
 .focus-light {
@@ -192,7 +193,7 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
   100% { background-position: 100% 100%, 0% 0%; }
 }
 .focus-plaque {
-  position: absolute !important; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 2;
+  position: absolute !important; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px - var(--vp-gap, 0px)); z-index: 2;
   text-align: center; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--plaque);
   text-shadow: 0 1px 8px var(--ink-shadow); pointer-events: none;
   animation: fade-in 1.2s .6s ease-out both;
@@ -251,6 +252,6 @@ html[data-focus] .tabbar { display: none; }
    на полосу «Домой», а сверху мозаика лезла под часы. Поэтому в фокусе витраж
    приклеен к окну: от низа строки состояния до самого низа экрана. */
 .today.focus .widget.viz, .today.focus .focus-light {
-  position: fixed !important; top: env(safe-area-inset-top); left: 0; right: 0; bottom: 0;
+  position: fixed !important; top: env(safe-area-inset-top); left: 0; right: 0; bottom: calc(0px - var(--vp-gap, 0px));
 }
 .today.focus .focus-plaque { position: fixed !important; }

@@ -6,6 +6,7 @@ import { findVisualization } from '../../visualizations/registry';
 import { useAppearance } from '../../settings/appearance';
 import { modes, setDesign, themes, useDesign } from '../../settings/design';
 import Appearance from '../appearance/Appearance';
+import { viewportGap } from '../../ui/viewport';
 import { Sheet } from '../../ui/Sheet';
 import { plural } from '../../domain/time';
 
@@ -133,7 +134,8 @@ export default function More() {
           <button className="btn small" onClick={() => void demo()}>Демо-данные</button>
         </div>
         Eukairo {__APP_VERSION__} · сборка {__BUILD_TIME__}<br />
-        На «Домой»: {standalone ? 'да' : 'нет'} · данные защищены: {persisted === null ? '…' : persisted ? 'да' : 'нет'}
+        На «Домой»: {standalone ? 'да' : 'нет'} · данные защищены: {persisted === null ? '…' : persisted ? 'да' : 'нет'}<br />
+        Экран {screen.height} · окно {window.innerHeight} · поправка {viewportGap()}
       </div>
 
       {restore && (
