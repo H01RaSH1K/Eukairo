@@ -1,4 +1,4 @@
-import { useMemo, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
 import { hourOwners } from './layout';
@@ -15,7 +15,21 @@ const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 
 function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
-  const { w, h, cells, decor } = getPattern(pattern, days.length, seedFor(from));
+  // Меряем место под картину, чтобы узор заполнил виджет целиком.
+  // ResizeObserver ≈ подписка на событие «размер изменился».
+  const box = useRef<HTMLDivElement>(null);
+  const [aspect, setAspect] = useState(0.7);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => {
+      const { width, height } = e.contentRect;
+      if (width > 0 && height > 0) setAspect(width / height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const { w, h, cells, decor } = getPattern(pattern, days.length, seedFor(from), aspect);
   // flatMap ≈ SelectMany: 24 часа каждого дня подряд.
   const owners = days.flatMap((d) => hourOwners(spans, d));
   const ownerIds = owners.map((o) => o?.entryId ?? null);
@@ -29,6 +43,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: V
   const pts = (i: number) => cells[i].map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
 
   return (
+    <div className="glass-box" ref={box}>
     <svg className={'glass ' + scale} viewBox={`-1 -1 ${w + 2} ${h + 2}`}>
       {decor?.map((poly, i) => (
         <polygon key={'d' + i} points={poly.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ')} className="glass-decor" />
@@ -50,6 +65,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, onSelect }: V
       <path d={lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] }} />
       {nowCell >= 0 && nowCell < cells.length && <polygon points={pts(nowCell)} className="glass-now" style={{ strokeWidth: leadWidth[scale] * 0.6 }} />}
     </svg>
+    </div>
   );
 }
 

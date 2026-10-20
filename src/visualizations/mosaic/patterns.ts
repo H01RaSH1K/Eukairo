@@ -13,11 +13,21 @@ export interface Pattern {
   decor?: Pt[][];  // пустые стёкла для красоты (добивают края), временем не заполняются
 }
 
-/** Сколько столбцов и строк сегментов для `days` дней (всего days × 24). */
-function dims(days: number): { cols: number; rows: number } {
-  if (days === 1) return { cols: 4, rows: 6 };
-  if (days === 7) return { cols: 12, rows: 14 };
-  return { cols: 24, rows: days }; // месяц: строка ≈ день
+/**
+ * Сколько столбцов и строк для n сегментов, чтобы картина заполнила виджет
+ * с соотношением сторон `aspect` (ширина / высота), а клетки были близки к квадрату.
+ * Перебираем все разложения n = cols × rows (≈ поиск минимума в цикле).
+ */
+function dims(n: number, aspect: number): { cols: number; rows: number } {
+  let best = { cols: n, rows: 1 };
+  let bestErr = Infinity;
+  for (let cols = 1; cols <= n; cols++) {
+    if (n % cols) continue;
+    const rows = n / cols;
+    const err = Math.abs(Math.log(cols / rows / aspect));
+    if (err < bestErr) { bestErr = err; best = { cols, rows }; }
+  }
+  return best;
 }
 
 /** Порядок «змейкой»: строка слева направо, следующая справа налево. */
@@ -30,15 +40,14 @@ function snake(cols: number, rows: number): [number, number][] {
 }
 
 const W = 100;
-// Высота картины: у дня сегменты чуть вытянуты, у недели и месяца почти квадратные.
-const heightFor = (cols: number, rows: number, days: number) => (W / cols) * rows * (days === 1 ? 0.93 : 1);
+// Ширина картины всегда 100, высота — по форме виджета: картина заполняет его целиком.
 
 // ——— витражи (диаграмма Вороного по разным раскладкам точек) ———
 
 /** Неровный витраж: сетка точек со сдвигом. `jitter` 0…1 — насколько неровно. */
-function jittered(days: number, jitter: number, seed: number): Pattern {
-  const { cols, rows } = dims(days);
-  const h = heightFor(cols, rows, days);
+function jittered(days: number, aspect: number, jitter: number, seed: number): Pattern {
+  const { cols, rows } = dims(days * 24, aspect);
+  const h = W / aspect;
   const cw = W / cols, ch = h / rows;
   const rand = rng(seed + days);
   const pad = (1 - jitter) / 2;
@@ -47,9 +56,9 @@ function jittered(days: number, jitter: number, seed: number): Pattern {
 }
 
 /** Соты: точки рядами со сдвигом на полклетки — получаются неровные шестиугольники. */
-function hex(days: number, seed: number): Pattern {
-  const { cols, rows } = dims(days);
-  const h = heightFor(cols, rows, days);
+function hex(days: number, aspect: number, seed: number): Pattern {
+  const { cols, rows } = dims(days * 24, aspect);
+  const h = W / aspect;
   const cw = W / cols, ch = h / rows;
   const rand = rng(seed);
   const wob = () => (rand() - 0.5) * 0.3;
@@ -61,20 +70,23 @@ function hex(days: number, seed: number): Pattern {
  * Спираль: точки вдоль спирали Архимеда от центра наружу с равным шагом.
  * Часы занимают круг, а углы квадрата добиваются пустыми «декоративными» стёклами.
  */
-function spiral(days: number, seed: number): Pattern {
+function spiral(days: number, aspect: number, seed: number): Pattern {
+  // Считаем в квадрате S × S, потом растягиваем под форму виджета (круг → эллипс).
   const n = days * 24;
-  const w = W, h = W, R = w / 2;
+  const S = W, R = S / 2;
   const step = Math.sqrt((Math.PI * R * R) / n);      // средний размер стёклышка в круге
   const b = step / (2 * Math.PI);                      // r = b·θ: витки на расстоянии step
-  const seeds: Pt[] = [];
   const turn = rng(seed)() * 2 * Math.PI;              // поворот спирали — свой у каждого периода
+  const sq: Pt[] = [];
   let theta = Math.PI; // начинаем чуть от центра, чтобы первые стёкла не были крошечными
   for (let r = b * theta; r < R * 1.5; r = b * theta) {
-    seeds.push([R + r * Math.sin(theta + turn), R - r * Math.cos(theta + turn)]);
+    sq.push([R + r * Math.sin(theta + turn), R - r * Math.cos(theta + turn)]);
     theta += step / Math.max(r, step);                 // шаг по дуге ≈ step
   }
-  const all = voronoi(seeds, w, h, 3 * step);
-  // Точки за пределами квадрата дают пустые многоугольники — их выбрасываем.
+  const w = W, h = W / aspect;
+  const seeds = sq.map(([x, y]): Pt => [(x * w) / S, (y * h) / S]);
+  const all = voronoi(seeds, w, h, 3 * step * Math.max(1, h / S, w / S));
+  // Точки за пределами картины дают пустые многоугольники — их выбрасываем.
   const decor = all.slice(n).filter((c) => c.length >= 3);
   return { w, h, cells: all.slice(0, n), decor };
 }
@@ -105,10 +117,10 @@ function rose(days: number): Pattern {
 }
 
 /** Треугольники: прямоугольники, разрезанные по диагонали (направление чередуется). */
-function tri(days: number): Pattern {
-  const { cols: c2, rows } = dims(days);
-  const cols = c2 / 2;
-  const h = heightFor(c2, rows, days);
+function tri(days: number, aspect: number): Pattern {
+  // Прямоугольник = 2 треугольника, поэтому раскладываем days × 12 прямоугольников.
+  const { cols, rows } = dims(days * 12, aspect);
+  const h = W / aspect;
   const cw = W / cols, ch = h / rows;
   const cells: Pt[][] = [];
   for (let r = 0; r < rows; r++) {
@@ -123,9 +135,9 @@ function tri(days: number): Pattern {
   return { w: W, h, cells };
 }
 
-function grid(days: number): Pattern {
-  const { cols, rows } = dims(days);
-  const h = heightFor(cols, rows, days);
+function grid(days: number, aspect: number): Pattern {
+  const { cols, rows } = dims(days * 24, aspect);
+  const h = W / aspect;
   const cw = W / cols, ch = h / rows;
   const cells = snake(cols, rows).map(([c, r]): Pt[] => [
     [c * cw, r * ch], [(c + 1) * cw, r * ch], [(c + 1) * cw, (r + 1) * ch], [c * cw, (r + 1) * ch],
@@ -138,29 +150,32 @@ function grid(days: number): Pattern {
  * чтобы дни не выглядели одинаково. `seed` — из даты, поэтому у одного
  * и того же дня нарезка всегда одна и та же.
  */
-function glass(days: number, seed: number): Pattern {
+function glass(days: number, aspect: number, seed: number): Pattern {
   const cuts = [
-    () => jittered(days, 0.6, seed),   // ровные неровные стёкла
-    () => jittered(days, 0.98, seed),  // осколки
-    () => hex(days, seed),             // соты
-    () => spiral(days, seed),          // спираль от центра
+    () => jittered(days, aspect, 0.6, seed),   // ровные неровные стёкла
+    () => jittered(days, aspect, 0.98, seed),  // осколки
+    () => hex(days, aspect, seed),             // соты
+    () => spiral(days, aspect, seed),          // спираль от центра
   ];
   return cuts[seed % cuts.length]();
 }
 
-const builders: Record<PatternId, (days: number, seed: number) => Pattern> = {
+const builders: Record<PatternId, (days: number, aspect: number, seed: number) => Pattern> = {
   glass,
-  rose: (d) => rose(d),
-  tri: (d) => tri(d),
-  grid: (d) => grid(d),
+  rose: (d) => rose(d), // роза всегда круглая
+  tri: (d, a) => tri(d, a),
+  grid: (d, a) => grid(d, a),
 };
 const cache = new Map<string, Pattern>();
 
-export function getPattern(id: PatternId, days = 1, seed = 0): Pattern {
-  const key = `${id}:${days}:${seed}`;
+/** `aspect` — ширина / высота места под картину. */
+export function getPattern(id: PatternId, days = 1, seed = 0, aspect = 0.7): Pattern {
+  // Округляем форму, чтобы мелкие изменения размера не пересчитывали узор.
+  const a = Math.round(Math.min(3, Math.max(0.3, aspect)) * 20) / 20;
+  const key = `${id}:${days}:${seed}:${a}`;
   if (!cache.has(key)) {
     if (cache.size > 60) cache.clear(); // кэш не должен расти бесконечно
-    cache.set(key, builders[id](days, seed));
+    cache.set(key, builders[id](days, a, seed));
   }
   return cache.get(key)!;
 }

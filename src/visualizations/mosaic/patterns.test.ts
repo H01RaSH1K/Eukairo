@@ -11,7 +11,7 @@ describe('узоры', () => {
   it.each(['grid', 'glass', 'tri'] as PatternId[])('%s: сегменты покрывают картину без дыр', (id) => {
     // seed 0…3 — все четыре нарезки витража
     for (const [days, seed] of [[1, 0], [1, 1], [1, 2], [1, 3], [7, 2], [31, 3]]) {
-      const p = getPattern(id, days, seed);
+      const p = getPattern(id, days, seed, 0.6);
       expect(p.cells).toHaveLength(days * 24);
       expect([...p.cells, ...(p.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(p.w * p.h, 1);
     }
@@ -32,7 +32,7 @@ describe('seedFor', () => {
 
 describe('leadPath', () => {
   it('убирает линию между часами одной записи', () => {
-    const { cells } = getPattern('grid');
+    const { cells } = getPattern('grid', 1, 0, 4 / 6); // сетка 4 × 6
     const none = leadPath(cells, Array(24).fill(null)).split('M').length;
     const owner = Array(24).fill(null);
     owner[0] = owner[1] = 'e1'; // 0:00 и 1:00 — соседи в сетке
