@@ -1,0 +1,113 @@
+/* Варианты дизайна. Каждый — набор правил под <html data-design="…">:
+   свои цвета (через переменные из theme.css), своя компоновка и свои анимации.
+   Классика — это theme.css как есть, плюс мягкое появление при смене периода. */
+
+.viz-anim { width: 100%; height: 100%; min-height: 0; display: flex; }
+
+/* ——— Классика ——— */
+[data-design='classic'] .viz-anim { animation: fade-in .25s ease-out both; }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* ——— Витрина: мозаика во весь экран, всё остальное — матовое стекло поверх ——— */
+[data-design='immersive'] { --bar: rgba(18, 18, 22, 0.55); }
+[data-design='immersive'] .today { position: relative; }
+[data-design='immersive'] .today .widget.viz {
+  position: absolute; inset: 0; z-index: 0;
+  border-radius: 0; padding: 0; background: var(--bg);
+}
+[data-design='immersive'] .today .widget.viz .glass-box { padding: 0; }
+/* затемнение сверху и снизу, чтобы текст и панели читались поверх стекла */
+[data-design='immersive'] .today .widget.viz::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to bottom, rgba(10,10,14,.85) 0, rgba(10,10,14,0) 22%, rgba(10,10,14,0) 55%, rgba(10,10,14,.75) 100%);
+}
+[data-design='immersive'] .today > :not(.widget.viz) { position: relative; z-index: 1; }
+[data-design='immersive'] .today-head { text-shadow: 0 1px 8px rgba(0,0,0,.8); }
+[data-design='immersive'] .today-head .nav-arrow { background: rgba(30,30,36,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+[data-design='immersive'] .today .segmented {
+  align-self: center; width: 240px; border-radius: 999px;
+  background: rgba(30,30,36,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+[data-design='immersive'] .today .segmented button { border-radius: 999px; }
+[data-design='immersive'] .today .banner { background: rgba(29,51,48,.7); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-design='immersive'] .today .widget.dial {
+  margin-top: auto; border-radius: 28px;
+  background: rgba(22,22,27,.55); border: 1px solid rgba(255,255,255,.08);
+  backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  animation: rise .5s cubic-bezier(.2,.9,.3,1.1) both;
+}
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } }
+/* стёкла встают на место по одному: задержка по порядку (--d из Mosaic.tsx) */
+[data-design='immersive'] .glass-fill:not(.live) {
+  transform-box: fill-box; transform-origin: center;
+  animation: piece-in .45s cubic-bezier(.2,.9,.3,1.3) both;
+  animation-delay: calc(var(--d) * 900ms);
+}
+@keyframes piece-in { from { transform: scale(.2); opacity: 0; } }
+/* таб-бар — плавающая «таблетка» */
+[data-design='immersive'] .tabbar {
+  left: 14px; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 8px);
+  height: var(--tabbar-h); padding: 0; border: 1px solid rgba(255,255,255,.08); border-radius: 22px;
+  backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+[data-design='immersive'] .screen { padding-bottom: calc(env(safe-area-inset-bottom) + var(--tabbar-h) + 22px); }
+
+/* ——— Бумага: светлая, заголовки с засечками, периоды листаются как страницы ——— */
+[data-design='paper'] {
+  color-scheme: light;
+  --bg: #f3eee4; --surface: #fbf8f2; --text: #2a2520; --text-dim: #8a8073; --accent: #c2603a;
+  --chip: #ece5d8; --control: #e7dfd1; --selected: #ddd2bf; --line: #e2d9c9; --bar: rgba(251, 248, 242, .94);
+  --glass-empty: #ece4d5; --glass-decor: #e4dac8; --glass-lead: #fbf8f2;
+  --font-display: Georgia, 'Times New Roman', serif;
+}
+[data-design='paper'] h1,
+[data-design='paper'] .today-total,
+[data-design='paper'] .dial-value { font-family: var(--font-display); font-weight: 500; letter-spacing: -.01em; }
+[data-design='paper'] .today-title h1 { font-size: 30px; }
+[data-design='paper'] .today-total { font-size: 20px; color: var(--accent); }
+[data-design='paper'] .widget { border-radius: 6px; box-shadow: 0 1px 0 var(--line), 0 6px 18px rgba(80,60,30,.07); }
+[data-design='paper'] .nav-arrow { background: none; border: 1px solid var(--line); color: var(--text); }
+/* сегменты — подчёркнутые вкладки, как в книге оглавления */
+[data-design='paper'] .segmented { background: none; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; }
+[data-design='paper'] .segmented button { border-radius: 0; font-family: var(--font-display); font-size: 15px; }
+[data-design='paper'] .segmented button[aria-pressed='true'] { background: none; color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+[data-design='paper'] .banner { background: #e8efe6; color: var(--text); }
+[data-design='paper'] .dial-handle { fill: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+[data-design='paper'] .dial-go.stop { color: var(--text); }
+[data-design='paper'] .tabbar { border-top: 1px solid var(--line); }
+[data-design='paper'] .viz-anim.fwd { animation: page-fwd .4s cubic-bezier(.2,.8,.2,1) both; }
+[data-design='paper'] .viz-anim.back { animation: page-back .4s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes page-fwd { from { transform: translateX(45%) rotate(2deg); opacity: 0; } }
+@keyframes page-back { from { transform: translateX(-45%) rotate(-2deg); opacity: 0; } }
+
+/* ——— Неон: свечение, контурные карточки, мерцающее включение ——— */
+[data-design='neon'] {
+  --bg: #06060a; --surface: rgba(255, 255, 255, .025); --text: #e9fffb; --text-dim: #6f8d8a; --accent: #3cf2d8;
+  --chip: rgba(255, 255, 255, .05); --control: rgba(255, 255, 255, .06); --selected: rgba(60, 242, 216, .14);
+  --line: rgba(60, 242, 216, .18); --bar: rgba(6, 6, 10, .9);
+  --glass-empty: #0c0d12; --glass-decor: #08090c; --glass-lead: #000;
+  --font-display: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+[data-design='neon'] .widget { border: 1px solid var(--line); box-shadow: inset 0 0 24px rgba(60,242,216,.04); }
+[data-design='neon'] h1,
+[data-design='neon'] .today-total,
+[data-design='neon'] .dial-value,
+[data-design='neon'] .card-title { font-family: var(--font-display); letter-spacing: .02em; }
+[data-design='neon'] .today-total,
+[data-design='neon'] .dial-value { color: var(--accent); text-shadow: 0 0 10px rgba(60,242,216,.6); }
+[data-design='neon'] .glass { filter: saturate(1.6) drop-shadow(0 0 4px rgba(60, 242, 216, .25)); }
+[data-design='neon'] .glass-fill { filter: brightness(1.15); }
+[data-design='neon'] .segmented { background: none; border: 1px solid var(--line); }
+[data-design='neon'] .segmented button[aria-pressed='true'] { color: var(--accent); background: var(--selected); text-shadow: 0 0 8px rgba(60,242,216,.7); }
+[data-design='neon'] .dial-fill { filter: drop-shadow(0 0 5px rgba(255,255,255,.45)); }
+[data-design='neon'] .dial-track { stroke: rgba(60, 242, 216, .1); }
+[data-design='neon'] .dial-go { box-shadow: 0 0 16px rgba(255,255,255,.25); }
+[data-design='neon'] .tabbar { border-top: 1px solid var(--line); }
+[data-design='neon'] .tabbar button[aria-current='page'] { text-shadow: 0 0 8px var(--accent); }
+[data-design='neon'] .viz-anim { animation: power-on .7s steps(1, end) both, glow-up .7s ease-out both; }
+@keyframes power-on { 0% { opacity: 0; } 12% { opacity: 1; } 18% { opacity: .2; } 30% { opacity: 1; } 36% { opacity: .5; } 44% { opacity: 1; } }
+@keyframes glow-up { from { filter: brightness(2.2) blur(1px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .viz-anim, .glass-fill, .widget.dial { animation: none !important; }
+}

@@ -5,6 +5,7 @@ import { shortMin } from '../today/Dial';
 import { resetDemo, setActivityTimer, showBackupBanner, simulateForgotten, useMock } from '../../mock/store';
 import { findVisualization } from '../../visualizations/registry';
 import { useAppearance } from '../../settings/appearance';
+import { designs, setDesign, useDesign } from '../../settings/design';
 import Appearance from '../appearance/Appearance';
 import { shareBackup } from './backup';
 import { Sheet } from '../../ui/Sheet';
@@ -18,6 +19,7 @@ export default function More({ goToday }: { goToday: () => void }) {
   const [lookOpen, setLookOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null); // у какого занятия открыт диапазон таймера
   const look = useAppearance();
+  const design = useDesign();
   // Один стиль на всё — пишем его; разные — «свой у каждого».
   const ids = new Set([look.day.vizId, look.week.vizId, look.month.vizId]);
   const lookSummary = ids.size === 1 ? findVisualization(look.day.vizId).title : 'свой у Д/Н/М';
@@ -51,6 +53,15 @@ export default function More({ goToday }: { goToday: () => void }) {
         <span>Оформление</span>
         <span className="dim">{lookSummary} ›</span>
       </button>
+
+      <div className="widget pad">
+        <div className="chips design-chips">
+          {designs.map((d) => (
+            <button key={d.id} aria-pressed={design === d.id} onClick={() => setDesign(d.id)}>{d.title}</button>
+          ))}
+        </div>
+        <div className="setting-hint">{designs.find((d) => d.id === design)!.hint}</div>
+      </div>
 
       <button className="widget pad row-btn" onClick={() => setTreeOpen(true)}>
         <span>Занятия</span>

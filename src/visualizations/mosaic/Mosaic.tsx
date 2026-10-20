@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType } from 'react';
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
 import { hourOwners, spotPlaces, type HourOwner } from './layout';
@@ -83,6 +83,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
             fill={o ? o.color : undefined}
             stroke={o ? o.color : undefined}
             className={(o ? 'glass-fill' : 'glass-empty') + (o && o.entryId === runningEntryId ? ' live' : '')}
+            // Доля 0…1 — порядок стекла; дизайн может по ней растянуть анимацию появления.
+            style={{ '--d': (i / cells.length).toFixed(3) } as CSSProperties}
             onClick={() => o && onSelect(o.entryId)}
           />
         );

@@ -46,6 +46,9 @@ export default function Today() {
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
+  // Куда листали в последний раз — для анимации «страница справа / слева».
+  const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
+  const go = (next: number) => { setDir(next > offset ? 'fwd' : 'back'); setOffset(next); };
   const [minutesFor, setMinutesFor] = useState<Record<string, number>>({});
 
   const colors = useMemo(() => activityColors(activities), [activities]);
@@ -90,14 +93,14 @@ export default function Today() {
   // Экран без прокрутки: шапка и виджеты снизу фиксированной высоты,
   // мозаика забирает всё оставшееся место.
   return (
-    <div className="screen fit">
+    <div className="screen fit today">
       <div className="today-head">
-        <button className="nav-arrow" onClick={() => setOffset(offset - 1)}>‹</button>
+        <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
         <div className="today-title" onClick={() => setOffset(0)}>
           <h1>{isCurrent ? titles[scale] : periodTitle(scale, from, to)}</h1>
           <div className="dim sub">{scale === 'day' && isCurrent ? date : isCurrent ? 'тапни ‹ чтобы листать' : 'тапни, чтобы вернуться'}</div>
         </div>
-        <button className="nav-arrow" disabled={isCurrent} onClick={() => setOffset(offset + 1)}>›</button>
+        <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
         <div className="today-total">{formatDuration(total)}</div>
       </div>
 
@@ -116,6 +119,9 @@ export default function Today() {
       )}
 
       <div className="widget viz">
+        {/* key меняется при смене периода → React пересоздаёт обёртку, и её CSS-анимация
+            проигрывается заново (листание, появление стёкол — зависит от дизайна). */}
+        <div className={'viz-anim ' + dir} key={`${scale}:${offset}`}>
         <Suspense fallback={null}>
           <Viz
             scale={scale}
@@ -130,6 +136,7 @@ export default function Today() {
             }}
           />
         </Suspense>
+        </div>
       </div>
 
       <Dial
