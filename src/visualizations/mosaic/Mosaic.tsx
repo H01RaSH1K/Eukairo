@@ -37,8 +37,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const exact = settings.count !== 'threshold';
   const minMs = Number(settings.threshold) * 60_000;
   const cut = settings.cut === undefined || settings.cut === 'auto' ? -1 : Number(settings.cut);
-  // «Одинаковые» стёкла: 30 шагов выравнивания площадей (см. fromSeeds в patterns.ts).
-  const relax = settings.size === 'varied' ? 0 : 30;
+  // Вид стёкол витража: ползунки в процентах → доли 0…1 (см. Look в patterns.ts).
+  const look = { spread: Number(settings.spread ?? 100) / 100, wobble: settings.wobble === undefined ? -1 : Number(settings.wobble) / 100 };
   const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
   const now = Date.now();
@@ -53,7 +53,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
     [sig, from, to, exact, minMs], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const counts = kept.map((k) => k.length);
-  const { w, h, cells, decor, day } = getPattern(pattern, counts, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday, cut, relax);
+  const { w, h, cells, decor, day } = getPattern(pattern, counts, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday, cut, look);
   // flatMap ≈ SelectMany: оставшиеся часы всех дней подряд.
   const hours = useMemo(() => kept.flatMap((k) => k.map((x) => x.o)), [kept]);
   // Копилка и пятна: пустые часы выкидываем, занятые раскладываем по-своему.

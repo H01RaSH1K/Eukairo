@@ -67,12 +67,14 @@ const cut: SettingDef = {
   ],
 };
 
-const size: SettingDef = {
-  id: 'size', kind: 'choice', title: 'Размер стёкол', default: 'equal',
-  options: [
-    { id: 'equal', title: 'Одинаковые', hint: 'Площадь у стёкол почти одна, а форма у каждого своя' },
-    { id: 'varied', title: 'Разные', hint: 'Как нарезалось: есть и крупные, и мелкие' },
-  ],
+const wobble: SettingDef = {
+  id: 'wobble', kind: 'range', title: 'Неровность формы', min: 0, max: 100, step: 10, default: 60, unit: '%',
+  hint: '0 — стёкла почти по сетке, 100 — совсем хаотичные осколки',
+};
+
+const spread: SettingDef = {
+  id: 'spread', kind: 'range', title: 'Разброс площади', min: 0, max: 100, step: 10, default: 30, unit: '%',
+  hint: '0 — все стёкла одной площади, 100 — как нарезалось, без выравнивания',
 };
 
 const allFills = ['calendar', 'rows', 'flow', 'spots', 'jar'];
@@ -82,7 +84,7 @@ const freeFills = ['spots', 'flow', 'jar'];
 export const visualizations: VisualizationPlugin[] = [
   {
     id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
-    settings: [fill(allFills), spots, growth, cut, size, count, threshold, lead], load: mosaic('glass'),
+    settings: [fill(allFills), spots, growth, cut, wobble, spread, count, threshold, lead], load: mosaic('glass'),
   },
   {
     id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
