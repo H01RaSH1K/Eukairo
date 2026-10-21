@@ -31,7 +31,6 @@ export function MarkSheet({ habit, day, onClose }: { habit: Habit; day: number; 
     })),
   );
   const isToday = day === startOfLocalDay(Date.now());
-  const firstNumber = params.find((p) => !p.options)?.id;
 
   const add = () => {
     const values: Record<string, number> = {};
@@ -83,11 +82,12 @@ export function MarkSheet({ habit, day, onClose }: { habit: Habit; day: number; 
         ) : (
           <label key={p.id} className="field">
             <span className="field-value">{p.name}</span>
-            {/* inputMode=decimal — на iPhone цифровая клавиатура с запятой */}
-            <input inputMode="decimal" value={text[p.id]} autoFocus={p.id === firstNumber && sets.length === 0} placeholder="—"
+            {/* inputMode=decimal — на iPhone цифровая клавиатура с запятой. Без autoFocus: числа уже стоят
+                от прошлого подхода, клавиатура нужна, только если тапнуть по полю */}
+            <input inputMode="decimal" value={text[p.id]} placeholder="—"
               onFocus={(e) => e.target.select()}
               onChange={(e) => setText({ ...text, [p.id]: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && add()} />
+              enterKeyHint="done" onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
             {p.unit && <span className="dim">{p.unit}</span>}
           </label>
         ))}

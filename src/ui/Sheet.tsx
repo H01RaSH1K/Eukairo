@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, type TouchEvent } from 'react';
+import { useEffect, useRef, type ReactNode, type TouchEvent } from 'react';
 
 const CLOSE_PX = 90; // протащили ниже — закрываем
 
@@ -9,6 +9,28 @@ export function Sheet({ title, onClose, children }: { title?: string; onClose: (
   // Откуда начали тянуть; null — сейчас не тянем (лист прокручен или палец идёт вверх).
   const from = useRef<number | null>(null);
   const shift = useRef(0);
+  const backdrop = useRef<HTMLDivElement>(null);
+
+  // Клавиатура iPhone не сжимает страницу, а наезжает сверху: fixed-лист остаётся под ней.
+  // visualViewport — видимая над клавиатурой часть; ставим фон листа ровно в неё,
+  // и лист поднимается над клавиатурой. Поле в фокусе прокручиваем в видимую часть листа.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const fit = () => {
+      const el = backdrop.current;
+      if (!el) return;
+      const kb = window.innerHeight - vv.height > 80; // меньше — это не клавиатура, а панели браузера
+      el.style.top = kb ? `${vv.offsetTop}px` : '';
+      el.style.height = kb ? `${vv.height}px` : '';
+      el.classList.toggle('kb', kb);
+      const f = document.activeElement;
+      if (kb && f instanceof HTMLElement && sheet.current?.contains(f)) f.scrollIntoView({ block: 'nearest' });
+    };
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); };
+  }, []);
 
   const move = (y: number, animate: boolean) => {
     const el = sheet.current!;
@@ -38,11 +60,12 @@ export function Sheet({ title, onClose, children }: { title?: string; onClose: (
   };
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div ref={backdrop} className="sheet-backdrop" onClick={onClose}>
       <div
         ref={sheet}
         className="sheet"
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={hideKeyboard}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -54,4 +77,11 @@ export function Sheet({ title, onClose, children }: { title?: string; onClose: (
       </div>
     </div>
   );
+}
+
+// У цифровой клавиатуры iPhone нет кнопки «Готово», а тап по кнопке фокус с поля не снимает.
+// Поэтому любой тап в листе мимо поля ввода прячет клавиатуру.
+function hideKeyboard(e: { target: EventTarget }) {
+  const f = document.activeElement;
+  if (f instanceof HTMLInputElement && f.type !== 'range' && !(e.target as Element).closest('input, textarea')) f.blur();
 }

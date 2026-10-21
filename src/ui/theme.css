@@ -142,6 +142,9 @@ body {
   padding: 8px 16px calc(env(safe-area-inset-bottom) + 16px);
   animation: slide-up .25s cubic-bezier(.2,.8,.2,1);
 }
+/* клавиатура открыта: фон листа — только видимая часть экрана, лист влезает в неё целиком */
+.sheet-backdrop.kb { bottom: auto; }
+.sheet-backdrop.kb .sheet { max-height: 100%; padding-bottom: 12px; }
 .sheet-grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--sheet-grab); margin: 0 auto 8px; }
 .sheet-title { font-size: 18px; text-align: center; margin: 4px 0 12px; }
 @keyframes slide-up { from { transform: translateY(100%); } }
