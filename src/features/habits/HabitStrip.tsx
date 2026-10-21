@@ -4,7 +4,7 @@ import { setHabitMark } from '../../db/commands';
 import { useData } from '../../db/store';
 import { HabitBook, activeHabits, dayKey, habitColors, type DayStatus } from '../../domain/habits';
 import { startOfLocalDay } from '../../domain/time';
-import { MarkSheet } from './MarkSheet';
+import { PointSheet } from '../points/PointSheet';
 
 // Карточка привычки (серия, календарь, график) нужна реже — её код грузим при первом открытии.
 const HabitSheet = lazy(() => import('./HabitSheet'));
@@ -12,18 +12,18 @@ const HabitSheet = lazy(() => import('./HabitSheet'));
 const LONG_MS = 450; // долгий тап — открыть карточку привычки
 
 // Полоска привычек на «Сегодня»: кружок на каждую привычку, которая положена в этот день.
-// Тап — отметить (с параметрами — сначала спросить числа), долгий тап — карточка привычки.
+// Тап — отметить (по записям — открыть записи занятия за день), долгий тап — карточка привычки.
 // Привычка по занятию отмечается сама, тап по ней сразу открывает карточку.
 export function HabitStrip({ day, now }: { day: number; now: number }) {
-  const { habits, habitMarks, activities, entries } = useData();
+  const { habits, habitMarks, activities, entries, points } = useData();
   const [open, setOpen] = useState<string | null>(null);
   const [asking, setAsking] = useState<Habit | null>(null);
   const colors = useMemo(() => habitColors(habits, activities), [habits, activities]);
   // Серии и прогресс пересчитываем раз в минуту, а не на каждый тик секундного таймера.
   const minute = Math.floor(now / 60_000);
   const books = useMemo(
-    () => activeHabits(habits).map((h) => new HabitBook(h, activities, entries, habitMarks, minute * 60_000)),
-    [habits, activities, entries, habitMarks, minute],
+    () => activeHabits(habits).map((h) => new HabitBook(h, activities, entries, habitMarks, minute * 60_000, points)),
+    [habits, activities, entries, habitMarks, points, minute],
   );
   const shown = books.filter((b) => b.status(day).due);
   if (shown.length === 0) return open ? <Suspense fallback={null}><HabitSheet id={open} day={day} onClose={() => setOpen(null)} /></Suspense> : null;
@@ -32,8 +32,8 @@ export function HabitStrip({ day, now }: { day: number; now: number }) {
     const h = b.habit, k = dayKey(day);
     if (h.kind === 'time') setOpen(h.id);
     else if (h.kind === 'quit') void setHabitMark(h.id, k, !s.marked);   // тап = «сорвался» / «нет, держусь»
+    else if (h.kind === 'points') setAsking(h);   // по записям — лист записей за день (там же удалить)
     else if (s.done) void setHabitMark(h.id, k, false);
-    else if (h.params?.length) setAsking(h);
     else void setHabitMark(h.id, k, true);
   };
 
@@ -45,7 +45,7 @@ export function HabitStrip({ day, now }: { day: number; now: number }) {
             isToday={day === startOfLocalDay(now)} onTap={tap} onLong={() => setOpen(b.habit.id)} />
         ))}
       </div>
-      {asking && <MarkSheet habit={asking} day={day} onClose={() => setAsking(null)} />}
+      {asking?.activityId && <PointSheet activityId={asking.activityId} day={day} onClose={() => setAsking(null)} />}
       {open && <Suspense fallback={null}><HabitSheet id={open} day={day} onClose={() => setOpen(null)} /></Suspense>}
     </>
   );

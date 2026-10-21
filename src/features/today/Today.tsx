@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } fro
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans, usefulMs } from '../../domain/spans';
-import { isHidden, needIds, pathOf, timerRange } from '../../domain/tree';
+import { canTrack, isHidden, isTimeless, needIds, pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
 import { ChargeCards } from './controls/ChargeCards';
 import { ClockRing } from './controls/ClockRing';
@@ -10,7 +10,7 @@ import { ChargeTray, ClockTray, DialTray, TilesTray } from './controls/Trays';
 import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
-import { MIN_MS, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
+import { MIN_MS, startOfLocalDay, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
 import { answerForgotten, saveEntry, snoozeBackupBanner, startTimer, stopTimer } from '../../db/commands';
 import { settingOf, useData } from '../../db/store';
 import { shareBackup } from '../../db/backup';
@@ -25,6 +25,7 @@ import { Sheet } from '../../ui/Sheet';
 import { useNow } from '../../ui/useNow';
 import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
+import { PointForm } from '../points/PointSheet';
 import { HabitStrip } from '../habits/HabitStrip';
 
 const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
@@ -38,6 +39,7 @@ export default function Today() {
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
+  const [noting, setNoting] = useState<string | null>(null); // занятие «без времени»: вместо полукруга — форма записи
   // Куда листали в последний раз — для анимации «страница справа / слева».
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
   const go = (next: number) => { if (next === offset) return; setDir(next > offset ? 'fwd' : 'back'); setOffset(next); };
@@ -67,7 +69,7 @@ export default function Today() {
 
   // Занятие на полукруге: идущее, выбранное или самое частое.
   // Выбранное могли успеть завершить в «Занятиях» — тогда берём частое.
-  const chosenOk = chosen && !isHidden(activities, chosen) ? chosen : null;
+  const chosenOk = chosen && canTrack(activities, chosen) ? chosen : null;
   const dialId = run?.activityId ?? chosenOk ?? quick[0] ?? '';
   const range = timerRange(activities, dialId);
   // Длительность помним для каждого занятия; по умолчанию — середина диапазона.
@@ -205,8 +207,18 @@ export default function Today() {
     run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
     name: (id) => name(id).at(-1) ?? '',
   };
-  const body =
-    design.mode === 'clock' ? <ClockRing {...control} />
+  const notingOk = noting && !isHidden(activities, noting) ? noting : null;
+  const body = notingOk ? (
+    <div className="widget dial point-card">
+      <PointForm key={notingOk} activityId={notingOk} day={startOfLocalDay(now)} onDone={() => setNoting(null)}
+        head={(
+          <button className="dial-activity" onClick={() => setPicking(true)}>
+            <span className="dot" style={{ background: colors.get(notingOk) }} />{name(notingOk).at(-1)} <span className="dim">▾</span>
+          </button>
+        )} />
+    </div>
+  )
+    : design.mode === 'clock' ? <ClockRing {...control} />
     : design.mode === 'charge' ? <ChargeCards {...control} />
     : design.mode === 'tiles' ? <Tiles {...control} />
     : (
@@ -236,8 +248,8 @@ export default function Today() {
       onOpen={setDrawerOpen}
       run={run}
       now={now}
-      color={colors.get(run?.activityId ?? dialId) ?? '#888'}
-      label={name(run?.activityId ?? dialId).at(-1) ?? ''}
+      color={colors.get(run?.activityId ?? notingOk ?? dialId) ?? '#888'}
+      label={name(run?.activityId ?? notingOk ?? dialId).at(-1) ?? ''}
       tray={tray}
     >
       {body}
@@ -302,7 +314,8 @@ export default function Today() {
           activities={activities}
           colors={colors}
           title="Занятие"
-          onPick={(id) => { setChosen(id); setPicking(false); }}
+          note={(id) => isTimeless(activities, id) ? 'запись' : undefined}
+          onPick={(id) => { if (isTimeless(activities, id)) setNoting(id); else { setNoting(null); setChosen(id); } setPicking(false); }}
           onClose={() => setPicking(false)}
           footer={<button className="btn ghost" onClick={() => { setPicking(false); newRetro(); }}>＋ Добавить запись задним числом</button>}
         />

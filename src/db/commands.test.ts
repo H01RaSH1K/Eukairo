@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, type Entry } from './schema';
 import {
+  deletePoint, savePoint,
   addActivity, archiveActivity, closeExpiredTimer, deleteActivity, logEntry, moveActivity, reorderActivity,
   saveEntry, seedIfEmpty, startTimer, stopTimer,
 } from './commands';
@@ -14,7 +15,7 @@ const entries = () => db.entries.orderBy('start').toArray();
 
 beforeEach(async () => {
   vi.useRealTimers();
-  await Promise.all([db.activities.clear(), db.entries.clear(), db.settings.clear()]);
+  await Promise.all([db.activities.clear(), db.entries.clear(), db.settings.clear(), db.points.clear()]);
 });
 
 describe('таймер', () => {
@@ -119,12 +120,24 @@ describe('импорт бэкапа', () => {
     const e: Entry = { id: 'e1', activityId: 'a', start: 0, end: 10 * MIN, source: 'manual', updatedAt: 5 };
     await db.entries.put(e);
     const r = await mergeBackup({
-      app: 'eukairo', schemaVersion: 1, exportedAt: '', settings: [], habits: [], habitMarks: [],
+      app: 'eukairo', schemaVersion: 1, exportedAt: '', settings: [], habits: [], habitMarks: [], points: [],
       activities: [{ id: 'a', parentId: null, name: 'A', order: 0, updatedAt: 1 }],
       entries: [{ ...e, end: 20 * MIN, updatedAt: 3 }, { ...e, id: 'e2', start: 30 * MIN, end: 40 * MIN }],
     });
     expect(r.entries).toBe(1); // e1 в бэкапе старее — остаётся наш
     expect((await db.entries.get('e1'))!.end).toBe(10 * MIN);
     expect(await db.entries.get('e2')).toBeDefined();
+  });
+});
+
+describe('записи без времени', () => {
+  it('сохранить, поправить, удалить; занятие с записями не удаляется, а завершается', async () => {
+    const a = await addActivity(null, 'Отжимания');
+    await savePoint({ id: 'p1', activityId: a, at: 1, values: { reps: 20 } });
+    await savePoint({ id: 'p1', activityId: a, at: 1, values: { reps: 25 } });
+    expect((await db.points.get('p1'))!.values).toEqual({ reps: 25 });
+    expect(await deleteActivity(a)).toBe('archived');
+    await deletePoint('p1');
+    expect(await db.points.count()).toBe(0);
   });
 });

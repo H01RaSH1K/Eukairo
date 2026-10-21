@@ -5,13 +5,14 @@ import { Sheet } from '../../ui/Sheet';
 
 // Выбор занятия из дерева. Тап по строке — выбрать (любой узел, и родитель тоже),
 // тап по стрелке — раскрыть детей.
-export function ActivityPicker({ activities, colors, title, onPick, onClose, footer }: {
+export function ActivityPicker({ activities, colors, title, onPick, onClose, footer, note }: {
   activities: Activity[];
   colors: Map<string, string>;
   title: string;
   onPick: (id: string) => void;
   onClose: () => void;
   footer?: ReactNode;   // доп. кнопка под деревом
+  note?: (id: string) => string | undefined; // пометка справа, например «запись» у занятий без времени
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (id: string) => {
@@ -28,6 +29,7 @@ export function ActivityPicker({ activities, colors, title, onPick, onClose, foo
         <div key={a.id} className="tree-row" style={{ paddingLeft: 12 + depth * 22 }} onClick={() => onPick(a.id)}>
           <span className="dot" style={{ background: colors.get(a.id) }} />
           <span className="tree-name">{a.icon && depth === 0 ? `${a.icon} ` : ''}{a.name}</span>
+          {note?.(a.id) && <span className="dim small">{note(a.id)}</span>}
           {hasKids && (
             <button className="tree-chevron" onClick={(e) => { e.stopPropagation(); toggle(a.id); }}>
               {open.has(a.id) ? '▾' : '▸'}

@@ -8,6 +8,7 @@ export interface Series {
   id: string;
   color: string;
   values: (number | null)[];
+  pointColors?: (string | undefined)[]; // свой цвет точки (по варианту), иначе цвет линии
 }
 
 /**
@@ -60,7 +61,7 @@ export function LineChart({ series, bw, h, scale, picked = null, format = (v) =>
             {/* заливка под линией — только когда линия одна, иначе каша */}
             {series.length === 1 && <polygon points={`${x(pts[0].i)},${h} ${line} ${x(pts.at(-1)!.i)},${h}`} fill={s.color} opacity=".15" />}
             <polyline points={line} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-            {pts.map((p) => <circle key={p.i} cx={x(p.i)} cy={y(p.v, r)} r={p.i === picked ? 4.5 : n > 24 ? 1.8 : 2.5} fill={s.color}
+            {pts.map((p) => <circle key={p.i} cx={x(p.i)} cy={y(p.v, r)} r={p.i === picked ? 4.5 : n > 24 && !s.pointColors ? 1.8 : 2.5} fill={s.pointColors?.[p.i] ?? s.color}
               stroke={p.i === picked ? 'var(--bg)' : 'none'} strokeWidth="1.5" />)}
           </g>
         );

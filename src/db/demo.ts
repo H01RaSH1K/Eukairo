@@ -1,7 +1,7 @@
 // Демо-данные: дерево занятий и ~5 недель правдоподобных записей.
 // Нужны, чтобы посмотреть мозаику и сводки на «живых» данных. Модуль грузится
 // только по кнопке «Ещё → Демо-данные» и в стартовый бандл не попадает.
-import { db, type Activity, type Entry, type Habit, type HabitMark } from './schema';
+import { db, type Activity, type Entry, type Habit, type HabitMark, type Point } from './schema';
 import { newId } from './commands';
 import { addLocalDays, HOUR_MS, MIN_MS, startOfLocalDay } from '../domain/time';
 import { dayKey, weekdayOf } from '../domain/habits';
@@ -24,6 +24,15 @@ const demoActivities: Activity[] = [
   a('duo', 'eng', 'Duolingo', 0),
   a('series', 'eng', 'Сериалы', 1),
   a('sport', null, 'Спорт', 4, { hue: 150, icon: '🏃' }),
+  // занятия с параметрами — для записей без времени («20 раз, кулаки, пол»)
+  a('push', 'sport', 'Отжимания', 0, { icon: '💪', timeless: true, params: [
+    { id: 'reps', name: 'Отжимания', unit: 'раз' },
+    { id: 'grip', name: 'Хват', options: [{ id: 'palm', name: 'ладони' }, { id: 'fist', name: 'кулаки' }, { id: 'fing', name: 'пальцы' }] },
+    { id: 'legs', name: 'Ноги', options: [{ id: 'floor', name: 'пол' }, { id: 'bench', name: 'скамья' }, { id: 'high', name: 'высоко' }] },
+  ] }),
+  a('bar', 'sport', 'Турник', 1, { icon: '🏋️', timeless: true, params: [{ id: 'pull', name: 'Подтягивания', unit: 'раз' }] }),
+  a('body', null, 'Замеры', 9, { hue: 185, icon: '📏', timeless: true }),
+  a('weight', 'body', 'Вес', 0, { icon: '⚖️', params: [{ id: 'kg', name: 'Вес', unit: 'кг' }] }),
   a('read', null, 'Чтение', 5, { hue: 52, icon: '📚' }),
   a('med', null, 'Медитация', 8, { hue: 305, icon: '🧘', timerMinMin: 5, timerMaxMin: 30 }),
   // Нужды: в полезное время не идут, их часы вынимаются из мозаики дня.
@@ -127,40 +136,58 @@ function makeDemoEntries(now: number): Entry[] {
 const demoHabits: Habit[] = [
   { id: 'h-teeth', name: 'Почистить зубы вечером', icon: '🪥', hue: 150, kind: 'check' },
   { id: 'h-dishes', name: 'Помыть посуду', icon: '🍽️', hue: 195, kind: 'check' },
-  { id: 'h-push', name: 'Анжуманя', icon: '💪', hue: 30, kind: 'check', params: [{ id: 'reps', name: 'Отжимания', unit: 'раз' }, { id: 'sets', name: 'Подходы' }] },
+  { id: 'h-push', name: 'Анжуманя', icon: '💪', hue: 30, kind: 'points', activityId: 'push' },
   { id: 'h-med', name: 'Медитация', icon: '🧘', hue: 305, kind: 'time', activityId: 'med', goalMin: 5 },
-  { id: 'h-bar', name: 'Турнек', icon: '🏋️', hue: 55, kind: 'check', weekdays: [0, 2, 4], params: [{ id: 'pull', name: 'Подтягивания', unit: 'раз' }] },
+  { id: 'h-bar', name: 'Турнек', icon: '🏋️', hue: 55, kind: 'points', activityId: 'bar', weekdays: [0, 2, 4] },
   { id: 'h-tok', name: 'Антиток', icon: '📵', hue: 330, kind: 'quit' },
 ].map((h, order) => ({ ...h, order, since: '', updatedAt: 0 }) as Habit);
 
-function makeDemoMarks(now: number): HabitMark[] {
+function makeDemoMarks(now: number): { marks: HabitMark[]; points: Point[] } {
   const rand = rng(7);
   const marks: HabitMark[] = [];
+  const points: Point[] = [];
   const today = startOfLocalDay(now);
-  const mark = (habitId: string, day: number, values?: Record<string, number>) =>
-    marks.push({ id: `${habitId}:${dayKey(day)}`, habitId, day: dayKey(day), done: true, values, updatedAt: now });
+  const mark = (habitId: string, day: number) =>
+    marks.push({ id: `${habitId}:${dayKey(day)}`, habitId, day: dayKey(day), done: true, updatedAt: now });
+  const point = (activityId: string, at: number, p: Pick<Point, 'values' | 'choices'>) =>
+    points.push({ id: newId(), activityId, at, updatedAt: now, ...p });
   // Сегодняшний день оставляем наполовину отмеченным — чтобы было что потыкать.
   for (let d = -40; d <= 0; d++) {
     const day = addLocalDays(today, d), w = weekdayOf(day), t = d === 0;
     if (!t && rand() < 0.9) mark('h-teeth', day);
     if ((t || rand() < 0.75)) mark('h-dishes', day);
+    // 2–4 подхода в день, хват и ноги меняются; на пальцах выходит заметно меньше — для этого и фильтр;
     // отжиманий понемногу больше: прогресс видно на графике
-    if (rand() < (t ? 0 : 0.8)) mark('h-push', day, { reps: Math.round(20 + (d + 40) * 0.6 + rand() * 8), sets: 2 + Math.round(rand() * 2) });
-    if ([0, 2, 4].includes(w) && !t && rand() < 0.85) mark('h-bar', day, { pull: Math.round(5 + (d + 40) * 0.12 + rand() * 3) });
+    if (rand() < (t ? 0 : 0.8)) {
+      const n = 2 + Math.floor(rand() * 3);
+      for (let i = 0; i < n; i++) {
+        const grip = ['palm', 'fist', 'fing'][Math.floor(rand() * 3)], legs = rand() < 0.7 ? 'floor' : rand() < 0.6 ? 'bench' : 'high';
+        const k = { palm: 1, fist: 0.8, fing: 0.45 }[grip]! * (legs === 'floor' ? 1 : legs === 'bench' ? 0.85 : 0.7);
+        point('push', day + (18 * 60 + i * 4) * MIN_MS, { values: { reps: Math.round((12 + (d + 40) * 0.3 + rand() * 6) * k) }, choices: { grip, legs } });
+      }
+    }
+    if ([0, 2, 4].includes(w) && !t && rand() < 0.85) {
+      point('bar', day + 17 * HOUR_MS, { values: { pull: Math.round(5 + (d + 40) * 0.12 + rand() * 3) } });
+      point('bar', day + 17 * HOUR_MS + 5 * MIN_MS, { values: { pull: Math.round(4 + (d + 40) * 0.1 + rand() * 2) } });
+    }
     if (!t && rand() < 0.12) mark('h-tok', day); // срыв
+    // вес — запись вне привычек, по утрам через день
+    if (d % 2 === 0) point('weight', day + 8 * HOUR_MS, { values: { kg: Math.round((74 - (d + 40) * 0.05 + (rand() - 0.5) * 0.8) * 10) / 10 } });
   }
-  return marks;
+  return { marks, points };
 }
 
-/** Стереть занятия, записи и привычки и заполнить демо-данными. Настройки не трогаем. */
+/** Стереть занятия, записи (с временем и без) и привычки и заполнить демо-данными. Настройки не трогаем. */
 export function fillDemo() {
-  return db.transaction('rw', [db.activities, db.entries, db.habits, db.habitMarks], async () => {
-    await Promise.all([db.activities.clear(), db.entries.clear(), db.habits.clear(), db.habitMarks.clear()]);
+  return db.transaction('rw', [db.activities, db.entries, db.habits, db.habitMarks, db.points], async () => {
+    await Promise.all([db.activities.clear(), db.entries.clear(), db.habits.clear(), db.habitMarks.clear(), db.points.clear()]);
     const now = Date.now();
     const since = dayKey(addLocalDays(startOfLocalDay(now), -40));
     await db.activities.bulkAdd(demoActivities.map((a) => ({ ...a, updatedAt: now })));
     await db.entries.bulkAdd(makeDemoEntries(now));
     await db.habits.bulkAdd(demoHabits.map((h) => ({ ...h, since, updatedAt: now })));
-    await db.habitMarks.bulkAdd(makeDemoMarks(now));
+    const { marks, points } = makeDemoMarks(now);
+    await db.habitMarks.bulkAdd(marks);
+    await db.points.bulkAdd(points);
   });
 }

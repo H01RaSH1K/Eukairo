@@ -126,3 +126,45 @@
 /* график не выше 3/4 ширины — ставим его посередине оставшегося места */
 .chart-full .habit-chart.full, .chart-full .full-stats { flex: 1; justify-content: center; }
 .bars.scrub { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+
+/* параметр-вариант: в редакторе строка вариантов, в отметке — чипы */
+.param-edit { display: flex; flex-direction: column; gap: 6px; }
+.options-field { margin-left: 16px; width: calc(100% - 16px); padding: 8px 12px; }
+.options-field input { text-align: left; font-size: 15px; }
+.choice-field { flex-direction: column; align-items: stretch; gap: 8px; }
+.choice-field .chips { flex-wrap: wrap; }
+.variant-chips { margin: 2px 0 4px; align-items: center; }
+.variant-chips button { padding: 4px 10px; font-size: 13px; }
+.variant-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.variant-chips button { flex: none; }
+.variant-chips button.variant-by { background: none; padding-left: 2px; font-weight: 600; min-width: 52px; text-align: left; }
+.variant-chips button.variant-by[aria-pressed='true'] { box-shadow: none; background: none; color: var(--text); }
+.variant-name { margin-right: 2px; }
+
+/* записи (подходы) за день */
+.set-list { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; }
+.set-row { display: flex; align-items: center; gap: 10px; background: var(--control); border-radius: 12px; padding: 6px 6px 6px 12px; }
+.set-n { color: var(--text-dim); font-size: 13px; min-width: 14px; }
+.set-text { flex: 1; font-size: 15px; }
+.set-row .btn.small { margin: 0; padding: 4px 10px; }
+.form .btn-row .btn { flex: 1 1 0; min-width: 0; }
+.set-row.editing { box-shadow: inset 0 0 0 1.5px var(--accent); }
+
+/* записи без времени в ленте: тонкая строка-точка между записями времени */
+.point-row {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: 0; border-left: 2px solid var(--line); margin-left: 12px;
+  padding: 4px 8px; color: var(--text); font: inherit; font-size: 14px; text-align: left;
+}
+.point-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-left: -14px; box-shadow: 0 0 0 3px var(--bg); }
+.point-time { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 13px; }
+.point-name { flex: none; }
+.point-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.point-stats .chips-scroll { margin-bottom: 8px; }
+.point-stats .chips-scroll button { background: var(--control); }
+.day-points { max-height: none; }
+
+/* форма записи на главном экране вместо полукруга */
+.point-card .point-inline { gap: 8px; }
+.point-card .point-inline > .dial-activity { align-self: center; }
+.point-card .set-list { max-height: 96px; overflow-y: auto; }

@@ -1,7 +1,8 @@
 // Формат бэкапа и слияние при импорте. Чистые функции: про файлы и базу не знают.
-import type { Activity, Entry, Habit, HabitMark, Setting } from '../db/schema';
+import type { Activity, Entry, Habit, HabitMark, Point, Setting } from '../db/schema';
+import { migrateHabitParams } from './points';
 
-export const SCHEMA_VERSION = 2; // 2 — добавились привычки
+export const SCHEMA_VERSION = 3; // 2 — добавились привычки, 3 — записи без времени
 
 export interface Backup {
   app: 'eukairo';
@@ -12,6 +13,7 @@ export interface Backup {
   settings: Setting[];
   habits: Habit[];           // в бэкапах версии 1 их нет — читаем как пустые
   habitMarks: HabitMark[];
+  points: Point[];           // в бэкапах до версии 3 их нет
 }
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -32,8 +34,13 @@ function isEntry(v: unknown): v is Entry {
 
 function isHabit(v: unknown): v is Habit {
   const h = v as Habit;
-  return !!h && isStr(h.id) && isStr(h.name) && isNum(h.hue) && ['check', 'time', 'quit'].includes(h.kind)
+  return !!h && isStr(h.id) && isStr(h.name) && isNum(h.hue) && ['check', 'time', 'quit', 'points'].includes(h.kind)
     && isNum(h.order) && isStr(h.since) && isNum(h.updatedAt);
+}
+
+function isPoint(v: unknown): v is Point {
+  const p = v as Point;
+  return !!p && isStr(p.id) && isStr(p.activityId) && isNum(p.at) && isNum(p.updatedAt);
 }
 
 function isMark(v: unknown): v is HabitMark {
@@ -57,8 +64,30 @@ export function parseBackup(text: string): Backup {
   const habitMarks = raw.habitMarks ?? [];
   if (!Array.isArray(habits) || !habits.every(isHabit)) throw new Error('В бэкапе повреждены привычки.');
   if (!Array.isArray(habitMarks) || !habitMarks.every(isMark)) throw new Error('В бэкапе повреждены отметки привычек.');
+  const points = raw.points ?? [];
+  if (!Array.isArray(points) || !points.every(isPoint)) throw new Error('В бэкапе повреждены записи без времени.');
   const settings = Array.isArray(raw.settings) ? raw.settings.filter((s) => s && isStr(s.key)) : [];
-  return { app: 'eukairo', schemaVersion: raw.schemaVersion, exportedAt: String(raw.exportedAt ?? ''), activities: raw.activities, entries: raw.entries, settings, habits, habitMarks };
+  const b: Backup = { app: 'eukairo', schemaVersion: raw.schemaVersion, exportedAt: String(raw.exportedAt ?? ''), activities: raw.activities, entries: raw.entries, settings, habits, habitMarks, points };
+  return upgrade(b);
+}
+
+/** Старый бэкап (параметры у привычек, числа в отметках) → нынешний формат, как миграция базы v3. */
+function upgrade(b: Backup): Backup {
+  // updatedAt берём из файла, а не «сейчас»: иначе старый бэкап при слиянии перебил бы свежие правки
+  const at = Math.max(0, ...b.habits.map((h) => h.updatedAt));
+  const m = migrateHabitParams(b, at);
+  if (!m.habits.length) return b;
+  const swap = <T extends { id: string }>(all: T[], changed: T[]) => {
+    const byId = new Map(changed.map((x) => [x.id, x]));
+    return [...all.map((x) => byId.get(x.id) ?? x), ...changed.filter((x) => !all.some((y) => y.id === x.id))];
+  };
+  return {
+    ...b,
+    activities: swap(b.activities, m.activities),
+    habits: swap(b.habits, m.habits),
+    habitMarks: swap(b.habitMarks, m.habitMarks),
+    points: swap(b.points, m.points),
+  };
 }
 
 /**

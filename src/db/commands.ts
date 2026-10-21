@@ -4,7 +4,7 @@
 //
 // async/await — как в C#: функция возвращает Promise (≈ Task), экраны обычно
 // не ждут результата — база сама сообщит об изменении, и экран перерисуется.
-import { db, type Activity, type Entry, type Habit } from './schema';
+import { db, type Activity, type Entry, type Habit, type Point } from './schema';
 import { nextHue } from '../domain/colors';
 import { resolveOverlaps } from '../domain/overlaps';
 import { canMoveTo, childrenOf, subtreeIds } from '../domain/tree';
@@ -103,7 +103,7 @@ export function addActivity(parentId: string | null, name: string, icon?: string
 }
 
 /** Поля, которые правятся напрямую. undefined = убрать своё значение (брать у родителя / авто). */
-export type ActivityPatch = Partial<Pick<Activity, 'name' | 'icon' | 'hue' | 'colorOverride' | 'timerMinMin' | 'timerMaxMin' | 'forgetAfterMin' | 'need'>>;
+export type ActivityPatch = Partial<Pick<Activity, 'name' | 'icon' | 'hue' | 'colorOverride' | 'timerMinMin' | 'timerMaxMin' | 'forgetAfterMin' | 'need' | 'timeless' | 'params'>>;
 
 export function updateActivity(id: string, patch: ActivityPatch) {
   // Dexie: поле со значением undefined в update удаляется из записи.
@@ -167,9 +167,9 @@ export function restoreActivity(id: string) {
 
 /** Удалить занятие. Если у поддерева есть записи — вместо удаления завершаем (история не теряется). */
 export function deleteActivity(id: string): Promise<'deleted' | 'archived'> {
-  return db.transaction('rw', db.activities, db.entries, async () => {
+  return db.transaction('rw', db.activities, db.entries, db.points, async () => {
     const ids = [...subtreeIds(await db.activities.toArray(), id)];
-    const used = await db.entries.where('activityId').anyOf(ids).count();
+    const used = await db.entries.where('activityId').anyOf(ids).count() + await db.points.where('activityId').anyOf(ids).count();
     if (used > 0) {
       await archiveActivity(id);
       return 'archived' as const;
@@ -182,7 +182,7 @@ export function deleteActivity(id: string): Promise<'deleted' | 'archived'> {
 // ——— привычки ———
 
 /** Что задаётся при создании и правке привычки. */
-export type HabitPatch = Partial<Pick<Habit, 'name' | 'icon' | 'hue' | 'kind' | 'activityId' | 'goalMin' | 'weekdays' | 'params'>>;
+export type HabitPatch = Partial<Pick<Habit, 'name' | 'icon' | 'hue' | 'kind' | 'activityId' | 'goalMin' | 'weekdays'>>;
 
 /** Новая привычка в конце списка; день начала — сегодня. Возвращает id. */
 export function addHabit(fields: HabitPatch & { name: string }) {
@@ -206,20 +206,22 @@ export function updateHabit(id: string, patch: HabitPatch) {
 }
 
 /**
- * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'), с числами параметров.
+ * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'). 
  * Если отмечают день раньше начала привычки — начало сдвигается на него:
  * значит, привычка на самом деле началась раньше.
  */
-export function setHabitMark(habitId: string, day: string, done: boolean, values?: Record<string, number>) {
+export function setHabitMark(habitId: string, day: string, done: boolean) {
   return db.transaction('rw', db.habits, db.habitMarks, async () => {
-    const now = Date.now();
     const id = `${habitId}:${day}`;
-    // Без новых значений оставляем прежние: сняли и снова поставили галочку — числа не пропадут.
     const old = await db.habitMarks.get(id);
-    await db.habitMarks.put({ id, habitId, day, done, values: values ?? old?.values, updatedAt: now });
-    const h = await db.habits.get(habitId);
-    if (h && done && day < h.since) await db.habits.update(habitId, { since: day, updatedAt: now });
+    await db.habitMarks.put({ ...old, id, habitId, day, done, updatedAt: Date.now() });
+    if (done) await moveSince(habitId, day);
   });
+}
+
+async function moveSince(habitId: string, day: string) {
+  const h = await db.habits.get(habitId);
+  if (h && day < h.since) await db.habits.update(habitId, { since: day, updatedAt: Date.now() });
 }
 
 /** Сдвинуть в списке: -1 — выше, +1 — ниже. */
@@ -289,4 +291,15 @@ export function seedIfEmpty() {
     }
     await db.settings.put({ key: 'seeded', value: true });
   });
+}
+
+// ——— записи без времени ———
+
+/** Новая запись или правка существующей (по id). */
+export function savePoint(p: Omit<Point, 'updatedAt'>) {
+  return db.points.put({ ...p, updatedAt: Date.now() });
+}
+
+export function deletePoint(id: string) {
+  return db.points.delete(id);
 }

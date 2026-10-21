@@ -1,20 +1,12 @@
 // Привычки: засчитан ли день, серии, процент. Чистые функции, про базу и React не знают.
-import type { Activity, Entry, Habit, HabitMark } from '../db/schema';
+import type { Activity, Entry, Habit, HabitMark, Point } from '../db/schema';
+import { pointsByDay } from './points';
 import { activityColors } from './colors';
 import { addLocalDays, startOfLocalDay, startOfNextLocalDay } from './time';
 import { subtreeIds } from './tree';
 
-/** Ключ дня по местному времени: '2026-10-21'. */
-export function dayKey(t: number): string {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Местная полночь дня по ключу. */
-export function dayStartOf(key: string): number {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d).getTime();
-}
+export { dayKey, dayStartOf } from './time';
+import { dayKey, dayStartOf } from './time';
 
 /** День недели: 0 = понедельник … 6 = воскресенье (в JS getDay() начинает с воскресенья). */
 export const weekdayOf = (t: number) => (new Date(t).getDay() + 6) % 7;
@@ -65,12 +57,17 @@ export function msByDay(entries: Entry[], activityIds: Set<string>, now: number)
 export class HabitBook {
   private marks = new Map<string, HabitMark>();
   private ms = new Map<string, number>();
+  private pts = new Map<string, Point[]>();
   private today: number;
   private since: number;
 
-  constructor(readonly habit: Habit, activities: Activity[], entries: Entry[], marks: HabitMark[], now: number) {
+  constructor(readonly habit: Habit, activities: Activity[], entries: Entry[], marks: HabitMark[], now: number, points: Point[] = []) {
     for (const m of marks) if (m.habitId === habit.id) this.marks.set(m.day, m);
-    if (habit.kind === 'time' && habit.activityId) this.ms = msByDay(entries, subtreeIds(activities, habit.activityId), now);
+    if (habit.activityId && (habit.kind === 'time' || habit.kind === 'points')) {
+      const ids = subtreeIds(activities, habit.activityId);
+      if (habit.kind === 'time') this.ms = msByDay(entries, ids, now);
+      this.pts = pointsByDay(points, ids); // записи без времени — и для points, и как числа на графике у time
+    }
     this.today = startOfLocalDay(now);
     this.since = dayStartOf(habit.since);
   }
@@ -84,18 +81,9 @@ export class HabitBook {
     let progress: number;
     if (h.kind === 'time') progress = marked ? 1 : Math.min(1, ms / ((h.goalMin ?? 1) * 60_000));
     else if (h.kind === 'quit') progress = marked || day > this.today || day < this.since ? 0 : 1;
+    else if (h.kind === 'points') progress = marked || this.pts.has(k) ? 1 : 0;
     else progress = marked ? 1 : 0;
     return { due, done: progress >= 1, progress, ms, marked };
-  }
-
-  /** Числа параметров, вписанные за день (у time ещё «минуты» — из трекинга, ключ TRACKED). */
-  values(day: number): Record<string, number> {
-    const v = { ...this.marks.get(dayKey(day))?.values };
-    if (this.habit.kind === 'time') {
-      const ms = this.ms.get(dayKey(day));
-      if (ms) v[TRACKED] = Math.round(ms / 60_000);
-    }
-    return v;
   }
 
   /** Сегодня ещё не засчитан, но день не кончился — серию это не рвёт. */
@@ -140,20 +128,12 @@ export class HabitBook {
   }
 }
 
-/** Ключ встроенного параметра «минуты по занятию» у привычки по времени. */
-export const TRACKED = 'tracked';
-
-/** Параметры для графика: у привычки по занятию первым идут минуты из трекинга. */
-export function chartParams(h: Habit): { id: string; name: string; unit?: string }[] {
-  return [...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []), ...(h.params ?? [])];
-}
-
 /** Активные привычки по порядку. */
 export const activeHabits = (habits: Habit[]) => habits.filter((h) => !h.archivedAt).sort((a, b) => a.order - b.order);
 
 /** Цвет привычки: у привязанной к занятию — цвет занятия, иначе свой тон. */
 export function habitColor(h: Habit, colors: Map<string, string>): string {
-  return (h.kind === 'time' && h.activityId && colors.get(h.activityId)) || `hsl(${h.hue} 60% 58%)`;
+  return ((h.kind === 'time' || h.kind === 'points') && h.activityId && colors.get(h.activityId)) || `hsl(${h.hue} 60% 58%)`;
 }
 
 /** Цвета всех привычек разом. */

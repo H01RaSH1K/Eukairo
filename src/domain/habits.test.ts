@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Activity, Entry, Habit, HabitMark } from '../db/schema';
-import { HabitBook, TRACKED, dayKey, dayStartOf, msByDay, scheduleText } from './habits';
+import type { Activity, Entry, Habit, HabitMark, Point } from '../db/schema';
+import { HabitBook, dayKey, dayStartOf, msByDay, scheduleText } from './habits';
 import { addLocalDays } from './time';
 
 const MIN = 60_000;
@@ -9,10 +9,10 @@ const now = new Date(2026, 9, 21, 15).getTime();
 const today = dayStartOf('2026-10-21');
 const day = (n: number) => addLocalDays(today, n);
 const habit = (h: Partial<Habit>): Habit => ({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0, ...h });
-const mark = (n: number, done = true, values?: Record<string, number>): HabitMark =>
-  ({ id: `h:${dayKey(day(n))}`, habitId: 'h', day: dayKey(day(n)), done, values, updatedAt: 0 });
-const book = (h: Partial<Habit>, marks: HabitMark[], entries: Entry[] = [], acts: Activity[] = []) =>
-  new HabitBook(habit(h), acts, entries, marks, now);
+const mark = (n: number, done = true): HabitMark =>
+  ({ id: `h:${dayKey(day(n))}`, habitId: 'h', day: dayKey(day(n)), done, updatedAt: 0 });
+const book = (h: Partial<Habit>, marks: HabitMark[], entries: Entry[] = [], acts: Activity[] = [], points: Point[] = []) =>
+  new HabitBook(habit(h), acts, entries, marks, now, points);
 
 describe('дни', () => {
   it('ключ дня и обратно', () => {
@@ -57,10 +57,29 @@ describe('серии', () => {
     const b = book({ kind: 'time', activityId: 'med', goalMin: 5 }, [mark(-3)], [e(-1, 3), e(-1, 2, 'kid'), e(-2, 10), e(0, 2)], acts);
     expect(b.status(day(0)).progress).toBeCloseTo(0.4);
     expect(b.streak()).toBe(3); // -1 (3+2 мин), -2, -3 (вручную)
-    expect(b.values(day(-2))[TRACKED]).toBe(10);
   });
   it('процент — только по прошедшим дням по расписанию', () => {
     const r = book({ since: dayKey(day(-3)) }, [mark(-1), mark(-3)]).rate(day(-10), day(1));
     expect(r).toEqual({ done: 2, due: 3 });
+  });
+});
+
+describe('привычка по записям занятия', () => {
+  const acts: Activity[] = [
+    { id: 'sport', parentId: null, name: 'Спорт', order: 0, updatedAt: 0 },
+    { id: 'push', parentId: 'sport', name: 'Отжимания', order: 0, updatedAt: 0, params: [
+      { id: 'reps', name: 'Отжимания' }, { id: 'grip', name: 'Хват', options: [{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'кулаки' }] },
+    ] },
+  ];
+  const pt = (id: string, n: number, reps: number, grip: string): Point =>
+    ({ id, activityId: 'push', at: day(n) + 18 * 3_600_000, values: { reps }, choices: { grip }, updatedAt: 0 });
+  const pts = [pt('1', -1, 20, 'b'), pt('2', -1, 15, 'a'), pt('3', -1, 10, 'b')];
+  const h = { kind: 'points' as const, activityId: 'push' };
+
+  it('день засчитан, когда есть запись (и по подзанятиям)', () => {
+    const b = book(h, [], [], acts, pts);
+    expect(b.status(day(-1)).done).toBe(true);
+    expect(b.status(day(-2)).done).toBe(false);
+    expect(book({ kind: 'points', activityId: 'sport' }, [], [], acts, pts).status(day(-1)).done).toBe(true);
   });
 });

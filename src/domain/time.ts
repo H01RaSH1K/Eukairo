@@ -114,3 +114,15 @@ export function periodTitle(scale: Period, from: number, to: number): string {
   if (scale === 'week') return `${fmt(from, { day: 'numeric', month: 'short' })} – ${fmt(to - 1, { day: 'numeric', month: 'short' })}`;
   return fmt(from, { month: 'long', year: 'numeric' });
 }
+
+/** Ключ дня по местному времени: '2026-10-21'. */
+export function dayKey(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Местная полночь дня по ключу. */
+export function dayStartOf(key: string): number {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
