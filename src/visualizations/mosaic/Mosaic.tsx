@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Componen
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
 import { runKeys, spotPlaces, wholeOwners, type HourOwner, type Rest } from './layout';
-import { cutPieces, stitch, type Cut } from './pieces';
+import { centroid, cutPieces, stitch, type Cut, type Group } from './pieces';
 import { dayBorderPath, getPattern, leadPath, seedFor, type FillId, type PatternId } from './patterns';
 import type { Pt } from './voronoi';
 import './mosaic.css';
@@ -74,27 +74,49 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
       whole = kept.flatMap((k) => k.map((x) => x.o));
       cuts = rests.map(({ r, di }) => ({ owner: r.owner, frac: r.frac, anchor: cellOf(kept, di, r.hour) }));
     } else {
-      // Копилка и пятна: пустые часы выкидываем, занятые (и остатки — сразу за своей серией)
-      // раскладываем по-своему. `o is HourOwner` — проверка типа, как в C# pattern matching.
+      // Копилка и пятна: пустые часы выкидываем, занятые раскладываем по-своему, а куски
+      // остатков кладём последними — по краю (в пятнах — за своей серией, в копилке — сверху),
+      // чтобы их объедки не становились дырами внутри. `o is HourOwner` — проверка типа, как в C#.
       const items: { o: HourOwner; rest?: Rest }[] = kept.flat().map((x) => x.o).filter((o): o is HourOwner => o !== null).map((o) => ({ o }));
       for (const { r } of rests) {
         let at = -1;
-        items.forEach((it, i) => { if (it.o.key === r.owner.key) at = i; });
+        if (fill === 'spots') items.forEach((it, i) => { if (it.o.key === r.owner.key) at = i; });
         items.splice(at < 0 ? items.length : at + 1, 0, { o: r.owner, rest: r });
       }
       const list = items.slice(0, cells.length);
+      const spotOf: number[] = list.map(() => 0); // у копилки одна группа
       const places = fill === 'spots'
-        ? spotPlaces(cells, list.map((it) => it.o), seed, spotCount, settings.growth === 'random' ? 'random' : 'round')
+        ? spotPlaces(cells, list.map((it) => it.o), seed, spotCount, settings.growth === 'random' ? 'random' : 'round', list.map((it) => !!it.rest), spotOf)
         : list.map((_, i) => i);
       whole = cells.map(() => null);
       cuts = [];
+      // Группы плотной укладки: стёкла, отведённые остаткам пятна (по порядку роста), и центр —
+      // середина его целых стёкол (у копилки — дно).
+      const groups: Group[] = [];
+      const sums: [number, number, number][] = [];
       places.forEach((cell, k) => {
-        if (list[k].rest) cuts.push({ owner: list[k].o, frac: list[k].rest!.frac, anchor: cell });
-        else whole[cell] = list[k].o;
+        if (cell < 0) return; // стёкол не хватило
+        const s = spotOf[k];
+        groups[s] ??= { queue: [], center: [0, 0] }; // ??= — «присвоить, если null/undefined»
+        sums[s] ??= [0, 0, 0];
+        if (list[k].rest) {
+          cuts.push({ owner: list[k].o, frac: list[k].rest!.frac, anchor: cell, group: s });
+          groups[s].queue.push(cell);
+        } else {
+          whole[cell] = list[k].o;
+          const m = centroid(cells[cell]);
+          sums[s][0] += m[0]; sums[s][1] += m[1]; sums[s][2]++;
+        }
       });
+      groups.forEach((g, s) => {
+        if (fill === 'jar') g.center = [w / 2, h]; // копилка наполняется снизу
+        else if (sums[s][2]) g.center = [sums[s][0] / sums[s][2], sums[s][1] / sums[s][2]];
+        else if (g.queue.length) g.center = centroid(cells[g.queue[0]]);
+      });
+      return cutPieces(cells, whole, cuts, futureFrom, groups);
     }
     return cutPieces(cells, whole, cuts, futureFrom);
-  }, [plan, kept, cells, timeFill, fill, seed, spotCount, settings.growth, futureFrom]);
+  }, [plan, kept, cells, w, h, timeFill, fill, seed, spotCount, settings.growth, futureFrom]);
 
   // Вершины разрезов вставляем и в соседей, чтобы общие рёбра совпали (см. stitch),
   // затем считаем свинец (между разными хозяевами) и швы (внутри одной серии).

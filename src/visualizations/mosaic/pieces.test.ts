@@ -55,4 +55,15 @@ describe('cutPieces', () => {
     const { seam } = leadPath(polys, ps.map((p) => p.owner?.key ?? null));
     expect(seam.split('M').length - 1).toBe(1); // одно общее ребро x = 10, y 0…10
   });
+
+  it('плотная укладка: остатки группы доливают начатое стекло, неполное — одно', () => {
+    const cells = grid(4, 1);
+    const cuts = ['a', 'b', 'c'].map((k, i) => ({ owner: own(k), frac: 0.7, anchor: i, group: 0 }));
+    const ps = cutPieces(cells, [null, null, null, null], cuts, 4, [{ queue: [0, 1, 2], center: [0, 5] }]);
+    for (const k of ['a', 'b', 'c']) expect(sumBy(ps, k)).toBeCloseTo(70, 3);
+    // 2.1 стекла: стёкла 0 и 1 полные, 2 — на 10%, 3 не тронуто
+    const empty = ps.filter((p) => !p.owner);
+    expect(empty.map((p) => p.cell)).toEqual([2, 3]);
+    expect(area(empty[0].poly)).toBeCloseTo(90, 3);
+  });
 });

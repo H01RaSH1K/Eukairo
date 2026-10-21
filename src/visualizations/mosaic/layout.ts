@@ -118,8 +118,11 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
  * примерно (но не ровно) поровну и наращиваем вокруг каждой точки.
  * Возвращает номер стекла для каждого занятого часа (в том же порядке, что `filled`).
  * Центры зависят только от `seed`, поэтому за день точки не прыгают, а пятна растут.
+ * `tail` — пометки «в хвост»: такие стёкла (куски остатков) пятно наращивает последними,
+ * по краю — тогда их объедки не остаются дырами внутри пятна.
+ * `spotOf` (необязательно) — сюда пишется номер пятна каждого часа (≈ out-параметр в C#).
  */
-export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, count = 5, growth: 'round' | 'random' = 'round'): number[] {
+export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, count = 5, growth: 'round' | 'random' = 'round', tail?: boolean[], spotOf?: number[]): number[] {
   const c = cells.map(centroid);
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const rand = rng(seed + 17);
@@ -132,14 +135,18 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
   // Серию (отрезок часов одного key) не рвём между пятнами: она целиком идёт
   // в то пятно, куда попадает её середина. Так часы одной записи сливаются.
   const sizes = new Array<number>(count).fill(0);
+  const members: number[][] = Array.from({ length: count }, () => []); // номера часов каждого пятна
   for (let i = 0; i < filled.length;) {
     let j = i;
     while (j < filled.length && filled[j].key === filled[i].key) j++;
     const mid = (i + j) / 2;
     const spot = Math.max(0, bounds.findIndex((b) => mid <= b));
     sizes[spot] += j - i;
+    for (let k = i; k < j; k++) { members[spot].push(k); if (spotOf) spotOf[k] = spot; }
     i = j;
   }
+  // Внутри пятна сначала целые, потом «хвост» (sort устойчивый — порядок времени сохраняется).
+  members.forEach((m) => m.sort((a, b) => Number(!!tail?.[a]) - Number(!!tail?.[b])));
 
   // Центры: каждый следующий — самый далёкий от прежних из 8 случайных стёкол,
   // не у самого края (чтобы пятно не обрезалось рамкой).
@@ -159,7 +166,7 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
   }
 
   const free = new Set(c.map((_, i) => i)); // ≈ HashSet<int>
-  const out: number[] = [];
+  const out: number[] = new Array(filled.length).fill(-1);
   // Рост: следующее стекло — свободное, ближайшее к предыдущему и поближе к центру пятна.
   // Так часы одной записи встают рядом и сливаются, а пятно растёт сплошным, без дыр.
   // «Кругом» — расстояние до центра обычное, пятно круглое. «Неровно» — расстояние
@@ -178,7 +185,7 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
         if (score < bestScore) { bestScore = score; best = i; }
       }
       free.delete(best);
-      out.push(best);
+      out[members[s][k]] = best;
       prev = c[best];
     }
   });

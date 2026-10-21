@@ -7,18 +7,30 @@ import { area, clipBy, type Pt } from './voronoi';
 /** Что нарисовать: многоугольник, чей он (null — пустое стекло) и из какого стекла. */
 export interface Piece { poly: Pt[]; owner: HourOwner | null; cell: number }
 
-/** Остаток, который надо вырезать: доля стекла и стекло, рядом с которым ему лучше встать. */
-export interface Cut { owner: HourOwner; frac: number; anchor: number }
+/**
+ * Остаток, который надо вырезать: доля стекла и стекло, рядом с которым ему лучше встать.
+ * `group` — номер пятна (у копилки одно на всех): тогда остаток укладывается плотно, см. Group.
+ */
+export interface Cut { owner: HourOwner; frac: number; anchor: number; group?: number }
+
+/**
+ * Плотная укладка для копилки и пятен: остатки группы наливаются в её стёкла по очереди
+ * (`queue` — свежие стёкла по порядку роста), как жидкость, слоями к `center`.
+ * Начатое стекло сначала доливается, и только потом берётся следующее, — неполным
+ * остаётся одно стекло на краю, дыр внутри нет.
+ */
+export interface Group { queue: number[]; center: Pt }
 
 /**
  * `whole` — хозяин каждого стекла целиком (null — свободно), `cuts` — остатки по порядку
  * времени. Каждый остаток берёт ближайшее к `anchor` стекло, где свободного места хватает:
  * свежее или объедок после чужого куска. Стёкла с номера `late` (будущие часы) — в последнюю
  * очередь. Если места одним куском нет нигде, остаток собирается из нескольких ближайших объедков.
+ * У остатков с `group` — плотная укладка (см. Group).
  * Кусок прилегает к целым стёклам своей серии (линия разреза — поперёк направления на них),
  * так он сливается с ними в одну фигуру. Прежние куски новым остатком не двигаются.
  */
-export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[], late = cells.length): Piece[] {
+export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[], late = cells.length, groups: Group[] = []): Piece[] {
   const full = cells.map(area);
   const mid = cells.map(centroid);
   // Свободная часть каждого стекла (у целых — пусто) и уже вырезанные куски.
@@ -27,8 +39,42 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
   const out: Piece[] = [];
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const penalty = 1e6; // будущие стёкла — только когда прошлых не осталось
+  const open = groups.map(() => -1); // начатое стекло каждой группы
+  const next = groups.map(() => 0);  // сколько стёкол очереди уже взято
+
+  // Кусок площади `want` из свободной части стекла i (если места меньше — всё, что есть).
+  const take = (i: number, want: number, owner: HourOwner, toward: Pt | null) => {
+    const [piece, rest] = want >= freeArea[i] - 1e-6 ? [free[i]!, null] : slice(free[i]!, want, toward, mid[i]);
+    out.push({ poly: piece, owner, cell: i });
+    free[i] = rest;
+    freeArea[i] = rest ? area(rest) : 0;
+    return area(piece) / full[i];
+  };
 
   for (const c of cuts) {
+    const g = c.group !== undefined ? groups[c.group] : undefined;
+    if (g) {
+      let need = c.frac;
+      while (need > 1e-6) {
+        let i = open[c.group!];
+        if (i < 0 || freeArea[i] <= 1e-6) {
+          // Следующее свежее стекло группы; очередь кончилась — ближайшее свободное к центру.
+          i = -1;
+          while (next[c.group!] < g.queue.length && i < 0) {
+            const q = g.queue[next[c.group!]++];
+            if (freeArea[q] > 1e-6) i = q;
+          }
+          if (i < 0) {
+            let bestD = Infinity;
+            free.forEach((f, k) => { if (f && freeArea[k] > 1e-6 && dist(mid[k], g.center) < bestD) { bestD = dist(mid[k], g.center); i = k; } });
+          }
+          if (i < 0) break; // места нет совсем
+          open[c.group!] = i;
+        }
+        need -= take(i, need * full[i], c.owner, g.center);
+      }
+      continue;
+    }
     const target = mid[c.anchor] ?? mid[0];
     // Стёкла этой серии (целые и куски) — к ним прижимаем кусок.
     const own = [
@@ -44,14 +90,8 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
     // Иначе — объедки по очереди от ближайшего, пока не наберём.
     for (const i of fits !== undefined ? [fits] : order) {
       if (need <= 1e-6) break;
-      const want = need * full[i];
-      const toward = nearest(own, mid[i]) ?? (i === c.anchor ? null : target);
-      const [piece, rest] = want >= freeArea[i] - 1e-6 ? [free[i]!, null] : slice(free[i]!, want, toward, mid[i]);
-      out.push({ poly: piece, owner: c.owner, cell: i });
-      need -= area(piece) / full[i];
-      free[i] = rest;
-      freeArea[i] = rest ? area(rest) : 0;
-      own.push(centroid(piece));
+      need -= take(i, need * full[i], c.owner, nearest(own, mid[i]) ?? (i === c.anchor ? null : target));
+      own.push(centroid(out[out.length - 1].poly));
     }
   }
   // Целые стёкла и всё, что осталось свободным.
