@@ -17,10 +17,15 @@ export function FullChart({ title, onClose, children }: { title: ReactNode; onCl
   );
 }
 
-/** Высота графика (в единицах viewBox шириной w) на весь экран: всё, что осталось от шапки и кнопок. */
+/**
+ * Высота графика (в единицах viewBox шириной w) на весь экран: что осталось от шапки и кнопок,
+ * но не выше 3/4 ширины — иначе на высоком экране телефона график вытягивается в столб
+ * и любое колебание выглядит обрывом.
+ */
 export function fullChartHeight(w: number, reservedPx = 230): number {
   const width = Math.max(1, window.innerWidth - 32);
-  return Math.max(120, Math.round(((window.innerHeight - reservedPx) * w) / width));
+  const fit = Math.round(((window.innerHeight - reservedPx) * w) / width);
+  return Math.max(120, Math.min(fit, Math.round(w * 0.75)));
 }
 
 /** Кнопка «развернуть». */

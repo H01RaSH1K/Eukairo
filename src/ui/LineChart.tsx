@@ -20,9 +20,15 @@ export function LineChart({ series, bw, h, scale, picked = null, format = (v) =>
 }) {
   const pad = 8; // чтобы точки у краёв не обрезались
   const n = Math.max(0, ...series.map((s) => s.values.length));
+  // Шкала с «круглыми» делениями (1, 2, 5, 10, 20…) и запасом: 34…47 становится 30…50,
+  // так прыжок на пару единиц не выглядит обрывом через весь график.
   const range = (vals: number[]): [number, number] => {
     let lo = Math.min(...vals), hi = Math.max(...vals);
     if (lo === hi) { lo -= 1; hi += 1; }
+    const step = niceStep((hi - lo) / 3);
+    lo = Math.floor(lo / step) * step;
+    hi = Math.ceil(hi / step) * step;
+    if (lo < 0 && Math.min(...vals) >= 0) lo = 0;
     return [lo, hi];
   };
   const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
@@ -35,7 +41,7 @@ export function LineChart({ series, bw, h, scale, picked = null, format = (v) =>
 
   return (
     <>
-      {labels && sharedRange.map((v) => (
+      {labels && ticks(sharedRange).map((v) => (
         <g key={v}>
           <line x1="0" x2={bw * n} y1={y(v, sharedRange)} y2={y(v, sharedRange)} stroke="var(--line)" strokeDasharray="2 3" />
           <text x="2" y={y(v, sharedRange) - 2} className="bar-label" textAnchor="start">{format(v)}</text>
@@ -59,6 +65,20 @@ export function LineChart({ series, bw, h, scale, picked = null, format = (v) =>
       })}
     </>
   );
+}
+
+/** Шаг делений: 1, 2 или 5, умноженное на степень десяти, не меньше `raw`. */
+function niceStep(raw: number): number {
+  const p = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 5, 10].map((k) => k * p).find((s) => s >= raw) ?? 10 * p;
+}
+
+/** Значения делений внутри [lo, hi] (их 3–5). */
+function ticks([lo, hi]: [number, number]): number[] {
+  const step = niceStep((hi - lo) / 3);
+  const out: number[] = [];
+  for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step / 1000; v += step) out.push(Math.round(v * 1000) / 1000);
+  return out;
 }
 
 /** Прозрачные полосы на всю высоту, по одной на столбец: тап выбирает столбец (попасть в точку пальцем трудно). */

@@ -123,3 +123,5 @@
 .chart-tools { display: flex; gap: 6px; align-items: center; }
 .chart-pick { cursor: pointer; }
 .chart-pick .dot, .bar-pick .dot { width: 8px; height: 8px; }
+/* график не выше 3/4 ширины — ставим его посередине оставшегося места */
+.chart-full .habit-chart.full, .chart-full .full-stats { flex: 1; justify-content: center; }
