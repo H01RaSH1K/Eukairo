@@ -288,6 +288,11 @@ input.field { -webkit-user-select: text; user-select: text; }
 .widget.quick .chip.more { grid-column: auto; min-height: 44px; }
 
 .stat-total .big { font-size: 28px; }
+.stat-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.stat-nav .nav-arrow { width: 28px; height: 28px; font-size: 17px; }
+.stat-period { flex: 1; text-align: center; font-weight: 600; }
+.bar-pick { text-transform: none; letter-spacing: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-pick .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
 .donut-widget { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .donut-row { flex: 1; min-height: 0; display: flex; align-items: center; gap: 12px; }
 .donut-row .donut { width: 42%; height: auto; max-height: 100%; flex: none; }
