@@ -1,8 +1,10 @@
-// Куски стёкол: остаток серии меньше часа вырезается из стекла прямой линией так,
-// чтобы площадь куска была той же долей стекла, что остаток — от часа.
+// Куски стёкол: остаток серии меньше часа вырезается из стекла так, чтобы площадь куска
+// была той же долей стекла, что остаток — от часа. Край куска — ломаный, как у битого
+// стекла: стекло, которое режем, делится на несколько осколков (свой маленький Вороной),
+// кусок набирается из ближайших осколков, а последний режется прямой ровно по площади.
 // Чистые функции, без React.
 import type { HourOwner } from './layout';
-import { area, clipBy, type Pt } from './voronoi';
+import { area, clipBy, rng, type Pt } from './voronoi';
 
 /** Что нарисовать: многоугольник, чей он (null — пустое стекло) и из какого стекла. */
 export interface Piece { poly: Pt[]; owner: HourOwner | null; cell: number }
@@ -27,28 +29,62 @@ export interface Group { queue: number[]; center: Pt }
  * свежее или объедок после чужого куска. Стёкла с номера `late` (будущие часы) — в последнюю
  * очередь. Если места одним куском нет нигде, остаток собирается из нескольких ближайших объедков.
  * У остатков с `group` — плотная укладка (см. Group).
- * Кусок прилегает к целым стёклам своей серии (линия разреза — поперёк направления на них),
- * так он сливается с ними в одну фигуру. Прежние куски новым остатком не двигаются.
+ * Кусок растёт от края стекла, обращённого к целым стёклам своей серии, — так он сливается
+ * с ними в одну фигуру. Прежние куски новым остатком не двигаются (осколки стекла зависят
+ * только от его номера).
  */
 export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[], late = cells.length, groups: Group[] = []): Piece[] {
   const full = cells.map(area);
   const mid = cells.map(centroid);
-  // Свободная часть каждого стекла (у целых — пусто) и уже вырезанные куски.
-  const free: (Pt[] | null)[] = cells.map((c, i) => (whole[i] ? null : c));
-  const freeArea = free.map((f, i) => (f ? full[i] : 0));
+  // Свободная часть каждого стекла — список выпуклых осколков (у целых — пусто).
+  // Пока стекло не резали, это оно само одним куском.
+  const free: Pt[][][] = cells.map((c, i) => (whole[i] ? [] : [c]));
+  const freeArea = free.map((f, i) => (f.length ? full[i] : 0));
+  const split = new Set<number>(); // стёкла, уже поделённые на осколки (≈ HashSet<int>)
   const out: Piece[] = [];
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const penalty = 1e6; // будущие стёкла — только когда прошлых не осталось
   const open = groups.map(() => -1); // начатое стекло каждой группы
   const next = groups.map(() => 0);  // сколько стёкол очереди уже взято
+  const freeMid = (i: number) => (split.has(i) ? centroid(merge(free[i])[0] ?? cells[i]) : mid[i]);
 
   // Кусок площади `want` из свободной части стекла i (если места меньше — всё, что есть).
+  // Растёт от точки края, ближайшей к `toward` (null — снизу): берём осколки по близости
+  // к ней целиком, пока влезают, а следующий режем прямой ровно на недостающую площадь.
   const take = (i: number, want: number, owner: HourOwner, toward: Pt | null) => {
-    const [piece, rest] = want >= freeArea[i] - 1e-6 ? [free[i]!, null] : slice(free[i]!, want, toward, mid[i]);
-    out.push({ poly: piece, owner, cell: i });
-    free[i] = rest;
-    freeArea[i] = rest ? area(rest) : 0;
-    return area(piece) / full[i];
+    let got: Pt[][];
+    if (want >= freeArea[i] - 1e-6) {
+      got = free[i];
+      free[i] = [];
+    } else {
+      if (!split.has(i)) { free[i] = shards(cells[i], i); split.add(i); }
+      const dx = toward ? toward[0] - mid[i][0] : 0, dy = toward ? toward[1] - mid[i][1] : 1;
+      const pts = free[i].flat();
+      const start = pts.reduce((b, p) => (p[0] * dx + p[1] * dy > b[0] * dx + b[1] * dy ? p : b), pts[0]);
+      const order = free[i].map((poly) => ({ poly, d: dist(centroid(poly), start) })).sort((x, y) => x.d - y.d).map((x) => x.poly);
+      got = [];
+      const keep: Pt[][] = [];
+      const cutAt: Pt[] = [];
+      let left = want;
+      for (const poly of order) {
+        const a = area(poly);
+        if (left <= 1e-9) keep.push(poly);
+        else if (a <= left + 1e-9) { got.push(poly); left -= a; }
+        else {
+          const [pc, rest] = slice(poly, left, start, centroid(poly));
+          got.push(pc); keep.push(rest); left = 0;
+          cutAt.push(...pc.filter((p) => !poly.some((q) => q[0] === p[0] && q[1] === p[1])));
+        }
+      }
+      // Новые вершины разреза — и в соседние осколки, чтобы осколки склеивались точно.
+      const all = stitch([...got, ...keep], cutAt);
+      got = all.slice(0, got.length);
+      free[i] = all.slice(got.length);
+    }
+    const a = got.reduce((s, p) => s + area(p), 0);
+    for (const poly of merge(got)) out.push({ poly, owner, cell: i });
+    freeArea[i] = free[i].reduce((s, p) => s + area(p), 0);
+    return a / full[i];
   };
 
   for (const c of cuts) {
@@ -66,7 +102,7 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
           }
           if (i < 0) {
             let bestD = Infinity;
-            free.forEach((f, k) => { if (f && freeArea[k] > 1e-6 && dist(mid[k], g.center) < bestD) { bestD = dist(mid[k], g.center); i = k; } });
+            free.forEach((_, k) => { if (freeArea[k] > 1e-6 && dist(mid[k], g.center) < bestD) { bestD = dist(mid[k], g.center); i = k; } });
           }
           if (i < 0) break; // места нет совсем
           open[c.group!] = i;
@@ -81,7 +117,7 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
       ...whole.map((o, i) => (o?.key === c.owner.key ? mid[i] : null)),
       ...out.filter((p) => p.owner?.key === c.owner.key).map((p) => centroid(p.poly)),
     ].filter((p): p is Pt => p !== null);
-    const score = (i: number) => dist(free[i] ? centroid(free[i]!) : mid[i], target) + (i >= late ? penalty : 0);
+    const score = (i: number) => dist(freeMid(i), target) + (i >= late ? penalty : 0);
 
     let need = c.frac;
     const order = free.map((_, i) => i).filter((i) => freeArea[i] > 1e-6).sort((i, j) => score(i) - score(j));
@@ -97,7 +133,7 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
   // Целые стёкла и всё, что осталось свободным.
   cells.forEach((c, i) => {
     if (whole[i]) out.push({ poly: c, owner: whole[i], cell: i });
-    else if (free[i] && freeArea[i] > 1e-6) out.push({ poly: free[i]!, owner: null, cell: i });
+    else if (freeArea[i] > 1e-6) for (const poly of split.has(i) ? merge(free[i]) : free[i]) out.push({ poly, owner: null, cell: i });
   });
   return out;
 }
@@ -122,6 +158,86 @@ function slice(poly: Pt[], want: number, toward: Pt | null, center: Pt): [Pt[], 
   }
   const c = (lo + hi) / 2;
   return [pieceAt(c), clipBy(poly, nx, ny, c)];
+}
+
+/** Осколков в стекле, которое режем: мелкий кусок — один-два осколка, а не длинная полоска. */
+const SHARDS = 7;
+
+/**
+ * Делит выпуклое стекло на SHARDS осколков — маленький Вороной внутри него.
+ * Точки случайные, но от номера стекла: одно и то же стекло всегда бьётся одинаково.
+ * Один шаг Ллойда (точки → центры своих осколков) делает осколки округлее.
+ */
+function shards(poly: Pt[], cell: number): Pt[][] {
+  const rand = rng(cell * 7919 + 13);
+  const xs = poly.map((p) => p[0]), ys = poly.map((p) => p[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  let seeds: Pt[] = [];
+  for (let k = 0; seeds.length < SHARDS && k < 200; k++) {
+    const p: Pt = [x0 + rand() * (x1 - x0), y0 + rand() * (y1 - y0)];
+    if (inside(poly, p)) seeds.push(p);
+  }
+  const cellsOf = (pts: Pt[]) => pts.map((s, i) => pts.reduce((c, o, j) => (j === i || !c.length ? c :
+    clipBy(c, o[0] - s[0], o[1] - s[1], ((o[0] - s[0]) * (o[0] + s[0]) + (o[1] - s[1]) * (o[1] + s[1])) / 2)), poly));
+  seeds = cellsOf(seeds).map((c, i) => (c.length ? centroid(c) : seeds[i]));
+  return cellsOf(seeds).filter((c) => c.length >= 3 && area(c) > 1e-9);
+}
+
+/** Точка внутри выпуклого многоугольника (с любым обходом). */
+function inside(poly: Pt[], p: Pt): boolean {
+  let sign = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const c = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    if (Math.abs(c) < 1e-12) continue;
+    if (sign === 0) sign = Math.sign(c); else if (Math.sign(c) !== sign) return false;
+  }
+  return true;
+}
+
+/**
+ * Склеивает соседние осколки в один многоугольник: общие рёбра (одно и то же ребро,
+ * пройденное в двух осколках навстречу) выкидываем, остальные сцепляем в контур.
+ * Несвязные части — отдельные контуры. Если что-то не сцепилось — отдаём осколки как есть.
+ */
+function merge(polys: Pt[][]): Pt[][] {
+  if (polys.length < 2) return polys;
+  const key = (p: Pt) => `${Math.round(p[0] * 1000)},${Math.round(p[1] * 1000)}`;
+  const edges = new Map<string, [Pt, Pt]>(); // «откуда|куда» → ребро
+  for (const poly of polys) poly.forEach((a, k) => {
+    const b = poly[(k + 1) % poly.length];
+    const ka = key(a), kb = key(b);
+    if (ka === kb) return;
+    if (edges.has(kb + '|' + ka)) edges.delete(kb + '|' + ka);
+    else edges.set(ka + '|' + kb, [a, b]);
+  });
+  const from = new Map<string, [Pt, Pt][]>();
+  for (const e of edges.values()) {
+    const k = key(e[0]);
+    from.set(k, [...(from.get(k) ?? []), e]);
+  }
+  const loops: Pt[][] = [];
+  let guard = edges.size + 1;
+  while (from.size && guard-- > 0) {
+    const [k0, list] = from.entries().next().value!;
+    let e = list[0];
+    const loop: Pt[] = [];
+    let k = k0;
+    for (let step = 0; step <= edges.size; step++) {
+      const l = from.get(k)!;
+      l.splice(l.indexOf(e), 1);
+      if (!l.length) from.delete(k);
+      loop.push(e[0]);
+      k = key(e[1]);
+      if (k === k0) break;
+      const nx = from.get(k);
+      if (!nx) return polys; // контур не замкнулся
+      e = nx[0];
+    }
+    if (k !== k0) return polys;
+    loops.push(loop);
+  }
+  return loops;
 }
 
 function nearest(pts: Pt[], to: Pt): Pt | null {

@@ -12,14 +12,25 @@ const own = (key: string) => ({ entryId: key, key, color: key });
 const sumBy = (ps: ReturnType<typeof cutPieces>, key: string) => ps.filter((p) => p.owner?.key === key).reduce((s, p) => s + area(p.poly), 0);
 
 describe('cutPieces', () => {
+  it('мелкий кусок компактный, а не длинная полоска', () => {
+    const cells = grid(1, 1);
+    const ps = cutPieces(cells, [null], [{ owner: own('a'), frac: 0.15, anchor: 0 }]);
+    const piece = ps.find((p) => p.owner)!;
+    const xs = piece.poly.map((p) => p[0]), ys = piece.poly.map((p) => p[1]);
+    const [w, h] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+    expect(area(piece.poly)).toBeCloseTo(15, 3);
+    expect(Math.max(w, h) / Math.min(w, h)).toBeLessThan(4); // прямая дала бы 10 × 1.5
+  });
+
   it('площадь записи = её время, кусок прилегает к своим стёклам', () => {
     const cells = grid(4, 1);
     const whole = [own('a'), null, null, null];
     const ps = cutPieces(cells, whole, [{ owner: own('a'), frac: 0.5, anchor: 1 }]);
     expect(sumBy(ps, 'a')).toBeCloseTo(150, 3);
     const piece = ps.find((p) => p.owner && p.cell === 1)!;
-    // кусок со стороны стекла 0: левая половина стекла 1
-    expect(Math.max(...piece.poly.map((p) => p[0]))).toBeCloseTo(15, 3);
+    // кусок растёт от края, обращённого к стеклу 0 (x = 10), и одним куском
+    expect(ps.filter((p) => p.owner && p.cell === 1)).toHaveLength(1);
+    expect(Math.min(...piece.poly.map((p) => p[0]))).toBeCloseTo(10, 3);
     expect(ps.reduce((s, p) => s + area(p.poly), 0)).toBeCloseTo(400, 3); // без дыр и наложений
   });
 
@@ -53,7 +64,7 @@ describe('cutPieces', () => {
     const extra = ps.filter((p) => p.poly !== cells[p.cell]).flatMap((p) => p.poly);
     const polys = stitch(ps.map((p) => p.poly), extra);
     const { seam } = leadPath(polys, ps.map((p) => p.owner?.key ?? null));
-    expect(seam.split('M').length - 1).toBe(1); // одно общее ребро x = 10, y 0…10
+    expect(seam.split('M').length - 1).toBeGreaterThanOrEqual(1); // общее ребро по x = 10 — шов, не свинец
   });
 
   it('плотная укладка: остатки группы доливают начатое стекло, неполное — одно', () => {

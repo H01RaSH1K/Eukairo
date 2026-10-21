@@ -17,7 +17,7 @@ import { shareBackup } from '../../db/backup';
 import { forgottenTimer, type ForgottenAnswer } from '../../domain/forgotten';
 import { defaultActivity, quickActivities } from '../../domain/quick';
 import { findVisualization } from '../../visualizations/registry';
-import { setSetting, settingsOf, useAppearance } from '../../settings/appearance';
+import { settingsOf, useAppearance } from '../../settings/appearance';
 import { setFocus, useDesign } from '../../settings/design';
 import { lazyViz } from '../../visualizations/lazy';
 import { Segmented } from '../../ui/Segmented';
@@ -59,7 +59,6 @@ export default function Today() {
   // ушли с экрана — фокус снимаем, иначе таб-бар останется спрятанным
   useEffect(() => () => setFocus(false), []);
   const plugin = findVisualization(look[scale].vizId); // у каждого масштаба свой стиль
-  const seamDef = plugin.settings.find((d) => d.id === 'seam');
   const Viz = lazyViz(plugin);
 
   const name = (id: string) => pathOf(activities, id).map((a) => a.name);
@@ -307,16 +306,6 @@ export default function Today() {
           <div className="focus-light" />
           {/* табличка, как под картиной в музее */}
           <div className="focus-plaque">{periodName} · {formatDuration(total)}</div>
-          {/* временно, пока выбираем: как видно стёкла внутри фигуры — переключатель прямо тут */}
-          {seamDef?.kind === 'choice' && (
-            <div className="focus-switch">
-              {seamDef.options.map((o) => (
-                <button key={o.id} className={settingsOf(look, scale).seam === o.id ? 'on' : ''} onClick={() => setSetting(scale, plugin.id, 'seam', o.id)}>
-                  {o.title}
-                </button>
-              ))}
-            </div>
-          )}
         </>
       )}
 
