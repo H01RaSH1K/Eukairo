@@ -95,3 +95,22 @@ export function plural(n: number, [one, few, many]: [string, string, string]): s
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
 }
+
+/** Название текущего периода. */
+export const periodTitles: Record<Period, string> = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
+
+/** Момент внутри периода, сдвинутого на `offset` дней/недель/месяцев (−1 = предыдущий). */
+export function shiftPeriod(scale: Period, t: number, offset: number): number {
+  if (scale === 'day') return addLocalDays(t, offset);
+  if (scale === 'week') return addLocalDays(t, offset * 7);
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth() + offset, 1).getTime();
+}
+
+/** Подпись прошлого периода: «20 октября», «13 окт. – 19 окт.», «сентябрь 2026 г.». */
+export function periodTitle(scale: Period, from: number, to: number): string {
+  const fmt = (t: number, o: Intl.DateTimeFormatOptions) => new Date(t).toLocaleDateString('ru-RU', o);
+  if (scale === 'day') return fmt(from, { day: 'numeric', month: 'long' });
+  if (scale === 'week') return `${fmt(from, { day: 'numeric', month: 'short' })} – ${fmt(to - 1, { day: 'numeric', month: 'short' })}`;
+  return fmt(from, { month: 'long', year: 'numeric' });
+}

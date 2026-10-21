@@ -10,7 +10,7 @@ import { ChargeTray, ClockTray, DialTray, TilesTray } from './controls/Trays';
 import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
-import { MIN_MS, addLocalDays, formatClock, formatDuration, periodRange, type Period } from '../../domain/time';
+import { MIN_MS, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
 import { answerForgotten, saveEntry, snoozeBackupBanner, startTimer, stopTimer } from '../../db/commands';
 import { settingOf, useData } from '../../db/store';
 import { shareBackup } from '../../db/backup';
@@ -28,23 +28,6 @@ import { EntrySheet } from '../timeline/EntrySheet';
 
 const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
 
-const titles: Record<Period, string> = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
-
-// Момент внутри периода, сдвинутого на `offset` дней/недель/месяцев.
-function shift(scale: Period, t: number, offset: number): number {
-  if (scale === 'day') return addLocalDays(t, offset);
-  if (scale === 'week') return addLocalDays(t, offset * 7);
-  const d = new Date(t);
-  return new Date(d.getFullYear(), d.getMonth() + offset, 1).getTime();
-}
-
-function periodTitle(scale: Period, from: number, to: number): string {
-  const fmt = (t: number, o: Intl.DateTimeFormatOptions) => new Date(t).toLocaleDateString('ru-RU', o);
-  if (scale === 'day') return fmt(from, { day: 'numeric', month: 'long' });
-  if (scale === 'week') return `${fmt(from, { day: 'numeric', month: 'short' })} – ${fmt(to - 1, { day: 'numeric', month: 'short' })}`;
-  return fmt(from, { month: 'long', year: 'numeric' });
-}
-
 export default function Today() {
   const data = useData();
   const { activities, entries, running: run } = data;
@@ -60,7 +43,7 @@ export default function Today() {
   const [minutesFor, setMinutesFor] = useState<Record<string, number>>({});
 
   const colors = useMemo(() => activityColors(activities), [activities]);
-  const { from, to } = periodRange(scale, shift(scale, now, offset));
+  const { from, to } = periodRange(scale, shiftPeriod(scale, now, offset));
   const isCurrent = offset === 0;
   const needs = useMemo(() => needIds(activities), [activities]);
   const spans = toSpans(entries, colors, from, to, now, needs);
@@ -165,7 +148,7 @@ export default function Today() {
     return true;
   };
 
-  const periodName = isCurrent ? titles[scale] : periodTitle(scale, from, to);
+  const periodName = isCurrent ? periodTitles[scale] : periodTitle(scale, from, to);
   const scales = [{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }] as const;
   const pickScale = (v: Period) => { setDir(order.indexOf(v) > order.indexOf(scale) ? 'fwd' : 'back'); setScale(v); setOffset(0); };
 
