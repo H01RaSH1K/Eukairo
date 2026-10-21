@@ -133,7 +133,10 @@
 .options-field input { text-align: left; font-size: 15px; }
 .choice-field { flex-direction: column; align-items: stretch; gap: 8px; }
 .choice-field .chips { flex-wrap: wrap; }
-.variant-chips { margin: 2px 0 6px; align-items: center; }
+.variant-chips { margin: 2px 0 4px; align-items: center; }
 .variant-chips button { padding: 4px 10px; font-size: 13px; }
-.variant-chips .variant-by { font-weight: 600; }
+.variant-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.variant-chips button { flex: none; }
+.variant-chips button.variant-by { background: none; padding-left: 2px; font-weight: 600; min-width: 52px; text-align: left; }
+.variant-chips button.variant-by[aria-pressed='true'] { box-shadow: none; background: none; color: var(--text); }
 .variant-name { margin-right: 2px; }

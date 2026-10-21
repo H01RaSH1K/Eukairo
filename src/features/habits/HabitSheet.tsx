@@ -26,7 +26,9 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const [pick, setPick] = useState<number | null>(null);  // день, выбранный тапом по графику
   const [full, setFull] = useState(false);                // график на весь экран
   const [by, setBy] = useState<string | null>(null);      // каким вариантом красить («Хват»)
-  const [only, setOnly] = useState<string | null>(null);  // оставить дни только с этим вариантом
+  // Фильтр: параметр → выбранные варианты (≈ Dictionary<string, HashSet<string>>).
+  // Внутри параметра — «или» (кулаки или ладони), между параметрами — «и» (… и на полу).
+  const [filter, setFilter] = useState<Record<string, string[]>>({});
   const pickChart = (k: ChartKind) => { setChart(k); saveChart('habit', k); };
   if (!habit) return null; // удалили, пока карточка была открыта
   const book = new HabitBook(habit, activities, entries, habitMarks, now);
@@ -45,9 +47,13 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const cp = cps.find((p) => p.id === by) ?? cps[0];
   const choiceAt = (i: number) => (cp ? book.choices(days[i])[cp.id] : undefined);
   const optIndex = (id: string | undefined) => cp?.options.findIndex((o) => o.id === id) ?? -1;
-  const keep = (i: number) => !only || choiceAt(i) === only;
+  const keep = (i: number) => Object.entries(filter).every(([pid, ids]) => !ids.length || ids.includes(book.choices(days[i])[pid]));
+  const toggleOption = (pid: string, oid: string) => {
+    const cur = filter[pid] ?? [];
+    setFilter({ ...filter, [pid]: cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid] });
+  };
   const tint = (i: number) => (optIndex(choiceAt(i)) >= 0 ? optionColor(optIndex(choiceAt(i))) : 'var(--text-dim)');
-  const colored = !!cp && !only; // при фильтре по одному варианту красить нечем — все точки одного цвета
+  const colored = !!cp && (filter[cp.id] ?? []).length !== 1; // один вариант оставлен — красить нечем
 
   const tapDay = (d: number) => {
     if (d > today) return;
@@ -129,20 +135,18 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
         <ChartKindSwitch value={chart} onChange={pickChart} />
         {!isFull && <ExpandButton onClick={() => setFull(true)} />}
       </div>
-      {cp && (
-        <div className="chips variant-chips">
-          {/* несколько параметров-вариантов — тап по названию переключает, каким красить */}
-          {cps.length > 1 && cps.map((c) => (
-            <button key={c.id} className="variant-by" aria-pressed={c.id === cp.id} onClick={() => { setBy(c.id); setOnly(null); }}>{c.name}</button>
-          ))}
-          {cps.length === 1 && <span className="dim small variant-name">{cp.name}:</span>}
-          {cp.options.map((o, i) => (
-            <button key={o.id} aria-pressed={only === o.id} onClick={() => setOnly(only === o.id ? null : o.id)}>
-              <span className="dot" style={{ background: optionColor(i) }} /> {o.name}
+      {/* строка на каждый параметр-вариант: тап по варианту включает его в фильтр, можно несколько;
+          тап по названию — красить точки этим параметром (цветные кружки — у него) */}
+      {cps.map((c) => (
+        <div key={c.id} className="chips variant-chips">
+          <button className="variant-by" aria-pressed={c.id === cp?.id} onClick={() => setBy(c.id)}>{c.name}</button>
+          {c.options.map((o, i) => (
+            <button key={o.id} aria-pressed={(filter[c.id] ?? []).includes(o.id)} onClick={() => toggleOption(c.id, o.id)}>
+              {c.id === cp?.id && <span className="dot" style={{ background: optionColor(i) }} />} {o.name}
             </button>
           ))}
         </div>
-      )}
+      ))}
       <svg viewBox={`0 0 ${W} ${h + 14}`} className="bars scrub" style={isFull ? { height: 'auto' } : undefined}
         {...scrub(days.length, (f) => Math.min(lastPast, Math.floor(f * days.length)), pick, setPick)}>
         <line x1="0" x2={W} y1={h} y2={h} stroke="var(--line)" />
