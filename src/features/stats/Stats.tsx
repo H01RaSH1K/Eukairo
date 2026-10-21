@@ -8,6 +8,7 @@ import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
 import { HabitStats } from '../habits/HabitStats';
 import { ChartKindSwitch, LineChart, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
+import { ExpandButton, FullChart, fullChartHeight } from '../../ui/FullChart';
 
 // Время каждого занятия (только собственные записи) внутри [from, to). Нужды не считаем.
 function ownTotals(entries: Entry[], from: number, to: number, now: number, needs: Set<string>) {
@@ -185,6 +186,7 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
   const [picked, setPicked] = useState<number | null>(null);
   const [chart, setChart] = useState<ChartKind>(() => savedChart('stats'));
   const [shown, setShown] = useState<Set<string> | null>(null); // линия: какие линии включены
+  const [full, setFull] = useState(false);                         // график на весь экран
   const buckets = period === 'day'
     ? Array.from({ length: 24 }, (_, h) => [from + h * HOUR_MS, from + (h + 1) * HOUR_MS])
     : dayStarts(from, to).map((d, i, all) => [d, all[i + 1] ?? to]);
@@ -214,7 +216,7 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
   const totals = data.map((m) => [...m.values()].reduce((x, y) => x + y, 0));
   const max = Math.max(period === 'day' ? HOUR_MS : 4 * HOUR_MS, ...totals);
 
-  const W = 320, H = 80, gap = buckets.length > 10 ? 2 : 6;
+  const W = 320, gap = buckets.length > 10 ? 2 : 6;
   const bw = (W - gap * (buckets.length - 1)) / buckets.length;
   const bucketName = (i: number) => period === 'day'
     ? `${i}:00–${i + 1}:00`
@@ -238,28 +240,40 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
   ];
   const fmt = (m: number) => (m >= 60 ? `${Math.round(m / 6) / 10} ч` : `${Math.round(m)} мин`);
 
-  return (
+  const pickChart = (k: ChartKind) => { setChart(k); saveChart('stats', k); };
+  const title = period === 'day' ? 'По часам' : 'По дням';
+
+  // Над графиком: выбранный тапом столбец и его числа, иначе — заголовок с переключателями.
+  const head = (isFull: boolean) => picked === null ? (
+    <div className="card-title chart-head">
+      <span>{isFull ? '' : title + ' · '}тапни {chart === 'line' ? 'точку' : 'столбик'}</span>
+      <span className="chart-tools">
+        <ChartKindSwitch value={chart} onChange={pickChart} />
+        {!isFull && <ExpandButton onClick={() => setFull(true)} />}
+      </span>
+    </div>
+  ) : chart === 'line' ? (
+    <div className="card-title bar-pick" onClick={() => setPicked(null)}>
+      <b>{bucketName(picked)}</b>
+      {lines.filter((l) => on.has(l.id) && l.values[picked] !== null).map((l) => (
+        <span key={l.id}> · <span className="dot" style={{ background: l.color }} />{short(l.name)} {formatDuration(l.values[picked]! * 60_000)}</span>
+      ))}
+    </div>
+  ) : (
+    <div className="card-title bar-pick" onClick={() => setPicked(null)}>
+      <b>{bucketName(picked)}: {formatDuration(totals[picked])}</b>
+      {groups.filter((g) => data[picked].get(g.id)).sort((x, y) => data[picked].get(y.id)! - data[picked].get(x.id)!).slice(0, isFull ? 8 : 3).map((g) => (
+        <span key={g.id}> · <span className="dot" style={{ background: colors.get(g.id) }} />{short(g.name)} {formatDuration(data[picked].get(g.id)!)}</span>
+      ))}
+    </div>
+  );
+
+  // Сам график; рисуется дважды: в карточке (h = 80) и на весь экран.
+  const body = (H: number, isFull: boolean) => (
     <>
-      {chart === 'line' ? (
-        <div className="card-title chart-head">
-          <span>{period === 'day' ? 'По часам' : 'По дням'}</span>
-          <ChartKindSwitch value={chart} onChange={(k) => { setChart(k); saveChart('stats', k); }} />
-        </div>
-      ) : picked === null ? (
-        <div className="card-title chart-head">
-          <span>{period === 'day' ? 'По часам' : 'По дням'} · тапни столбик</span>
-          <ChartKindSwitch value={chart} onChange={(k) => { setChart(k); saveChart('stats', k); }} />
-        </div>
-      ) : (
-        <div className="card-title bar-pick" onClick={() => setPicked(null)}>
-          <b>{bucketName(picked)}: {formatDuration(totals[picked])}</b>
-          {groups.filter((g) => data[picked].get(g.id)).sort((x, y) => data[picked].get(y.id)! - data[picked].get(x.id)!).slice(0, 3).map((g) => (
-            <span key={g.id}> · <span className="dot" style={{ background: colors.get(g.id) }} />{short(g.name)} {formatDuration(data[picked].get(g.id)!)}</span>
-          ))}
-        </div>
-      )}
+      {head(isFull)}
       {chart === 'line' && (
-        <div className="chips-scroll line-toggles">
+        <div className={'chips-scroll line-toggles' + (isFull ? ' wrap' : '')}>
           {lines.map((l) => (
             <button key={l.id} aria-pressed={on.has(l.id)} onClick={() => toggle(l.id)}>
               <span className="dot" style={{ background: on.has(l.id) ? l.color : 'var(--line)' }} /> {short(l.name)}
@@ -267,16 +281,15 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
           ))}
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H + 16}`} className="bars">
+      <svg viewBox={`0 0 ${W} ${H + 16}`} className="bars" style={isFull ? { height: 'auto' } : undefined}>
         {/* шаг точек = столбик + промежуток; сдвиг на полпромежутка — точка по центру столбика */}
-        {chart === 'line' && <g transform={`translate(${-gap / 2} 0)`}><LineChart series={lines.filter((l) => on.has(l.id))} bw={bw + gap} h={H} scale="shared" format={fmt} /></g>}
+        {chart === 'line' && <g transform={`translate(${-gap / 2} 0)`}><LineChart series={lines.filter((l) => on.has(l.id))} bw={bw + gap} h={H} scale="shared" format={fmt} picked={picked} /></g>}
         {data.map((m, i) => {
           let y = H;
           const x = i * (bw + gap);
           return (
-            // Прозрачный прямоугольник на всю высоту — чтобы попасть пальцем и в низкий столбик.
-            <g key={i} onClick={() => chart === 'bars' && setPicked(picked === i ? null : i)} opacity={picked === null || picked === i ? 1 : 0.35}>
-              <rect x={x - gap / 2} y={0} width={bw + gap} height={H + 16} fill="transparent" />
+            // Прозрачный прямоугольник на всю высоту — чтобы попасть пальцем и в низкий столбик (и в точку линии).
+            <g key={i} onClick={() => setPicked(picked === i ? null : i)} opacity={chart === 'line' || picked === null || picked === i ? 1 : 0.35}>
               {chart === 'bars' && groups.map((g) => {
                 const h = ((m.get(g.id) ?? 0) / max) * H;
                 if (h <= 0) return null;
@@ -288,10 +301,22 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
                   {period === 'day' ? (i % 6 === 0 ? i : '') : period === 'week' ? new Date(buckets[i][0]).toLocaleDateString('ru-RU', { weekday: 'short' }) : new Date(buckets[i][0]).getDate()}
                 </text>
               )}
+              <rect x={x - gap / 2} y={0} width={bw + gap} height={H + 16} fill="transparent" />
             </g>
           );
         })}
       </svg>
+    </>
+  );
+
+  return (
+    <>
+      {body(80, false)}
+      {full && (
+        <FullChart title={title} onClose={() => setFull(false)}>
+          <div className="full-stats">{body(fullChartHeight(W, 220), true)}</div>
+        </FullChart>
+      )}
     </>
   );
 }

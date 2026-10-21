@@ -105,3 +105,21 @@
 .line-toggles { margin: 0 -12px 6px; padding: 0 12px; }
 .line-toggles button { display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: var(--chip); }
 .line-toggles .dot { width: 8px; height: 8px; }
+
+/* График на весь экран */
+.chart-full {
+  position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  animation: fade .2s;
+}
+.chart-full-head { display: flex; align-items: center; gap: 10px; }
+.chart-full-title { flex: 1; font-size: 20px; font-weight: 600; }
+.chart-full .habit-chart.full { flex: 1; background: none; padding: 0; }
+.chart-full .bars { width: 100%; }
+.chart-full .bar-label { font-size: 8px; }
+.full-stats { display: flex; flex-direction: column; gap: 8px; }
+.line-toggles.wrap { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+.chart-expand { flex: none; border: 0; border-radius: 999px; background: var(--control); color: var(--text); font: inherit; font-size: 14px; width: 30px; height: 26px; }
+.chart-tools { display: flex; gap: 6px; align-items: center; }
+.chart-pick { cursor: pointer; }
+.chart-pick .dot, .bar-pick .dot { width: 8px; height: 8px; }

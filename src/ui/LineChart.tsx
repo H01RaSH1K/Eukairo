@@ -13,8 +13,10 @@ export interface Series {
  * own — у каждой своя (отжимания в штуках и вес в кг рядом не сравнить, сравнивают ход линий).
  * Шкала — от минимума до максимума, а не от нуля: так виден рост, а не ровная линия наверху.
  */
-export function LineChart({ series, bw, h, scale, format = (v) => String(Math.round(v * 10) / 10) }: {
-  series: Series[]; bw: number; h: number; scale: 'shared' | 'own'; format?: (v: number) => string;
+export function LineChart({ series, bw, h, scale, picked = null, format = (v) => String(Math.round(v * 10) / 10) }: {
+  series: Series[]; bw: number; h: number; scale: 'shared' | 'own';
+  picked?: number | null;   // выбранный тапом столбец: вертикальная линия и крупные точки
+  format?: (v: number) => string;
 }) {
   const pad = 8; // чтобы точки у краёв не обрезались
   const n = Math.max(0, ...series.map((s) => s.values.length));
@@ -39,6 +41,7 @@ export function LineChart({ series, bw, h, scale, format = (v) => String(Math.ro
           <text x="2" y={y(v, sharedRange) - 2} className="bar-label" textAnchor="start">{format(v)}</text>
         </g>
       ))}
+      {picked !== null && <line x1={x(picked)} x2={x(picked)} y1={0} y2={h} stroke="var(--text-dim)" strokeWidth="1" />}
       {series.map((s) => {
         const pts = s.values.flatMap((v, i) => (v === null ? [] : [{ i, v }]));
         if (pts.length === 0) return null;
@@ -49,10 +52,22 @@ export function LineChart({ series, bw, h, scale, format = (v) => String(Math.ro
             {/* заливка под линией — только когда линия одна, иначе каша */}
             {series.length === 1 && <polygon points={`${x(pts[0].i)},${h} ${line} ${x(pts.at(-1)!.i)},${h}`} fill={s.color} opacity=".15" />}
             <polyline points={line} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-            {pts.map((p) => <circle key={p.i} cx={x(p.i)} cy={y(p.v, r)} r={n > 24 ? 1.8 : 2.5} fill={s.color} />)}
+            {pts.map((p) => <circle key={p.i} cx={x(p.i)} cy={y(p.v, r)} r={p.i === picked ? 4.5 : n > 24 ? 1.8 : 2.5} fill={s.color}
+              stroke={p.i === picked ? 'var(--bg)' : 'none'} strokeWidth="1.5" />)}
           </g>
         );
       })}
+    </>
+  );
+}
+
+/** Прозрачные полосы на всю высоту, по одной на столбец: тап выбирает столбец (попасть в точку пальцем трудно). */
+export function TapColumns({ n, bw, h, picked, onPick }: { n: number; bw: number; h: number; picked: number | null; onPick: (i: number | null) => void }) {
+  return (
+    <>
+      {Array.from({ length: n }, (_, i) => (
+        <rect key={i} x={i * bw} y={0} width={bw} height={h} fill="transparent" onClick={() => onPick(picked === i ? null : i)} />
+      ))}
     </>
   );
 }

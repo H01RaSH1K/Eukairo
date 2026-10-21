@@ -4,7 +4,8 @@ import { useData } from '../../db/store';
 import { HabitBook, WEEKDAYS, chartParams, dayKey, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
 import { addLocalDays, dayStarts, periodRange, shiftPeriod, startOfLocalDay } from '../../domain/time';
 import { Sheet } from '../../ui/Sheet';
-import { ChartKindSwitch, LineChart, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
+import { ChartKindSwitch, LineChart, TapColumns, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
+import { ExpandButton, FullChart, fullChartHeight } from '../../ui/FullChart';
 import { HabitEditor } from './HabitEditor';
 import { MarkSheet } from './MarkSheet';
 
@@ -22,6 +23,8 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const [asking, setAsking] = useState<number | null>(null); // день, за который спрашиваем числа
   const [editing, setEditing] = useState(false);
   const [chart, setChart] = useState<ChartKind>(() => savedChart('habit'));
+  const [pick, setPick] = useState<number | null>(null);  // день, выбранный тапом по графику
+  const [full, setFull] = useState(false);                // график на весь экран
   const pickChart = (k: ChartKind) => { setChart(k); saveChart('habit', k); };
   if (!habit) return null; // удалили, пока карточка была открыта
   const book = new HabitBook(habit, activities, entries, habitMarks, now);
@@ -62,6 +65,65 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const sameUnit = new Set(series.map((s) => params.find((p) => p.id === s.id)?.unit ?? '')).size <= 1;
   const W = 300, H = 70, bw = W / days.length;
 
+  // Что показать над графиком: выбранный тапом день и числа по нему, иначе — итог месяца.
+  const dayName = (i: number) => new Date(days[i]).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' });
+  const caption = () => {
+    if (pick !== null) {
+      const list = chart === 'line' ? series : pid ? [{ id: pid, color, values }] : [];
+      return (
+        <div className="small chart-pick" onClick={() => setPick(null)}>
+          <b>{dayName(pick)}</b>
+          {list.map((x) => {
+            const p = params.find((q) => q.id === x.id)!;
+            const v = x.values[pick];
+            return <span key={x.id}> · <span className="dot" style={{ background: x.color }} /> {p.name} {v === null ? '—' : `${round(v)}${p.unit ? ' ' + p.unit : ''}`}</span>;
+          })}
+        </div>
+      );
+    }
+    return (
+      <div className="dim small">
+        {chart === 'line' && series.length > 1 && !sameUnit && 'У каждой линии своя шкала: сравнивай ход, а не высоту. '}
+        {chart === 'line' && series.length > 1 ? 'Тапни день, чтобы увидеть числа.' : got.length
+          ? `среднее ${round(got.reduce((a, b) => a + b, 0) / got.length)} · максимум ${round(Math.max(...got))}${unit ? ' ' + unit : ''} · дней с числом: ${got.length}`
+          : 'В этом месяце чисел нет. Они вписываются при отметке.'}
+      </div>
+    );
+  };
+
+  // График целиком (кнопки, сам график, подпись). Рисуется дважды: в карточке (h = 70) и на весь экран.
+  const chartBody = (h: number, isFull: boolean) => (
+    <>
+      <div className="chart-bar-row">
+        <div className="chips">
+          {chart === 'bars'
+            ? params.map((p) => <button key={p.id} aria-pressed={p.id === pid} onClick={() => setParam(p.id)}>{p.name}</button>)
+            // в режиме линии параметры включаются по отдельности, точка — цвет линии
+            : params.map((p, i) => (
+              <button key={p.id} aria-pressed={on.has(p.id)} onClick={() => toggle(p.id)}>
+                <span className="dot" style={{ background: on.has(p.id) ? lineColor(i) : 'var(--line)' }} /> {p.name}
+              </button>
+            ))}
+        </div>
+        <ChartKindSwitch value={chart} onChange={pickChart} />
+        {!isFull && <ExpandButton onClick={() => setFull(true)} />}
+      </div>
+      <svg viewBox={`0 0 ${W} ${h + 14}`} className="bars" style={isFull ? { height: 'auto' } : undefined}>
+        <line x1="0" x2={W} y1={h} y2={h} stroke="var(--line)" />
+        {chart === 'bars' && values.map((v, i) => v !== null && (
+          <rect key={i} x={i * bw + 1} y={h - (v / max) * h} width={bw - 2} height={Math.max(1, (v / max) * h)} rx="1.5" fill={color}
+            opacity={pick === null || pick === i ? 1 : 0.35} />
+        ))}
+        {chart === 'line' && <LineChart series={series} bw={bw} h={h} scale={sameUnit ? 'shared' : 'own'} picked={pick} />}
+        {days.map((d, i) => (i % 5 === 0 || i === days.length - 1) && (
+          <text key={d} x={i * bw + bw / 2} y={h + 12} textAnchor="middle" className="bar-label">{new Date(d).getDate()}</text>
+        ))}
+        <TapColumns n={days.length} bw={bw} h={h + 14} picked={pick} onPick={setPick} />
+      </svg>
+      {caption()}
+    </>
+  );
+
   return (
     <Sheet onClose={onClose}>
       <div className="habit-card" style={{ '--hc': color } as CSSProperties}>
@@ -83,9 +145,9 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
         </div>
 
         <div className="stat-nav">
-          <button className="nav-arrow" onClick={() => setMonth(month - 1)}>‹</button>
+          <button className="nav-arrow" onClick={() => { setMonth(month - 1); setPick(null); }}>‹</button>
           <div className="stat-period">{new Date(from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
-          <button className="nav-arrow" disabled={to > today} onClick={() => setMonth(month + 1)}>›</button>
+          <button className="nav-arrow" disabled={to > today} onClick={() => { setMonth(month + 1); setPick(null); }}>›</button>
         </div>
         <div className="habit-cal">
           {WEEKDAYS.map((w) => <span key={w} className="wd">{w}</span>)}
@@ -105,36 +167,13 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
 
         {params.length > 0 && (
           <div className="habit-chart">
-            <div className="chart-bar-row">
-              <div className="chips">
-                {chart === 'bars'
-                  ? params.map((p) => <button key={p.id} aria-pressed={p.id === pid} onClick={() => setParam(p.id)}>{p.name}</button>)
-                  // в режиме линии параметры включаются по отдельности, точка — цвет линии
-                  : params.map((p, i) => (
-                    <button key={p.id} aria-pressed={on.has(p.id)} onClick={() => toggle(p.id)}>
-                      <span className="dot" style={{ background: on.has(p.id) ? lineColor(i) : 'var(--line)' }} /> {p.name}
-                    </button>
-                  ))}
-              </div>
-              <ChartKindSwitch value={chart} onChange={pickChart} />
-            </div>
-            <svg viewBox={`0 0 ${W} ${H + 14}`} className="bars">
-              <line x1="0" x2={W} y1={H} y2={H} stroke="var(--line)" />
-              {chart === 'bars' && values.map((v, i) => v !== null && (
-                <rect key={i} x={i * bw + 1} y={H - (v / max) * H} width={bw - 2} height={Math.max(1, (v / max) * H)} rx="1.5" fill={color} />
-              ))}
-              {chart === 'line' && <LineChart series={series} bw={bw} h={H} scale={sameUnit ? 'shared' : 'own'} />}
-              {days.map((d, i) => (i % 5 === 0 || i === days.length - 1) && (
-                <text key={d} x={i * bw + bw / 2} y={H + 12} textAnchor="middle" className="bar-label">{new Date(d).getDate()}</text>
-              ))}
-            </svg>
-            <div className="dim small">
-              {chart === 'line' && series.length > 1 && !sameUnit && 'У каждой линии своя шкала: сравнивай ход, а не высоту. '}
-              {chart === 'line' && series.length > 1 ? '' : got.length
-                ? `среднее ${round(got.reduce((a, b) => a + b, 0) / got.length)} · максимум ${round(Math.max(...got))}${unit ? ' ' + unit : ''} · дней с числом: ${got.length}`
-                : 'В этом месяце чисел нет. Они вписываются при отметке.'}
-            </div>
+            {chartBody(H, false)}
           </div>
+        )}
+        {full && (
+          <FullChart title={<>{habit.icon} {habit.name} · {new Date(from).toLocaleDateString('ru-RU', { month: 'long' })}</>} onClose={() => setFull(false)}>
+            <div className="habit-chart full">{chartBody(fullChartHeight(W, 190), true)}</div>
+          </FullChart>
         )}
 
         {habit.kind === 'time' && <p className="dim small">Засчитывается сама, когда протрекано {habit.goalMin} мин. Забыл таймер — тапни день в календаре.</p>}
