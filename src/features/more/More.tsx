@@ -15,12 +15,14 @@ const ACTS: [string, string, string] = ['занятие', 'занятия', 'з�
 
 // Редактор занятий нужен редко — грузим его код только при первом открытии.
 const Activities = lazy(() => import('../activities/Activities'));
+const Habits = lazy(() => import('../habits/Habits'));
 
 // Экран «Ещё»: оформление, режим таймера, занятия, бэкап, служебное.
 export default function More() {
   const data = useData();
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
+  const [habitsOpen, setHabitsOpen] = useState(false);
   const [lookOpen, setLookOpen] = useState(false);
   const [restore, setRestore] = useState<{ backup?: Backup; error?: string; done?: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -51,18 +53,19 @@ export default function More() {
     setRestore({ done: `Готово: добавлено или обновлено ${r.entries} ${plural(r.entries, ENTRIES)} и ${r.activities} ${plural(r.activities, ACTS)}.` });
   };
   const replace = async (b: Backup) => {
-    if (!confirm('Стереть все занятия и записи на этом телефоне и заменить их бэкапом?')) return;
+    if (!confirm('Стереть все занятия, записи и привычки на этом телефоне и заменить их бэкапом?')) return;
     await replaceWithBackup(b);
     setRestore({ done: 'Готово: данные заменены бэкапом.' });
   };
   const demo = async () => {
-    if (!confirm('Заменить все занятия и записи демо-данными (~5 недель)? Сначала лучше сохранить бэкап.')) return;
+    if (!confirm('Заменить все занятия, записи и привычки демо-данными (~5 недель)? Сначала лучше сохранить бэкап.')) return;
     const { fillDemo } = await import('../../db/demo');
     await fillDemo();
   };
 
   // Оформление и занятия открываются поверх «Ещё», как экран в стеке навигации iOS.
   if (lookOpen) return <Appearance onBack={() => setLookOpen(false)} />;
+  if (habitsOpen) return <Suspense fallback={null}><Habits onBack={() => setHabitsOpen(false)} /></Suspense>;
   if (treeOpen) return <Suspense fallback={null}><Activities onBack={() => setTreeOpen(false)} /></Suspense>;
 
   return (
@@ -112,10 +115,16 @@ export default function More() {
         </label>
       </div>
 
-      <button className="widget pad row-btn" onClick={() => setTreeOpen(true)}>
-        <span>Занятия</span>
-        <span className="dim">{activeCount} ›</span>
-      </button>
+      <div className="widget pad two-rows">
+        <button className="row-btn" onClick={() => setTreeOpen(true)}>
+          <span>Занятия</span>
+          <span className="dim">{activeCount} ›</span>
+        </button>
+        <button className="row-btn" onClick={() => setHabitsOpen(true)}>
+          <span>Привычки</span>
+          <span className="dim">{data.habits.filter((h) => !h.archivedAt).length} ›</span>
+        </button>
+      </div>
 
       <div className="widget pad">
         <div className="btn-row demo">

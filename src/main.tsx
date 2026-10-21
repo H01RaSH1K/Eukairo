@@ -9,7 +9,11 @@ import { installNoBounce } from './ui/noBounce';
 import './ui/theme.css';
 import './ui/designs.css';
 import './ui/themes.css';
+import './ui/habits.css';
 import './settings/design'; // ставит дизайн до первой отрисовки
+
+// Внутри iframe (превью) — помечаем, CSS уберёт чужие отступы (theme.css, data-embedded).
+if (window.self !== window.top) document.documentElement.dataset.embedded = '';
 
 // Открываем базу сразу, параллельно с первой отрисовкой.
 startStore();

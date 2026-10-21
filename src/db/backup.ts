@@ -11,13 +11,17 @@ import { currentDesign, replaceDesign } from '../settings/design';
 const LOCAL_ONLY = new Set(['lastBackupAt', 'backupSnoozeUntil', 'forgottenAnswer']);
 
 async function build(): Promise<Backup> {
-  const [activities, entries, settings] = await Promise.all([db.activities.toArray(), db.entries.toArray(), db.settings.toArray()]);
+  const [activities, entries, settings, habits, habitMarks] = await Promise.all([
+    db.activities.toArray(), db.entries.toArray(), db.settings.toArray(), db.habits.toArray(), db.habitMarks.toArray(),
+  ]);
   return {
     app: 'eukairo',
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     activities,
     entries,
+    habits,
+    habitMarks,
     settings: [
       ...settings.filter((s) => !LOCAL_ONLY.has(s.key)),
       // оформление и вид главного экрана живут в localStorage, но тоже едут в бэкап
@@ -57,11 +61,13 @@ export async function readBackup(file: File): Promise<Backup> {
 
 /** Объединить бэкап с тем, что уже есть. Возвращает, сколько записей добавилось/обновилось. */
 export function mergeBackup(b: Backup) {
-  return db.transaction('rw', db.activities, db.entries, async () => {
+  return db.transaction('rw', [db.activities, db.entries, db.habits, db.habitMarks], async () => {
     const acts = mergeById(await db.activities.toArray(), b.activities);
     const ents = mergeById(await db.entries.toArray(), b.entries);
     await db.activities.bulkPut(acts);
     await db.entries.bulkPut(ents);
+    await db.habits.bulkPut(mergeById(await db.habits.toArray(), b.habits));
+    await db.habitMarks.bulkPut(mergeById(await db.habitMarks.toArray(), b.habitMarks));
     await db.entries.bulkPut(closeExtraRunning(await db.entries.toArray()));
     return { activities: acts.length, entries: ents.length };
   });
@@ -69,10 +75,12 @@ export function mergeBackup(b: Backup) {
 
 /** Стереть всё и поднять из бэкапа (новый телефон, потерянные данные). */
 export async function replaceWithBackup(b: Backup) {
-  await db.transaction('rw', db.activities, db.entries, db.settings, async () => {
-    await Promise.all([db.activities.clear(), db.entries.clear()]);
+  await db.transaction('rw', [db.activities, db.entries, db.settings, db.habits, db.habitMarks], async () => {
+    await Promise.all([db.activities.clear(), db.entries.clear(), db.habits.clear(), db.habitMarks.clear()]);
     await db.activities.bulkPut(b.activities);
     await db.entries.bulkPut(b.entries);
+    await db.habits.bulkPut(b.habits);
+    await db.habitMarks.bulkPut(b.habitMarks);
     for (const s of b.settings) {
       if (s.key !== 'appearance' && s.key !== 'design' && !LOCAL_ONLY.has(s.key)) await db.settings.put(s);
     }

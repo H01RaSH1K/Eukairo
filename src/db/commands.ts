@@ -4,11 +4,12 @@
 //
 // async/await — как в C#: функция возвращает Promise (≈ Task), экраны обычно
 // не ждут результата — база сама сообщит об изменении, и экран перерисуется.
-import { db, type Activity, type Entry } from './schema';
+import { db, type Activity, type Entry, type Habit } from './schema';
 import { nextHue } from '../domain/colors';
 import { resolveOverlaps } from '../domain/overlaps';
 import { canMoveTo, childrenOf, subtreeIds } from '../domain/tree';
 import type { ForgottenAnswer } from '../domain/forgotten';
+import { dayKey, nextHabitHue } from '../domain/habits';
 
 let idCounter = 0;
 export const newId = () => crypto.randomUUID?.() ?? `id-${Date.now()}-${idCounter++}`;
@@ -175,6 +176,78 @@ export function deleteActivity(id: string): Promise<'deleted' | 'archived'> {
     }
     await db.activities.bulkDelete(ids);
     return 'deleted' as const;
+  });
+}
+
+// ——— привычки ———
+
+/** Что задаётся при создании и правке привычки. */
+export type HabitPatch = Partial<Pick<Habit, 'name' | 'icon' | 'hue' | 'kind' | 'activityId' | 'goalMin' | 'weekdays' | 'params'>>;
+
+/** Новая привычка в конце списка; день начала — сегодня. Возвращает id. */
+export function addHabit(fields: HabitPatch & { name: string }) {
+  return db.transaction('rw', db.habits, async () => {
+    const all = await db.habits.toArray();
+    const id = newId();
+    await db.habits.add({
+      kind: 'check', ...fields, id,
+      name: fields.name.trim() || 'Без названия',
+      hue: fields.hue ?? nextHabitHue(all),
+      order: all.reduce((m, h) => Math.max(m, h.order + 1), 0),
+      since: dayKey(Date.now()),
+      updatedAt: Date.now(),
+    });
+    return id;
+  });
+}
+
+export function updateHabit(id: string, patch: HabitPatch) {
+  return db.habits.update(id, { ...patch, updatedAt: Date.now() });
+}
+
+/**
+ * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'), с числами параметров.
+ * Если отмечают день раньше начала привычки — начало сдвигается на него:
+ * значит, привычка на самом деле началась раньше.
+ */
+export function setHabitMark(habitId: string, day: string, done: boolean, values?: Record<string, number>) {
+  return db.transaction('rw', db.habits, db.habitMarks, async () => {
+    const now = Date.now();
+    const id = `${habitId}:${day}`;
+    // Без новых значений оставляем прежние: сняли и снова поставили галочку — числа не пропадут.
+    const old = await db.habitMarks.get(id);
+    await db.habitMarks.put({ id, habitId, day, done, values: values ?? old?.values, updatedAt: now });
+    const h = await db.habits.get(habitId);
+    if (h && done && day < h.since) await db.habits.update(habitId, { since: day, updatedAt: now });
+  });
+}
+
+/** Сдвинуть в списке: -1 — выше, +1 — ниже. */
+export function reorderHabit(id: string, dir: -1 | 1) {
+  return db.transaction('rw', db.habits, async () => {
+    const list = (await db.habits.toArray()).filter((h) => !h.archivedAt).sort((a, b) => a.order - b.order);
+    const i = list.findIndex((h) => h.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    const now = Date.now();
+    await db.habits.bulkPut(list.map((h, k) => ({ ...h, order: k, updatedAt: h.order === k ? h.updatedAt : now })));
+  });
+}
+
+/** «Завершить»: привычка пропадает с «Сегодня», история остаётся. */
+export function archiveHabit(id: string) {
+  return db.habits.update(id, { archivedAt: Date.now(), updatedAt: Date.now() });
+}
+
+export function restoreHabit(id: string) {
+  return db.habits.update(id, { archivedAt: undefined, updatedAt: Date.now() });
+}
+
+/** Удалить совсем, вместе с отметками. */
+export function deleteHabit(id: string) {
+  return db.transaction('rw', db.habits, db.habitMarks, async () => {
+    await db.habitMarks.where('habitId').equals(id).delete();
+    await db.habits.delete(id);
   });
 }
 

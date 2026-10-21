@@ -419,6 +419,12 @@ input.field { -webkit-user-select: text; user-select: text; }
 @media (display-mode: standalone) {
   html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top))); }
 }
+/* Открыто внутри чужой страницы (превью на claude.ai): та добавляет свои отступы
+   под шапку на всём html, а приложение и так отступает на safe-area само —
+   выходило два отступа подряд. Чужие убираем, остаются наши, как на телефоне. */
+html[data-embedded] { padding: 0 !important; margin: 0 !important; }
+html[data-embedded], html[data-embedded] body { height: 100%; overflow: hidden; }
+
 /* Нужды: метка в дереве занятий и переключатель в карточке */
 .need-tag { font-size: 11px; color: var(--text-dim); border: 1px solid var(--control); border-radius: 6px; padding: 1px 6px; }
 .need-toggle { flex-wrap: nowrap; gap: 12px; }
