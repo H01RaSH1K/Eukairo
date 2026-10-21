@@ -17,6 +17,16 @@ export function isHidden(all: Activity[], id: string): boolean {
   return path.length === 0 || path.some((a) => a.archivedAt);
 }
 
+/** Занятие «без времени» (флаг на нём или на предке): его нет в таймере и вводе времени. */
+export function isTimeless(all: Activity[], id: string): boolean {
+  return pathOf(all, id).some((a) => a.timeless);
+}
+
+/** Можно ли трекать время: не завершено и не «без времени». */
+export function canTrack(all: Activity[], id: string): boolean {
+  return !isHidden(all, id) && !isTimeless(all, id);
+}
+
 /** Нужда ли занятие: флаг на нём самом или на ком-то из предков. */
 export function isNeed(all: Activity[], id: string): boolean {
   return pathOf(all, id).some((a) => a.need);

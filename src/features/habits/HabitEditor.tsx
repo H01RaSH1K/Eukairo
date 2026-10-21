@@ -4,7 +4,7 @@ import { addHabit, archiveHabit, deleteHabit, updateHabit } from '../../db/comma
 import { useData } from '../../db/store';
 import { activityColors } from '../../domain/colors';
 import { WEEKDAYS } from '../../domain/habits';
-import { pathOf } from '../../domain/tree';
+import { isTimeless, pathOf } from '../../domain/tree';
 import { Sheet } from '../../ui/Sheet';
 import { ActivityPicker } from '../activities/ActivityPicker';
 
@@ -106,7 +106,7 @@ export function HabitEditor({ habit, onClose, onRemoved }: { habit?: Habit; onCl
       </div>
 
       {picking && (
-        <ActivityPicker activities={activities} colors={colors} title="Занятие привычки"
+        <ActivityPicker activities={kind === 'time' ? activities.filter((a) => !isTimeless(activities, a.id)) : activities} colors={colors} title="Занятие привычки"
           onPick={(id) => { setActivityId(id); setPicking(false); if (!name.trim()) setName(pathOf(activities, id).at(-1)!.name); }}
           onClose={() => setPicking(false)} />
       )}

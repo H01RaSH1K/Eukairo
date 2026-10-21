@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Activity } from '../db/schema';
-import { isNeed, needIds, timerRange } from './tree';
+import type { Activity, Entry } from '../db/schema';
+import { canTrack, isNeed, isTimeless, needIds, timerRange } from './tree';
+import { defaultActivity, quickActivities } from './quick';
 
 const a = (id: string, parentId: string | null, extra: Partial<Activity> = {}): Activity =>
   ({ id, parentId, name: id, order: 0, updatedAt: 0, ...extra });
@@ -21,5 +22,18 @@ describe('нужды', () => {
     expect(isNeed(tree, 'nap')).toBe(true);
     expect(isNeed(tree, 'work')).toBe(false);
     expect([...needIds(tree)].sort()).toEqual(['lunch', 'nap', 'sleep']);
+  });
+});
+
+describe('без времени', () => {
+  const tree = [a('sport', null, { order: 0 }), a('push', 'sport', { timeless: true }), a('body', null, { timeless: true, order: 1 }),
+    a('weight', 'body'), a('code', null, { order: 2 })];
+  it('флаг наследуется, таких занятий нет в таймере', () => {
+    expect(isTimeless(tree, 'weight')).toBe(true);
+    expect(canTrack(tree, 'sport')).toBe(true);
+    expect(canTrack(tree, 'push')).toBe(false);
+    const entries: Entry[] = [{ id: 'e', activityId: 'push', start: 0, end: 1, source: 'manual', updatedAt: 0 }];
+    expect(quickActivities(tree, entries, 1)).toEqual(['sport', 'code']);
+    expect(defaultActivity([tree[2], tree[3], tree[4]], entries)).toBe('code');
   });
 });

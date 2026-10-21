@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } fro
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { toSpans, usefulMs } from '../../domain/spans';
-import { isHidden, needIds, pathOf, timerRange } from '../../domain/tree';
+import { canTrack, isTimeless, needIds, pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
 import { ChargeCards } from './controls/ChargeCards';
 import { ClockRing } from './controls/ClockRing';
@@ -67,7 +67,7 @@ export default function Today() {
 
   // Занятие на полукруге: идущее, выбранное или самое частое.
   // Выбранное могли успеть завершить в «Занятиях» — тогда берём частое.
-  const chosenOk = chosen && !isHidden(activities, chosen) ? chosen : null;
+  const chosenOk = chosen && canTrack(activities, chosen) ? chosen : null;
   const dialId = run?.activityId ?? chosenOk ?? quick[0] ?? '';
   const range = timerRange(activities, dialId);
   // Длительность помним для каждого занятия; по умолчанию — середина диапазона.
@@ -299,7 +299,7 @@ export default function Today() {
 
       {picking && (
         <ActivityPicker
-          activities={activities}
+          activities={activities.filter((a) => !isTimeless(activities, a.id))}
           colors={colors}
           title="Занятие"
           onPick={(id) => { setChosen(id); setPicking(false); }}

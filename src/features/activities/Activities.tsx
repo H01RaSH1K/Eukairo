@@ -5,7 +5,7 @@ import {
 } from '../../db/commands';
 import { useData } from '../../db/store';
 import { activityColors } from '../../domain/colors';
-import { childrenOf, forgetAfter, isHidden, isNeed, pathOf, subtreeIds, timerRange } from '../../domain/tree';
+import { childrenOf, forgetAfter, isHidden, isNeed, isTimeless, pathOf, subtreeIds, timerRange } from '../../domain/tree';
 import { Sheet } from '../../ui/Sheet';
 import { shortMin } from '../today/Dial';
 import { ActivityPicker } from './ActivityPicker';
@@ -36,7 +36,7 @@ export default function Activities({ onBack }: { onBack: () => void }) {
         <span className="dot" style={{ background: colors.get(a.id) }} />
         <span className="tree-name">{a.icon && depth === 0 ? `${a.icon} ` : ''}{a.name}</span>
         {a.need && <span className="need-tag">нужда</span>}
-        <span className="dim small">{timerRange(activities, a.id).map(shortMin).join(' – ')}</span>
+        <span className="dim small">{isTimeless(activities, a.id) ? 'без времени' : timerRange(activities, a.id).map(shortMin).join(' – ')}</span>
       </div>,
       ...tree(a.id, depth + 1),
     ]);
@@ -99,6 +99,8 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
   const ownTimer = a.timerMinMin !== undefined || a.timerMaxMin !== undefined;
   const forget = forgetAfter(all, a.id);
   const needByParent = !a.need && a.parentId !== null && isNeed(all, a.parentId);
+  const timelessByParent = !a.timeless && a.parentId !== null && isTimeless(all, a.parentId);
+  const timeless = a.timeless || timelessByParent; // такому занятию настройки таймера не нужны
 
   const commitName = () => { if (name.trim() && name.trim() !== a.name) void updateActivity(a.id, { name: name.trim() }); };
   const commitParams = () => {
@@ -140,37 +142,52 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
           <div className="dim small">Цвет — оттенок родителя <span className="dot" style={{ background: color, display: 'inline-block', verticalAlign: 'middle' }} /></div>
         )}
 
-        <div className="range-edit flat">
-          <div className="setting-toggle">
-            <span className="setting-title">Таймер {shortMin(lo)} – {shortMin(hi)}</span>
-            {ownTimer && !isRoot && <button className="btn small ghost" onClick={() => void setActivityTimer(a.id, undefined, undefined)}>как у родителя</button>}
-            {!ownTimer && !isRoot && <span className="dim small">как у родителя</span>}
-          </div>
-          <input className="slider" type="range" min={5} max={475} step={5} value={lo} aria-label="Таймер от"
-            onChange={(e) => { const v = Number(e.target.value); void setActivityTimer(a.id, v, Math.max(hi, v + 5)); }} />
-          <input className="slider" type="range" min={10} max={480} step={5} value={hi} aria-label="Таймер до"
-            onChange={(e) => { const v = Number(e.target.value); void setActivityTimer(a.id, Math.min(lo, v - 5), v); }} />
-        </div>
-
-        <div className="range-edit flat">
-          <div className="setting-toggle">
-            <span className="setting-title">Спросить «таймер не забыт?» через {shortMin(forget)}</span>
-            {a.forgetAfterMin !== undefined && <button className="btn small ghost" onClick={() => void updateActivity(a.id, { forgetAfterMin: undefined })}>{isRoot ? 'по умолч.' : 'как у родителя'}</button>}
-          </div>
-          <input className="slider" type="range" min={30} max={720} step={30} value={forget} aria-label="Порог забытого таймера"
-            onChange={(e) => void updateActivity(a.id, { forgetAfterMin: Number(e.target.value) })} />
-        </div>
-
         <label className="range-edit flat setting-toggle need-toggle">
           <span>
-            <span className="setting-title">Нужда</span>
+            <span className="setting-title">Без времени</span>
             <span className="setting-hint">
-              {needByParent ? 'Как у родителя' : 'Сон, еда: не в счёт полезного, часы вынимаются из мозаики дня'}
+              {timelessByParent ? 'Как у родителя' : 'Только записи с числами (отжимания, вес): нет в таймере и во вводе времени'}
             </span>
           </span>
-          <input type="checkbox" checked={a.need || needByParent} disabled={needByParent}
-            onChange={(e) => void updateActivity(a.id, { need: e.target.checked || undefined })} />
+          <input type="checkbox" checked={timeless} disabled={timelessByParent}
+            onChange={(e) => void updateActivity(a.id, { timeless: e.target.checked || undefined })} />
         </label>
+
+        {!timeless && (
+          <>
+            <div className="range-edit flat">
+              <div className="setting-toggle">
+                <span className="setting-title">Таймер {shortMin(lo)} – {shortMin(hi)}</span>
+                {ownTimer && !isRoot && <button className="btn small ghost" onClick={() => void setActivityTimer(a.id, undefined, undefined)}>как у родителя</button>}
+                {!ownTimer && !isRoot && <span className="dim small">как у родителя</span>}
+              </div>
+              <input className="slider" type="range" min={5} max={475} step={5} value={lo} aria-label="Таймер от"
+                onChange={(e) => { const v = Number(e.target.value); void setActivityTimer(a.id, v, Math.max(hi, v + 5)); }} />
+              <input className="slider" type="range" min={10} max={480} step={5} value={hi} aria-label="Таймер до"
+                onChange={(e) => { const v = Number(e.target.value); void setActivityTimer(a.id, Math.min(lo, v - 5), v); }} />
+            </div>
+
+            <div className="range-edit flat">
+              <div className="setting-toggle">
+                <span className="setting-title">Спросить «таймер не забыт?» через {shortMin(forget)}</span>
+                {a.forgetAfterMin !== undefined && <button className="btn small ghost" onClick={() => void updateActivity(a.id, { forgetAfterMin: undefined })}>{isRoot ? 'по умолч.' : 'как у родителя'}</button>}
+              </div>
+              <input className="slider" type="range" min={30} max={720} step={30} value={forget} aria-label="Порог забытого таймера"
+                onChange={(e) => void updateActivity(a.id, { forgetAfterMin: Number(e.target.value) })} />
+            </div>
+
+            <label className="range-edit flat setting-toggle need-toggle">
+              <span>
+                <span className="setting-title">Нужда</span>
+                <span className="setting-hint">
+                  {needByParent ? 'Как у родителя' : 'Сон, еда: не в счёт полезного, часы вынимаются из мозаики дня'}
+                </span>
+              </span>
+              <input type="checkbox" checked={a.need || needByParent} disabled={needByParent}
+                onChange={(e) => void updateActivity(a.id, { need: e.target.checked || undefined })} />
+            </label>
+          </>
+        )}
 
         <div className="range-edit flat">
           <div className="setting-title">Записи без времени</div>

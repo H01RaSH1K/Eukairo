@@ -102,7 +102,7 @@ export function migrateHabitParams(d: { activities: Activity[]; habits: Habit[];
       out.habits.push({ ...rest, updatedAt: now });
     } else {
       target = d.activities.find((a) => a.id === `act-${h.id}`)
-        ?? { id: `act-${h.id}`, parentId: null, name: h.name, icon: h.icon, hue: h.hue, order: ++order, updatedAt: now };
+        ?? { id: `act-${h.id}`, parentId: null, name: h.name, icon: h.icon, hue: h.hue, order: ++order, timeless: true, updatedAt: now };
       target = { ...target, params, updatedAt: now };
       out.habits.push({ ...rest, kind: h.kind === 'check' ? 'points' : h.kind, activityId: target.id, updatedAt: now });
     }

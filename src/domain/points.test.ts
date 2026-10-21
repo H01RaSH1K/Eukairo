@@ -47,7 +47,7 @@ describe('перенос старых параметров привычек', ()
   it('галочка с параметрами → своё занятие и привычка по записям; числа → записи', () => {
     const m = migrateHabitParams({ activities: [med], habits, habitMarks: marks }, 5);
     const act = m.activities.find((a) => a.id === 'act-push')!;
-    expect(act).toMatchObject({ parentId: null, name: 'Анжуманя', hue: 30, order: 4, params: [{ id: 'reps', name: 'Отжимания', unit: 'раз' }] });
+    expect(act).toMatchObject({ parentId: null, name: 'Анжуманя', hue: 30, order: 4, timeless: true, params: [{ id: 'reps', name: 'Отжимания', unit: 'раз' }] });
     expect(m.habits.find((h) => h.id === 'push')).toMatchObject({ kind: 'points', activityId: 'act-push' });
     expect(m.habits.find((h) => h.id === 'push')!.params).toBeUndefined();
     expect(m.points.filter((x) => x.activityId === 'act-push')).toEqual([

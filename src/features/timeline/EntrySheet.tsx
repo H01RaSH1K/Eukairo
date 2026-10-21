@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
 import { findOverlaps } from '../../domain/overlaps';
-import { pathOf } from '../../domain/tree';
+import { isTimeless, pathOf } from '../../domain/tree';
 import { MIN_MS, addLocalDays, formatClock, formatDuration, startOfLocalDay } from '../../domain/time';
 import { deleteEntry, saveEntry, stopTimer } from '../../db/commands';
 import { useData } from '../../db/store';
@@ -117,7 +117,7 @@ export function EntrySheet({ entry, isNew, onClose }: { entry: Entry; isNew: boo
 
       {picking && (
         <ActivityPicker
-          activities={activities}
+          activities={activities.filter((a) => !isTimeless(activities, a.id))}
           colors={colors}
           title="Занятие"
           onPick={(id) => { setActivityId(id); setPicking(false); }}

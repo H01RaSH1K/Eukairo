@@ -25,13 +25,13 @@ const demoActivities: Activity[] = [
   a('series', 'eng', 'Сериалы', 1),
   a('sport', null, 'Спорт', 4, { hue: 150, icon: '🏃' }),
   // занятия с параметрами — для записей без времени («20 раз, кулаки, пол»)
-  a('push', 'sport', 'Отжимания', 0, { icon: '💪', params: [
+  a('push', 'sport', 'Отжимания', 0, { icon: '💪', timeless: true, params: [
     { id: 'reps', name: 'Отжимания', unit: 'раз' },
     { id: 'grip', name: 'Хват', options: [{ id: 'palm', name: 'ладони' }, { id: 'fist', name: 'кулаки' }, { id: 'fing', name: 'пальцы' }] },
     { id: 'legs', name: 'Ноги', options: [{ id: 'floor', name: 'пол' }, { id: 'bench', name: 'скамья' }, { id: 'high', name: 'высоко' }] },
   ] }),
-  a('bar', 'sport', 'Турник', 1, { icon: '🏋️', params: [{ id: 'pull', name: 'Подтягивания', unit: 'раз' }] }),
-  a('body', null, 'Замеры', 9, { hue: 185, icon: '📏' }),
+  a('bar', 'sport', 'Турник', 1, { icon: '🏋️', timeless: true, params: [{ id: 'pull', name: 'Подтягивания', unit: 'раз' }] }),
+  a('body', null, 'Замеры', 9, { hue: 185, icon: '📏', timeless: true }),
   a('weight', 'body', 'Вес', 0, { icon: '⚖️', params: [{ id: 'kg', name: 'Вес', unit: 'кг' }] }),
   a('read', null, 'Чтение', 5, { hue: 52, icon: '📚' }),
   a('med', null, 'Медитация', 8, { hue: 305, icon: '🧘', timerMinMin: 5, timerMaxMin: 30 }),
