@@ -1,17 +1,15 @@
 import { useState, type CSSProperties } from 'react';
 import { setHabitMark } from '../../db/commands';
 import { useData } from '../../db/store';
-import { HabitBook, WEEKDAYS, chartParams, dayKey, habitColors, habitParams, scheduleText, weekdayOf } from '../../domain/habits';
-import { choiceParams } from '../../domain/points';
+import { HabitBook, WEEKDAYS, dayKey, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
 import { addLocalDays, dayStarts, periodRange, shiftPeriod, startOfLocalDay } from '../../domain/time';
 import { Sheet } from '../../ui/Sheet';
-import { ParamChart } from '../points/ParamChart';
 import { PointSheet } from '../points/PointSheet';
 import { HabitEditor } from './HabitEditor';
 
 const KIND_TEXT = { check: 'галочка', quit: 'держусь', time: 'время занятия', points: 'по записям занятия' } as const;
 
-// Карточка привычки: серия, рекорд, процент, месяц сеткой и график чисел из записей по дням.
+// Карточка привычки: серия, рекорд, процент и месяц сеткой. Числа и графики — у занятия, в «Сводки → Записи».
 // Тап по дню в календаре — отметить или снять (так правятся прошлые дни).
 export default function HabitSheet({ id, day, onClose }: { id: string; day: number; onClose: () => void }) {
   const { habits, habitMarks, activities, entries, points } = useData();
@@ -28,8 +26,6 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const { from, to } = periodRange('month', shiftPeriod('month', day, month));
   const days = dayStarts(from, to);
   const r30 = book.rate(addLocalDays(today, -29), today + 1);
-  const numbers = chartParams(habit, activities);
-  const params = habitParams(habit, activities);
 
   const tapDay = (d: number) => {
     if (d > today) return;
@@ -82,15 +78,8 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
           })}
         </div>
 
-        {numbers.length > 0 && (
-          <ParamChart days={days} today={today} numbers={numbers} choices={choiceParams(params)} color={color} chartKey="habit"
-            pointsAt={(i) => book.points(days[i])} valuesAt={(i, keep) => book.values(days[i], keep)}
-            fullTitle={<>{habit.icon} {habit.name} · {new Date(from).toLocaleDateString('ru-RU', { month: 'long' })}</>}
-            empty={habit.kind === 'time' ? 'В этом месяце времени по занятию нет.' : 'В этом месяце записей нет. Тапни день, чтобы добавить.'} />
-        )}
-
         {habit.kind === 'time' && <p className="dim small">Засчитывается сама, когда протрекано {habit.goalMin} мин. Забыл таймер — тапни день в календаре.</p>}
-        {habit.kind === 'points' && <p className="dim small">Засчитывается сама, когда за день есть запись по занятию. Тап по дню — записи этого дня.</p>}
+        {habit.kind === 'points' && <p className="dim small">Засчитывается сама, когда за день есть запись по занятию. Тап по дню — записи этого дня. Графики чисел — в «Сводки → Записи».</p>}
         {habit.kind === 'quit' && <p className="dim small">День засчитан, пока не отмечен срыв. Тап по дню — отметить или снять срыв.</p>}
       </div>
 

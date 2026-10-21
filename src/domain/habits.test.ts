@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, Entry, Habit, HabitMark, Point } from '../db/schema';
-import { HabitBook, TRACKED, chartParams, dayKey, dayStartOf, msByDay, scheduleText } from './habits';
-import { COUNT } from './points';
+import { HabitBook, dayKey, dayStartOf, msByDay, scheduleText } from './habits';
 import { addLocalDays } from './time';
 
 const MIN = 60_000;
@@ -10,8 +9,8 @@ const now = new Date(2026, 9, 21, 15).getTime();
 const today = dayStartOf('2026-10-21');
 const day = (n: number) => addLocalDays(today, n);
 const habit = (h: Partial<Habit>): Habit => ({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0, ...h });
-const mark = (n: number, done = true, values?: Record<string, number>): HabitMark =>
-  ({ id: `h:${dayKey(day(n))}`, habitId: 'h', day: dayKey(day(n)), done, values, updatedAt: 0 });
+const mark = (n: number, done = true): HabitMark =>
+  ({ id: `h:${dayKey(day(n))}`, habitId: 'h', day: dayKey(day(n)), done, updatedAt: 0 });
 const book = (h: Partial<Habit>, marks: HabitMark[], entries: Entry[] = [], acts: Activity[] = [], points: Point[] = []) =>
   new HabitBook(habit(h), acts, entries, marks, now, points);
 
@@ -58,7 +57,6 @@ describe('серии', () => {
     const b = book({ kind: 'time', activityId: 'med', goalMin: 5 }, [mark(-3)], [e(-1, 3), e(-1, 2, 'kid'), e(-2, 10), e(0, 2)], acts);
     expect(b.status(day(0)).progress).toBeCloseTo(0.4);
     expect(b.streak()).toBe(3); // -1 (3+2 мин), -2, -3 (вручную)
-    expect(b.values(day(-2))[TRACKED]).toBe(10);
   });
   it('процент — только по прошедшим дням по расписанию', () => {
     const r = book({ since: dayKey(day(-3)) }, [mark(-1), mark(-3)]).rate(day(-10), day(1));
@@ -83,12 +81,5 @@ describe('привычка по записям занятия', () => {
     expect(b.status(day(-1)).done).toBe(true);
     expect(b.status(day(-2)).done).toBe(false);
     expect(book({ kind: 'points', activityId: 'sport' }, [], [], acts, pts).status(day(-1)).done).toBe(true);
-  });
-  it('на график идут числа занятия и число записей; фильтр берёт только подходящие записи', () => {
-    expect(chartParams(habit(h), acts).map((p) => p.id)).toEqual(['reps', COUNT]);
-    const b = book(h, [], [], acts, pts);
-    expect(b.values(day(-1))).toEqual({ reps: 45, [COUNT]: 3 });
-    expect(b.values(day(-1), (p) => p.choices?.grip === 'b')).toEqual({ reps: 30, [COUNT]: 2 });
-    expect(b.values(day(-1), () => false)).toEqual({});
   });
 });

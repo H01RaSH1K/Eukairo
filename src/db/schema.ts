@@ -65,8 +65,6 @@ export interface Habit {
   activityId?: string;        // для time и points
   goalMin?: number;           // только для time: сколько минут в день
   weekdays?: number[];        // дни недели, 0 = пн … 6 = вс; нет = каждый день
-  /** @deprecated старый формат (до записей без времени): переезжает на занятие при открытии базы. */
-  params?: Param[];
   order: number;
   since: string;              // день начала 'ГГГГ-ММ-ДД': раньше него дни не в счёт
   archivedAt?: number;
@@ -98,8 +96,6 @@ export interface HabitMark {
   habitId: string;
   day: string;                // 'ГГГГ-ММ-ДД' по местному времени
   done: boolean;
-  /** @deprecated старый формат: числа за день — переезжают в записи без времени. */
-  values?: Record<string, number>;
   updatedAt: number;
 }
 

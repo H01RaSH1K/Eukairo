@@ -78,6 +78,9 @@ export function parseOptions(text: string, old: ParamOption[], makeId: () => str
 
 // Подходы из ранней версии превью хранились прямо в отметке — читаем и их.
 type LegacySet = { at?: number; values?: Record<string, number>; choices?: Record<string, string> };
+// Старый формат: параметры у привычки, числа — в отметке. В схеме этих полей больше нет.
+type LegacyHabit = Habit & { params?: Param[] };
+type LegacyMark = HabitMark & { values?: Record<string, number>; sets?: LegacySet[] };
 
 /**
  * Перенос старого формата: параметры жили у привычки, числа — в её отметке за день.
@@ -89,7 +92,7 @@ type LegacySet = { at?: number; values?: Record<string, number>; choices?: Recor
  * Id новых занятий и записей выводятся из старых, поэтому повторный импорт того же бэкапа
  * не плодит дубликаты. Возвращает только изменённое и новое.
  */
-export function migrateHabitParams(d: { activities: Activity[]; habits: Habit[]; habitMarks: HabitMark[] }, now: number) {
+export function migrateHabitParams(d: { activities: Activity[]; habits: LegacyHabit[]; habitMarks: LegacyMark[] }, now: number) {
   const out = { activities: [] as Activity[], habits: [] as Habit[], habitMarks: [] as HabitMark[], points: [] as Point[] };
   let order = Math.max(-1, ...d.activities.filter((a) => a.parentId === null).map((a) => a.order));
   for (const h of d.habits) {
@@ -109,16 +112,14 @@ export function migrateHabitParams(d: { activities: Activity[]; habits: Habit[];
     out.activities.push(target);
     for (const m of d.habitMarks) {
       if (m.habitId !== h.id) continue;
-      const legacy = (m as HabitMark & { sets?: LegacySet[] }).sets;
-      const sets: LegacySet[] = legacy ?? (m.values ? [{ values: m.values }] : []);
+      const sets: LegacySet[] = m.sets ?? (m.values ? [{ values: m.values }] : []);
       if (!sets.length) continue;
       const noon = dayStartOf(m.day) + 12 * HOUR_MS;
       if (m.done) sets.forEach((s, i) => out.points.push({
         id: `${m.id}:${i}`, activityId: target.id, at: s.at || noon + i * 60_000,
         values: s.values, choices: s.choices, updatedAt: now,
       }));
-      const { values: _v, ...mark } = m as HabitMark & { sets?: unknown };
-      delete mark.sets;
+      const { values: _v, sets: _s, ...mark } = m; // всё, кроме старых чисел
       // у привычки «по записям» день засчитывают сами записи, ручная галочка не нужна
       out.habitMarks.push({ ...mark, done: h.kind === 'check' ? false : m.done, updatedAt: now });
     }

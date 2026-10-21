@@ -1,6 +1,6 @@
 // Привычки: засчитан ли день, серии, процент. Чистые функции, про базу и React не знают.
-import type { Activity, Entry, Habit, HabitMark, Param, Point } from '../db/schema';
-import { COUNT, pointsByDay, sumValues } from './points';
+import type { Activity, Entry, Habit, HabitMark, Point } from '../db/schema';
+import { pointsByDay } from './points';
 import { activityColors } from './colors';
 import { addLocalDays, startOfLocalDay, startOfNextLocalDay } from './time';
 import { subtreeIds } from './tree';
@@ -86,25 +86,6 @@ export class HabitBook {
     return { due, done: progress >= 1, progress, ms, marked };
   }
 
-  /** Записи без времени за день (по занятию привычки с подзанятиями). */
-  points(day: number): Point[] {
-    return this.pts.get(dayKey(day)) ?? [];
-  }
-
-  /**
-   * Числа за день: по каждому параметру — сумма по записям, плюс число записей (ключ COUNT),
-   * у time ещё минуты из трекинга (ключ TRACKED). `keep` отбирает записи (фильтр по вариантам):
-   * если ни одна не подошла, чисел за день нет.
-   */
-  values(day: number, keep: (p: Point) => boolean = () => true): Record<string, number> {
-    const v = sumValues(this.points(day).filter(keep));
-    if (this.habit.kind === 'time') {
-      const ms = this.ms.get(dayKey(day));
-      if (ms) v[TRACKED] = Math.round(ms / 60_000);
-    }
-    return v;
-  }
-
   /** Сегодня ещё не засчитан, но день не кончился — серию это не рвёт. */
   private pendingToday(day: number, s: DayStatus) {
     return day === this.today && !s.done;
@@ -146,22 +127,6 @@ export class HabitBook {
     return { done, due };
   }
 }
-
-/** Ключ встроенного параметра «минуты по занятию» у привычки по времени. */
-export const TRACKED = 'tracked';
-/** Параметры для графика: у привычки по занятию первым идут минуты из трекинга, дальше числа занятия и число записей. */
-export function chartParams(h: Habit, activities: Activity[]): Param[] {
-  const params = (h.activityId && activities.find((a) => a.id === h.activityId)?.params) || [];
-  return [
-    ...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []),
-    ...params.filter((p) => !p.options),
-    ...(h.kind === 'points' || params.length ? [{ id: COUNT, name: 'Записей' }] : []),
-  ];
-}
-
-/** Параметры занятия привычки (для вариантов и формы записи). */
-export const habitParams = (h: Habit, activities: Activity[]): Param[] =>
-  (h.activityId && activities.find((a) => a.id === h.activityId)?.params) || [];
 
 /** Активные привычки по порядку. */
 export const activeHabits = (habits: Habit[]) => habits.filter((h) => !h.archivedAt).sort((a, b) => a.order - b.order);

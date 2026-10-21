@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Activity, Habit, HabitMark } from '../db/schema';
+import type { Activity, Habit, HabitMark, Param } from '../db/schema';
 import { COUNT, describePoint, mainChoice, matches, migrateHabitParams, parseOptions, sumValues } from './points';
 import { parseBackup } from './backup';
 
@@ -32,12 +32,13 @@ describe('записи без времени', () => {
 
 describe('перенос старых параметров привычек', () => {
   const med: Activity = { id: 'med', parentId: null, name: 'Медитация', order: 3, updatedAt: 0 };
-  const habits: Habit[] = [
+  // старый формат: параметры у привычки, числа в отметке
+  const habits: (Habit & { params?: Param[] })[] = [
     { id: 'push', name: 'Анжуманя', icon: '💪', hue: 30, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0, params: [{ id: 'reps', name: 'Отжимания', unit: 'раз' }] },
     { id: 'm', name: 'Медитация', hue: 300, kind: 'time', activityId: 'med', goalMin: 5, order: 1, since: '2026-10-01', updatedAt: 0, params: [{ id: 'calm', name: 'Спокойствие' }] },
     { id: 'teeth', name: 'Зубы', hue: 100, kind: 'check', order: 2, since: '2026-10-01', updatedAt: 0 },
   ];
-  const marks: HabitMark[] = [
+  const marks: (HabitMark & { values?: Record<string, number> })[] = [
     { id: 'push:2026-10-20', habitId: 'push', day: '2026-10-20', done: true, values: { reps: 30 }, updatedAt: 0 },
     { id: 'push:2026-10-19', habitId: 'push', day: '2026-10-19', done: true, updatedAt: 0 },
     { id: 'm:2026-10-20', habitId: 'm', day: '2026-10-20', done: false, values: { calm: 7 }, updatedAt: 0 },
@@ -49,13 +50,13 @@ describe('перенос старых параметров привычек', ()
     const act = m.activities.find((a) => a.id === 'act-push')!;
     expect(act).toMatchObject({ parentId: null, name: 'Анжуманя', hue: 30, order: 4, timeless: true, params: [{ id: 'reps', name: 'Отжимания', unit: 'раз' }] });
     expect(m.habits.find((h) => h.id === 'push')).toMatchObject({ kind: 'points', activityId: 'act-push' });
-    expect(m.habits.find((h) => h.id === 'push')!.params).toBeUndefined();
+    expect(m.habits.find((h) => h.id === 'push')).not.toHaveProperty('params');
     expect(m.points.filter((x) => x.activityId === 'act-push')).toEqual([
       expect.objectContaining({ id: 'push:2026-10-20:0', values: { reps: 30 } }),
     ]);
     // отметка с числами больше не ручная галочка: день засчитывает запись
     expect(m.habitMarks.find((x) => x.id === 'push:2026-10-20')).toMatchObject({ done: false });
-    expect(m.habitMarks.find((x) => x.id === 'push:2026-10-20')!.values).toBeUndefined();
+    expect(m.habitMarks.find((x) => x.id === 'push:2026-10-20')).not.toHaveProperty('values');
   });
   it('у привычки по времени параметры уходят её занятию; привычки без параметров не трогаются', () => {
     const m = migrateHabitParams({ activities: [med], habits, habitMarks: marks }, 5);
