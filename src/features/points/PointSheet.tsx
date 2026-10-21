@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { Point } from '../../db/schema';
 import { deletePoint, newId, savePoint } from '../../db/commands';
 import { useData } from '../../db/store';
@@ -20,6 +20,19 @@ function atClock(base: number, s: string): number {
 // Внизу форма, заполненная прошлой записью: поменял что нужно — «＋ Запись». Лист после добавления
 // не закрывается, чтобы подряд вписать несколько подходов. Тап по записи в списке — правка.
 export function PointSheet({ activityId, day, onClose }: { activityId: string; day: number; onClose: () => void }) {
+  const { activities } = useData();
+  const activity = activities.find((a) => a.id === activityId);
+  if (!activity) return null;
+  return (
+    <Sheet title={`${activity.icon ?? ''} ${activity.name}`.trim()} onClose={onClose}>
+      {/* key: другое занятие или день — форма заново заполняется прошлой записью */}
+      <PointForm key={activityId + day} activityId={activityId} day={day} onDone={onClose} />
+    </Sheet>
+  );
+}
+
+/** Сама форма — и в листе, и на главном экране вместо полукруга (тогда `head` — кнопка выбора занятия). */
+export function PointForm({ activityId, day, onDone, head }: { activityId: string; day: number; onDone: () => void; head?: ReactNode }) {
   const { activities, points } = useData();
   const activity = activities.find((a) => a.id === activityId);
   const color = useMemo(() => activityColors(activities).get(activityId), [activities, activityId]);
@@ -64,70 +77,70 @@ export function PointSheet({ activityId, day, onClose }: { activityId: string; d
   const name = pathOf(activities, activityId).map((a) => a.name).join(' › ');
 
   return (
-    <Sheet title={`${activity.icon ?? ''} ${activity.name}`.trim()} onClose={onClose}>
-      <div className="form">
+<div className={'form' + (head ? ' point-inline' : '')}>
+      {head ?? (
         <p className="dim small center">
           {name !== activity.name && <>{name} · </>}
           {isToday ? 'сегодня' : new Date(day).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
+      )}
 
-        {list.length > 0 && (
-          <div className="set-list">
-            {list.map((p, i) => (
-              <div key={p.id} className={'set-row' + (edit?.id === p.id ? ' editing' : '')} onClick={() => startEdit(p)}>
-                <span className="set-n" style={{ color }}>{i + 1}</span>
-                <span className="set-text">{describePoint(p, params) || 'отметка'}</span>
-                <span className="dim small">{formatClock(p.at)}</span>
-                <button className="btn small" aria-label="Удалить запись"
-                  onClick={(e) => { e.stopPropagation(); if (edit?.id === p.id) stopEdit(); void deletePoint(p.id); }}>✕</button>
-              </div>
+      {list.length > 0 && (
+        <div className="set-list">
+          {list.map((p, i) => (
+            <div key={p.id} className={'set-row' + (edit?.id === p.id ? ' editing' : '')} onClick={() => startEdit(p)}>
+              <span className="set-n" style={{ color }}>{i + 1}</span>
+              <span className="set-text">{describePoint(p, params) || 'отметка'}</span>
+              <span className="dim small">{formatClock(p.at)}</span>
+              <button className="btn small" aria-label="Удалить запись"
+                onClick={(e) => { e.stopPropagation(); if (edit?.id === p.id) stopEdit(); void deletePoint(p.id); }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {params.map((q) => q.options?.length ? (
+        // вариант — одним тапом по чипу
+        <div key={q.id} className="field choice-field">
+          <span className="field-value">{q.name}</span>
+          <div className="chips">
+            {q.options.map((o) => (
+              <button key={o.id} aria-pressed={choice[q.id] === o.id} onClick={() => setChoice({ ...choice, [q.id]: o.id })}>{o.name}</button>
             ))}
           </div>
-        )}
-
-        {params.map((q) => q.options?.length ? (
-          // вариант — одним тапом по чипу
-          <div key={q.id} className="field choice-field">
-            <span className="field-value">{q.name}</span>
-            <div className="chips">
-              {q.options.map((o) => (
-                <button key={o.id} aria-pressed={choice[q.id] === o.id} onClick={() => setChoice({ ...choice, [q.id]: o.id })}>{o.name}</button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <label key={q.id} className="field">
-            <span className="field-value">{q.name}</span>
-            {/* inputMode=decimal — на iPhone цифровая клавиатура с запятой. Без autoFocus: числа уже стоят
-                от прошлой записи, клавиатура нужна, только если тапнуть по полю */}
-            <input inputMode="decimal" value={text[q.id]} placeholder="—" enterKeyHint="done"
-              onFocus={(e) => e.target.select()}
-              onChange={(e) => setText({ ...text, [q.id]: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-            {q.unit && <span className="dim">{q.unit}</span>}
-          </label>
-        ))}
-        {params.length === 0 && <p className="dim small center">У занятия нет параметров — запись просто отметит момент. Параметры задаются в «Ещё → Занятия».</p>}
-        {clock ? (
-          <label className="field">
-            <span className="field-value">Время</span>
-            <input type="time" value={clock} onChange={(e) => setClock(e.target.value)} />
-          </label>
-        ) : (
-          // за сегодня по умолчанию «сейчас»; тап — вписать другое время
-          <button className="field" onClick={() => setClock(formatClock(Date.now()))}>
-            <span className="field-value">Время</span>
-            <span className="dim">сейчас ›</span>
-          </button>
-        )}
-
-        <div className="btn-row">
-          <button className="btn primary" onClick={save}>{edit ? 'Сохранить' : '＋ Запись'}</button>
-          {edit
-            ? <button className="btn" onClick={stopEdit}>Отмена</button>
-            : <button className="btn" onClick={onClose}>Готово</button>}
         </div>
+      ) : (
+        <label key={q.id} className="field">
+          <span className="field-value">{q.name}</span>
+          {/* inputMode=decimal — на iPhone цифровая клавиатура с запятой. Без autoFocus: числа уже стоят
+              от прошлой записи, клавиатура нужна, только если тапнуть по полю */}
+          <input inputMode="decimal" value={text[q.id]} placeholder="—" enterKeyHint="done"
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => setText({ ...text, [q.id]: e.target.value })}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          {q.unit && <span className="dim">{q.unit}</span>}
+        </label>
+      ))}
+      {params.length === 0 && <p className="dim small center">У занятия нет параметров — запись просто отметит момент. Параметры задаются в «Ещё → Занятия».</p>}
+      {clock ? (
+        <label className="field">
+          <span className="field-value">Время</span>
+          <input type="time" value={clock} onChange={(e) => setClock(e.target.value)} />
+        </label>
+      ) : (
+        // за сегодня по умолчанию «сейчас»; тап — вписать другое время
+        <button className="field" onClick={() => setClock(formatClock(Date.now()))}>
+          <span className="field-value">Время</span>
+          <span className="dim">сейчас ›</span>
+        </button>
+      )}
+
+      <div className="btn-row">
+        <button className="btn primary" onClick={save}>{edit ? 'Сохранить' : '＋ Запись'}</button>
+        {edit
+          ? <button className="btn" onClick={stopEdit}>Отмена</button>
+          : <button className="btn" onClick={onDone}>Готово</button>}
       </div>
-    </Sheet>
+    </div>
   );
 }

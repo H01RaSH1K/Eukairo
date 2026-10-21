@@ -163,3 +163,8 @@
 .point-stats .chips-scroll { margin-bottom: 8px; }
 .point-stats .chips-scroll button { background: var(--control); }
 .day-points { max-height: none; }
+
+/* форма записи на главном экране вместо полукруга */
+.point-card .point-inline { gap: 8px; }
+.point-card .point-inline > .dial-activity { align-self: center; }
+.point-card .set-list { max-height: 96px; overflow-y: auto; }
