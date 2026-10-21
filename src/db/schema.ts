@@ -55,11 +55,20 @@ export interface Habit {
   updatedAt: number;
 }
 
-// Параметр привычки — число, которое вписываешь при отметке (по нему рисуется график).
+// Параметр привычки — то, что вписываешь при отметке. Обычно число (по нему рисуется график),
+// а с `options` — вариант из списка: «Хват: пальцы / кулаки / ладони». Варианты красят точки
+// на графике и позволяют оставить только сопоставимые дни.
 export interface HabitParam {
   id: string;
-  name: string;               // «Отжимания»
-  unit?: string;              // «раз», «мин», «км»
+  name: string;               // «Отжимания», «Хват»
+  unit?: string;              // «раз», «мин», «км»; у варианта нет
+  options?: HabitOption[];    // есть → параметр-вариант, нет → число
+}
+
+// Вариант храним по id, а не по тексту: переименовал «ладони» в «на ладонях» — история не потерялась.
+export interface HabitOption {
+  id: string;
+  name: string;
 }
 
 // Отметка привычки за день. id = `${habitId}:${day}` — одна отметка на день.
@@ -72,6 +81,7 @@ export interface HabitMark {
   day: string;                // 'ГГГГ-ММ-ДД' по местному времени
   done: boolean;
   values?: Record<string, number>; // id параметра → число (≈ Dictionary<string, double>)
+  choices?: Record<string, string>; // id параметра-варианта → id выбранного варианта
   updatedAt: number;
 }
 

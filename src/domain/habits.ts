@@ -1,5 +1,5 @@
 // Привычки: засчитан ли день, серии, процент. Чистые функции, про базу и React не знают.
-import type { Activity, Entry, Habit, HabitMark } from '../db/schema';
+import type { Activity, Entry, Habit, HabitMark, HabitOption, HabitParam } from '../db/schema';
 import { activityColors } from './colors';
 import { addLocalDays, startOfLocalDay, startOfNextLocalDay } from './time';
 import { subtreeIds } from './tree';
@@ -98,6 +98,11 @@ export class HabitBook {
     return v;
   }
 
+  /** Варианты, выбранные за день: id параметра → id варианта. */
+  choices(day: number): Record<string, string> {
+    return this.marks.get(dayKey(day))?.choices ?? {};
+  }
+
   /** Сегодня ещё не засчитан, но день не кончился — серию это не рвёт. */
   private pendingToday(day: number, s: DayStatus) {
     return day === this.today && !s.done;
@@ -145,8 +150,17 @@ export const TRACKED = 'tracked';
 
 /** Параметры для графика: у привычки по занятию первым идут минуты из трекинга. */
 export function chartParams(h: Habit): { id: string; name: string; unit?: string }[] {
-  return [...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []), ...(h.params ?? [])];
+  return [...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []), ...(h.params ?? []).filter((p) => !p.options)];
 }
+
+/** Параметры-варианты («Хват: пальцы / кулаки / ладони»): ими красят и фильтруют график. */
+export function choiceParams(h: Habit): (HabitParam & { options: HabitOption[] })[] {
+  return (h.params ?? []).filter((p): p is HabitParam & { options: HabitOption[] } => !!p.options?.length);
+}
+
+/** Цвет варианта по его месту в списке: контрастные между собой, не сливаются с фоном. */
+export const optionColor = (i: number) => OPTION_COLORS[i % OPTION_COLORS.length];
+const OPTION_COLORS = ['#56ccf2', '#f2c94c', '#ff8a65', '#9b8cff', '#6fcf97', '#f78fb3'];
 
 /** Активные привычки по порядку. */
 export const activeHabits = (habits: Habit[]) => habits.filter((h) => !h.archivedAt).sort((a, b) => a.order - b.order);
@@ -172,4 +186,20 @@ export function nextHabitHue(habits: Habit[]): number {
     if (next - h > gap) { gap = next - h; best = h + (next - h) / 2; }
   });
   return Math.round(best) % 360;
+}
+
+/**
+ * «пальцы, кулаки, ладони» → список вариантов. Старые id сохраняются: сначала по совпадению
+ * названия, потом по месту в списке (так переименование «ладони» → «на ладонях» не теряет историю).
+ */
+export function parseOptions(text: string, old: HabitOption[], makeId: () => string): HabitOption[] {
+  const names = [...new Set(text.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean))];
+  const used = new Set<string>();
+  const byName = names.map((n) => old.find((o) => o.name === n));
+  byName.forEach((o) => o && used.add(o.id));
+  return names.map((name, i) => {
+    let o = byName[i];
+    if (!o && old[i] && !used.has(old[i].id) && !names.includes(old[i].name)) { o = old[i]; used.add(o.id); }
+    return { id: o?.id ?? makeId(), name };
+  });
 }

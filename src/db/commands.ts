@@ -206,17 +206,20 @@ export function updateHabit(id: string, patch: HabitPatch) {
 }
 
 /**
- * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'), с числами параметров.
+ * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'), с числами и вариантами параметров.
  * Если отмечают день раньше начала привычки — начало сдвигается на него:
  * значит, привычка на самом деле началась раньше.
  */
-export function setHabitMark(habitId: string, day: string, done: boolean, values?: Record<string, number>) {
+export function setHabitMark(
+  habitId: string, day: string, done: boolean,
+  values?: Record<string, number>, choices?: Record<string, string>,
+) {
   return db.transaction('rw', db.habits, db.habitMarks, async () => {
     const now = Date.now();
     const id = `${habitId}:${day}`;
     // Без новых значений оставляем прежние: сняли и снова поставили галочку — числа не пропадут.
     const old = await db.habitMarks.get(id);
-    await db.habitMarks.put({ id, habitId, day, done, values: values ?? old?.values, updatedAt: now });
+    await db.habitMarks.put({ id, habitId, day, done, values: values ?? old?.values, choices: choices ?? old?.choices, updatedAt: now });
     const h = await db.habits.get(habitId);
     if (h && done && day < h.since) await db.habits.update(habitId, { since: day, updatedAt: now });
   });

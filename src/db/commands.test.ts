@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, type Entry } from './schema';
 import {
+  setHabitMark,
   addActivity, archiveActivity, closeExpiredTimer, deleteActivity, logEntry, moveActivity, reorderActivity,
   saveEntry, seedIfEmpty, startTimer, stopTimer,
 } from './commands';
@@ -126,5 +127,16 @@ describe('импорт бэкапа', () => {
     expect(r.entries).toBe(1); // e1 в бэкапе старее — остаётся наш
     expect((await db.entries.get('e1'))!.end).toBe(10 * MIN);
     expect(await db.entries.get('e2')).toBeDefined();
+  });
+});
+
+describe('отметки привычек', () => {
+  it('снятие и повторная отметка не теряют числа и варианты', async () => {
+    await db.habits.put({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0 });
+    await setHabitMark('h', '2026-10-20', true, { reps: 30 }, { grip: 'b' });
+    await setHabitMark('h', '2026-10-20', false);
+    await setHabitMark('h', '2026-10-20', true);
+    const m = (await db.habitMarks.get('h:2026-10-20'))!;
+    expect(m).toMatchObject({ done: true, values: { reps: 30 }, choices: { grip: 'b' } });
   });
 });

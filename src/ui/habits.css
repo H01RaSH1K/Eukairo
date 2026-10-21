@@ -126,3 +126,14 @@
 /* график не выше 3/4 ширины — ставим его посередине оставшегося места */
 .chart-full .habit-chart.full, .chart-full .full-stats { flex: 1; justify-content: center; }
 .bars.scrub { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+
+/* параметр-вариант: в редакторе строка вариантов, в отметке — чипы */
+.param-edit { display: flex; flex-direction: column; gap: 6px; }
+.options-field { margin-left: 16px; width: calc(100% - 16px); padding: 8px 12px; }
+.options-field input { text-align: left; font-size: 15px; }
+.choice-field { flex-direction: column; align-items: stretch; gap: 8px; }
+.choice-field .chips { flex-wrap: wrap; }
+.variant-chips { margin: 2px 0 6px; align-items: center; }
+.variant-chips button { padding: 4px 10px; font-size: 13px; }
+.variant-chips .variant-by { font-weight: 600; }
+.variant-name { margin-right: 2px; }

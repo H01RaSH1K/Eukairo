@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import { setHabitMark } from '../../db/commands';
 import { useData } from '../../db/store';
-import { HabitBook, WEEKDAYS, chartParams, dayKey, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
+import { HabitBook, WEEKDAYS, chartParams, choiceParams, dayKey, optionColor, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
 import { addLocalDays, dayStarts, periodRange, shiftPeriod, startOfLocalDay } from '../../domain/time';
 import { Sheet } from '../../ui/Sheet';
 import { ChartKindSwitch, LineChart, scrub, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
@@ -25,6 +25,8 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const [chart, setChart] = useState<ChartKind>(() => savedChart('habit'));
   const [pick, setPick] = useState<number | null>(null);  // день, выбранный тапом по графику
   const [full, setFull] = useState(false);                // график на весь экран
+  const [by, setBy] = useState<string | null>(null);      // каким вариантом красить («Хват»)
+  const [only, setOnly] = useState<string | null>(null);  // оставить дни только с этим вариантом
   const pickChart = (k: ChartKind) => { setChart(k); saveChart('habit', k); };
   if (!habit) return null; // удалили, пока карточка была открыта
   const book = new HabitBook(habit, activities, entries, habitMarks, now);
@@ -37,6 +39,16 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const params = chartParams(habit);
   const pid = params.find((p) => p.id === param)?.id ?? params[0]?.id;
 
+  // Варианты: точки красятся по выбранному варианту дня, а тап по варианту оставляет только его дни —
+  // так «на кулаках» сравнивается с «на кулаках», а не с «на пальцах».
+  const cps = choiceParams(habit);
+  const cp = cps.find((p) => p.id === by) ?? cps[0];
+  const choiceAt = (i: number) => (cp ? book.choices(days[i])[cp.id] : undefined);
+  const optIndex = (id: string | undefined) => cp?.options.findIndex((o) => o.id === id) ?? -1;
+  const keep = (i: number) => !only || choiceAt(i) === only;
+  const tint = (i: number) => (optIndex(choiceAt(i)) >= 0 ? optionColor(optIndex(choiceAt(i))) : 'var(--text-dim)');
+  const colored = !!cp && !only; // при фильтре по одному варианту красить нечем — все точки одного цвета
+
   const tapDay = (d: number) => {
     if (d > today) return;
     const s = book.status(d), k = dayKey(d);
@@ -48,7 +60,7 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   };
 
   // Значения выбранного параметра по дням месяца (null — не вписано).
-  const values = days.map((d) => (pid ? book.values(d)[pid] ?? null : null));
+  const values = days.map((d, i) => (pid && keep(i) ? book.values(d)[pid] ?? null : null));
   const got = values.filter((v): v is number => v !== null);
   const max = Math.max(1, ...got);
   const unit = params.find((p) => p.id === pid)?.unit;
@@ -60,7 +72,11 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
     setShown(next);
   };
   const lineColor = (i: number) => (i === 0 ? color : SERIES_COLORS[(i - 1) % SERIES_COLORS.length]);
-  const series = params.map((p, i) => ({ id: p.id, color: lineColor(i), values: days.map((d) => book.values(d)[p.id] ?? null) }))
+  const series = params.map((p, i) => ({
+    id: p.id, color: lineColor(i),
+    values: days.map((d, k) => (keep(k) ? book.values(d)[p.id] ?? null : null)),
+    pointColors: colored ? days.map((_, k) => tint(k)) : undefined,
+  }))
     .filter((s) => on.has(s.id));
   const sameUnit = new Set(series.map((s) => params.find((p) => p.id === s.id)?.unit ?? '')).size <= 1;
   const W = 300, H = 70, bw = W / days.length;
@@ -78,6 +94,10 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
             const p = params.find((q) => q.id === x.id)!;
             const v = x.values[pick];
             return <span key={x.id}> · <span className="dot" style={{ background: x.color }} /> {p.name} {v === null ? '—' : `${round(v)}${p.unit ? ' ' + p.unit : ''}`}</span>;
+          })}
+          {cps.map((c) => {
+            const o = c.options.find((q) => q.id === book.choices(days[pick])[c.id]);
+            return o && <span key={c.id}> · {c.name.toLowerCase()}: {o.name}</span>;
           })}
         </div>
       );
@@ -109,11 +129,25 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
         <ChartKindSwitch value={chart} onChange={pickChart} />
         {!isFull && <ExpandButton onClick={() => setFull(true)} />}
       </div>
+      {cp && (
+        <div className="chips variant-chips">
+          {/* несколько параметров-вариантов — тап по названию переключает, каким красить */}
+          {cps.length > 1 && cps.map((c) => (
+            <button key={c.id} className="variant-by" aria-pressed={c.id === cp.id} onClick={() => { setBy(c.id); setOnly(null); }}>{c.name}</button>
+          ))}
+          {cps.length === 1 && <span className="dim small variant-name">{cp.name}:</span>}
+          {cp.options.map((o, i) => (
+            <button key={o.id} aria-pressed={only === o.id} onClick={() => setOnly(only === o.id ? null : o.id)}>
+              <span className="dot" style={{ background: optionColor(i) }} /> {o.name}
+            </button>
+          ))}
+        </div>
+      )}
       <svg viewBox={`0 0 ${W} ${h + 14}`} className="bars scrub" style={isFull ? { height: 'auto' } : undefined}
         {...scrub(days.length, (f) => Math.min(lastPast, Math.floor(f * days.length)), pick, setPick)}>
         <line x1="0" x2={W} y1={h} y2={h} stroke="var(--line)" />
         {chart === 'bars' && values.map((v, i) => v !== null && (
-          <rect key={i} x={i * bw + 1} y={h - (v / max) * h} width={bw - 2} height={Math.max(1, (v / max) * h)} rx="1.5" fill={color}
+          <rect key={i} x={i * bw + 1} y={h - (v / max) * h} width={bw - 2} height={Math.max(1, (v / max) * h)} rx="1.5" fill={colored ? tint(i) : color}
             opacity={pick === null || pick === i ? 1 : 0.35} />
         ))}
         {chart === 'line' && <LineChart series={series} bw={bw} h={h} scale={sameUnit ? 'shared' : 'own'} picked={pick} />}

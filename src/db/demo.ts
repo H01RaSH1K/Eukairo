@@ -127,7 +127,11 @@ function makeDemoEntries(now: number): Entry[] {
 const demoHabits: Habit[] = [
   { id: 'h-teeth', name: 'Почистить зубы вечером', icon: '🪥', hue: 150, kind: 'check' },
   { id: 'h-dishes', name: 'Помыть посуду', icon: '🍽️', hue: 195, kind: 'check' },
-  { id: 'h-push', name: 'Анжуманя', icon: '💪', hue: 30, kind: 'check', params: [{ id: 'reps', name: 'Отжимания', unit: 'раз' }, { id: 'sets', name: 'Подходы' }] },
+  { id: 'h-push', name: 'Анжуманя', icon: '💪', hue: 30, kind: 'check', params: [
+    { id: 'reps', name: 'Отжимания', unit: 'раз' }, { id: 'sets', name: 'Подходы' },
+    { id: 'grip', name: 'Хват', options: [{ id: 'palm', name: 'ладони' }, { id: 'fist', name: 'кулаки' }, { id: 'fing', name: 'пальцы' }] },
+    { id: 'legs', name: 'Ноги', options: [{ id: 'floor', name: 'пол' }, { id: 'bench', name: 'скамья' }, { id: 'high', name: 'высоко' }] },
+  ] },
   { id: 'h-med', name: 'Медитация', icon: '🧘', hue: 305, kind: 'time', activityId: 'med', goalMin: 5 },
   { id: 'h-bar', name: 'Турнек', icon: '🏋️', hue: 55, kind: 'check', weekdays: [0, 2, 4], params: [{ id: 'pull', name: 'Подтягивания', unit: 'раз' }] },
   { id: 'h-tok', name: 'Антиток', icon: '📵', hue: 330, kind: 'quit' },
@@ -137,15 +141,20 @@ function makeDemoMarks(now: number): HabitMark[] {
   const rand = rng(7);
   const marks: HabitMark[] = [];
   const today = startOfLocalDay(now);
-  const mark = (habitId: string, day: number, values?: Record<string, number>) =>
-    marks.push({ id: `${habitId}:${dayKey(day)}`, habitId, day: dayKey(day), done: true, values, updatedAt: now });
+  const mark = (habitId: string, day: number, values?: Record<string, number>, choices?: Record<string, string>) =>
+    marks.push({ id: `${habitId}:${dayKey(day)}`, habitId, day: dayKey(day), done: true, values, choices, updatedAt: now });
   // Сегодняшний день оставляем наполовину отмеченным — чтобы было что потыкать.
   for (let d = -40; d <= 0; d++) {
     const day = addLocalDays(today, d), w = weekdayOf(day), t = d === 0;
     if (!t && rand() < 0.9) mark('h-teeth', day);
     if ((t || rand() < 0.75)) mark('h-dishes', day);
     // отжиманий понемногу больше: прогресс видно на графике
-    if (rand() < (t ? 0 : 0.8)) mark('h-push', day, { reps: Math.round(20 + (d + 40) * 0.6 + rand() * 8), sets: 2 + Math.round(rand() * 2) });
+    // хват меняется, и на пальцах выходит заметно меньше — для этого и нужен фильтр по варианту
+    if (rand() < (t ? 0 : 0.8)) {
+      const grip = ['palm', 'fist', 'fing'][Math.floor(rand() * 3)], legs = rand() < 0.7 ? 'floor' : rand() < 0.6 ? 'bench' : 'high';
+      const k = { palm: 1, fist: 0.8, fing: 0.45 }[grip]! * (legs === 'floor' ? 1 : legs === 'bench' ? 0.85 : 0.7);
+      mark('h-push', day, { reps: Math.round((20 + (d + 40) * 0.6 + rand() * 8) * k), sets: 2 + Math.round(rand() * 2) }, { grip, legs });
+    }
     if ([0, 2, 4].includes(w) && !t && rand() < 0.85) mark('h-bar', day, { pull: Math.round(5 + (d + 40) * 0.12 + rand() * 3) });
     if (!t && rand() < 0.12) mark('h-tok', day); // срыв
   }

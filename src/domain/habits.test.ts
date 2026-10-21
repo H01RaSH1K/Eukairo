@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, Entry, Habit, HabitMark } from '../db/schema';
-import { HabitBook, TRACKED, dayKey, dayStartOf, msByDay, scheduleText } from './habits';
+import { HabitBook, TRACKED, chartParams, choiceParams, dayKey, dayStartOf, msByDay, parseOptions, scheduleText } from './habits';
 import { addLocalDays } from './time';
 
 const MIN = 60_000;
@@ -62,5 +62,31 @@ describe('серии', () => {
   it('процент — только по прошедшим дням по расписанию', () => {
     const r = book({ since: dayKey(day(-3)) }, [mark(-1), mark(-3)]).rate(day(-10), day(1));
     expect(r).toEqual({ done: 2, due: 3 });
+  });
+});
+
+describe('параметры-варианты', () => {
+  const grip = { id: 'grip', name: 'Хват', options: [{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'кулаки' }] };
+  const h = habit({ params: [{ id: 'reps', name: 'Отжимания' }, grip] });
+
+  it('на график идут только числа, варианты — отдельно', () => {
+    expect(chartParams(h).map((p) => p.id)).toEqual(['reps']);
+    expect(choiceParams(h).map((p) => p.id)).toEqual(['grip']);
+  });
+  it('вариант дня читается из отметки', () => {
+    const m = { ...mark(-1, true, { reps: 30 }), choices: { grip: 'b' } };
+    const b = book(h, [m]);
+    expect(b.choices(day(-1))).toEqual({ grip: 'b' });
+    expect(b.choices(day(-2))).toEqual({});
+  });
+  it('разбор строки сохраняет id: по названию, потом по месту', () => {
+    let n = 0;
+    const make = () => 'new' + n++;
+    expect(parseOptions('кулаки, пальцы, ладони', grip.options, make)).toEqual([
+      { id: 'b', name: 'кулаки' }, { id: 'a', name: 'пальцы' }, { id: 'new0', name: 'ладони' },
+    ]);
+    // переименовали «кулаки» → «на кулаках»: id тот же, история не теряется
+    expect(parseOptions('пальцы, на кулаках', grip.options, make)).toEqual([{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'на кулаках' }]);
+    expect(parseOptions(' , ,', grip.options, make)).toEqual([]);
   });
 });
