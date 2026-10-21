@@ -1,0 +1,58 @@
+import { describe, expect, it } from 'vitest';
+import { cutPieces, stitch } from './pieces';
+import { area, type Pt } from './voronoi';
+import { leadPath } from './patterns';
+
+// Сетка n × m квадратов 10 × 10, по строкам.
+const grid = (n: number, m: number) => Array.from({ length: n * m }, (_, i): Pt[] => {
+  const x = (i % n) * 10, y = Math.floor(i / n) * 10;
+  return [[x, y], [x + 10, y], [x + 10, y + 10], [x, y + 10]];
+});
+const own = (key: string) => ({ entryId: key, key, color: key });
+const sumBy = (ps: ReturnType<typeof cutPieces>, key: string) => ps.filter((p) => p.owner?.key === key).reduce((s, p) => s + area(p.poly), 0);
+
+describe('cutPieces', () => {
+  it('площадь записи = её время, кусок прилегает к своим стёклам', () => {
+    const cells = grid(4, 1);
+    const whole = [own('a'), null, null, null];
+    const ps = cutPieces(cells, whole, [{ owner: own('a'), frac: 0.5, anchor: 1 }]);
+    expect(sumBy(ps, 'a')).toBeCloseTo(150, 3);
+    const piece = ps.find((p) => p.owner && p.cell === 1)!;
+    // кусок со стороны стекла 0: левая половина стекла 1
+    expect(Math.max(...piece.poly.map((p) => p[0]))).toBeCloseTo(15, 3);
+    expect(ps.reduce((s, p) => s + area(p.poly), 0)).toBeCloseTo(400, 3); // без дыр и наложений
+  });
+
+  it('остаток берёт объедок, если влезает', () => {
+    const cells = grid(2, 1);
+    const ps = cutPieces(cells, [null, null], [{ owner: own('a'), frac: 0.6, anchor: 0 }, { owner: own('b'), frac: 0.3, anchor: 0 }]);
+    expect(ps.filter((p) => p.owner).every((p) => p.cell === 0)).toBe(true);
+    expect(sumBy(ps, 'b')).toBeCloseTo(30, 3);
+  });
+
+  it('свежих стёкол нет — остаток собирается из нескольких объедков', () => {
+    // 3 стекла, 3 записи по 40 минут, потом ещё одна на 40: 2 ч = площадь 2 стёкол
+    const cells = grid(3, 1);
+    const cuts = ['a', 'b', 'c', 'd'].map((k, i) => ({ owner: own(k), frac: 2 / 3, anchor: Math.min(i, 2) }));
+    const ps = cutPieces(cells, [null, null, null], cuts);
+    for (const k of ['a', 'b', 'c', 'd']) expect(sumBy(ps, k)).toBeCloseTo(200 / 3, 2);
+    expect(ps.filter((p) => p.owner?.key === 'd').length).toBeGreaterThan(1);
+  });
+
+  it('прежние куски не двигаются от новой записи', () => {
+    const cells = grid(4, 2);
+    const first = [{ owner: own('a'), frac: 0.4, anchor: 2 }];
+    const a1 = cutPieces(cells, cells.map(() => null), first).find((p) => p.owner)!;
+    const a2 = cutPieces(cells, cells.map(() => null), [...first, { owner: own('b'), frac: 0.5, anchor: 3 }]).find((p) => p.owner?.key === 'a')!;
+    expect(a2.poly).toEqual(a1.poly);
+  });
+
+  it('шов между стеклом и куском одной серии тонкий, а не свинец', () => {
+    const cells = grid(2, 2);
+    const ps = cutPieces(cells, [own('a'), null, null, null], [{ owner: own('a'), frac: 0.5, anchor: 1 }]);
+    const extra = ps.filter((p) => p.poly !== cells[p.cell]).flatMap((p) => p.poly);
+    const polys = stitch(ps.map((p) => p.poly), extra);
+    const { seam } = leadPath(polys, ps.map((p) => p.owner?.key ?? null));
+    expect(seam.split('M').length - 1).toBe(1); // одно общее ребро x = 10, y 0…10
+  });
+});

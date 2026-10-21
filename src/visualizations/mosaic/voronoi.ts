@@ -21,7 +21,11 @@ function rng(seed: number) {
 function clipHalf(poly: Pt[], a: Pt, b: Pt, wa = 0, wb = 0): Pt[] {
   const nx = b[0] - a[0];
   const ny = b[1] - a[1];
-  const c = (nx * (a[0] + b[0])) / 2 + (ny * (a[1] + b[1])) / 2 - (wb - wa) / 2;
+  return clipBy(poly, nx, ny, (nx * (a[0] + b[0])) / 2 + (ny * (a[1] + b[1])) / 2 - (wb - wa) / 2);
+}
+
+/** Оставляет часть многоугольника, где x·nx + y·ny ≤ c (полуплоскость). */
+export function clipBy(poly: Pt[], nx: number, ny: number, c: number): Pt[] {
   const side = (p: Pt) => p[0] * nx + p[1] * ny - c; // ≤ 0 — наша сторона
   const out: Pt[] = [];
   for (let i = 0; i < poly.length; i++) {

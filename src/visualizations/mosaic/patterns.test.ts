@@ -65,13 +65,15 @@ describe('seedFor', () => {
 });
 
 describe('leadPath', () => {
-  it('убирает линию между часами одной записи', () => {
+  it('линия между часами одной записи становится тонким швом', () => {
     const { cells } = getPattern('grid', 1, 0, 4 / 6); // сетка 4 × 6
-    const none = leadPath(cells, Array(24).fill(null)).split('M').length;
+    const none = leadPath(cells, Array(24).fill(null));
     const owner = Array(24).fill(null);
     owner[0] = owner[1] = 'e1'; // 0:00 и 1:00 — соседи в сетке
-    const merged = leadPath(cells, owner).split('M').length;
-    expect(none - merged).toBe(1); // общее ребро больше не рисуется
+    const merged = leadPath(cells, owner);
+    expect(none.lead.split('M').length - merged.lead.split('M').length).toBe(1); // общее ребро — не свинец
+    expect(none.seam).toBe('');
+    expect(merged.seam.split('M').length - 1).toBe(1); // а шов
   });
 });
 

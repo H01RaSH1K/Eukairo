@@ -354,10 +354,11 @@ export function seedFor(from: number): number {
 
 /**
  * Свинцовые линии витража: все рёбра, кроме общих рёбер у сегментов
- * одной и той же записи. Так несколько часов одной записи читаются одной фигурой.
- * Возвращает SVG-путь ("M x y L x y …").
+ * одной и той же серии — те идут тонким швом (`seam`). Так несколько часов
+ * одной записи читаются одной фигурой, но сегменты в ней видны.
+ * Возвращает SVG-пути ("M x y L x y …").
  */
-export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
+export function leadPath(cells: Pt[][], owner: (string | null)[]): { lead: string; seam: string } {
   // Ребро → какие сегменты его используют. Ключ — концы, округлённые и упорядоченные,
   // так что ребро соседа (в обратном направлении) даёт тот же ключ (≈ Dictionary<string, List<int>>).
   const r = (v: number) => Math.round(v * 50);
@@ -372,6 +373,7 @@ export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
   }));
 
   const parts: string[] = [];
+  const seams: string[] = [];
   const drawn = new Set<string>();
   cells.forEach((poly) => poly.forEach((p, k) => {
     const q = poly[(k + 1) % poly.length];
@@ -380,9 +382,9 @@ export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
     drawn.add(key);
     const u = users.get(key)!;
     const merged = u.length === 2 && owner[u[0]] !== null && owner[u[0]] === owner[u[1]];
-    if (!merged) parts.push(`M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
+    (merged ? seams : parts).push(`M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
   }));
-  return parts.join('');
+  return { lead: parts.join(''), seam: seams.join('') };
 }
 
 /**

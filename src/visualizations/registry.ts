@@ -39,20 +39,6 @@ const growth: SettingDef = {
   showIf: { id: 'fill', equals: ['spots'] },
 };
 
-const count: SettingDef = {
-  id: 'count', kind: 'choice', title: 'Подсчёт часов', default: 'exact',
-  options: [
-    { id: 'exact', title: 'Точно', hint: 'Цветных стёкол столько, сколько набрано часов: минуты не теряются' },
-    { id: 'threshold', title: 'По порогу', hint: 'Стекло часа — записи, занявшей в нём не меньше порога' },
-  ],
-};
-
-const threshold: SettingDef = {
-  id: 'threshold', kind: 'range', title: 'Час закрашивается от', min: 10, max: 50, step: 5, default: 30, unit: 'мин',
-  hint: 'Сколько минут записи нужно, чтобы стекло часа стало её цвета',
-  showIf: { id: 'count', equals: ['threshold'] },
-};
-
 const lead: SettingDef = {
   id: 'lead', kind: 'choice', title: 'Свинцовые линии', default: 'normal',
   options: [{ id: 'thin', title: 'Тонкие' }, { id: 'normal', title: 'Обычные' }, { id: 'bold', title: 'Толстые' }],
@@ -84,19 +70,19 @@ const freeFills = ['spots', 'flow', 'jar'];
 export const visualizations: VisualizationPlugin[] = [
   {
     id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
-    settings: [fill(allFills), spots, growth, cut, wobble, spread, count, threshold, lead], load: mosaic('glass'),
+    settings: [fill(allFills), spots, growth, cut, wobble, spread, lead], load: mosaic('glass'),
   },
   {
     id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
-    settings: [fill(freeFills), spots, growth, count, threshold, lead], load: mosaic('rose'),
+    settings: [fill(freeFills), spots, growth, lead], load: mosaic('rose'),
   },
   {
     id: 'mosaic-tri', title: 'Треугольники', description: 'Час — треугольник, пары складываются в ромбы',
-    settings: [fill(freeFills), spots, growth, count, threshold, lead], load: mosaic('tri'),
+    settings: [fill(freeFills), spots, growth, lead], load: mosaic('tri'),
   },
   {
     id: 'mosaic-grid', title: 'Сетка', description: 'Ровные клетки — проще всего читать',
-    settings: [fill(allFills), spots, growth, count, threshold, lead], load: mosaic('grid'),
+    settings: [fill(allFills), spots, growth, lead], load: mosaic('grid'),
   },
 ];
 

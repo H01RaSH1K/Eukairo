@@ -29,35 +29,29 @@ export function runKeys(spans: Span[]): Map<string, string> {
   return out;
 }
 
-/** «По порогу»: час достаётся записи, занявшей больше всего времени в нём, если хотя бы `minMs`. */
-export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = HOUR_MS / 2, keys?: Map<string, string>): (HourOwner | null)[] {
-  return Array.from({ length: count }, (_, h) => {
-    const a = dayStart + h * HOUR_MS;
-    const b = a + HOUR_MS;
-    let best: Span | null = null;
-    let bestMs = 0;
-    for (const s of spans) {
-      const ms = Math.min(s.end, b) - Math.max(s.start, a);
-      if (ms > bestMs) { bestMs = ms; best = s; }
-    }
-    return best && bestMs >= minMs ? ownerOf(best, keys) : null;
-  });
-}
-
 const ownerOf = (s: Span, keys?: Map<string, string>): HourOwner =>
   ({ entryId: s.entryId, key: keys?.get(s.entryId) ?? s.entryId, color: s.color, need: s.need });
 
 /**
- * «Точно»: минуты не теряются. Цветных стёкол в дне — столько, сколько набрано часов
- * (округлённо), и делятся они между сериями по их времени: сначала целые часы,
- * остаток — тем, у кого дробная часть больше (метод наибольшего остатка).
- * Стекло серия получает там, где у неё больше всего минут; если эти часы уже заняты
- * соседями — ближайший свободный час рядом с ней.
+ * Остаток серии меньше часа: кусок стекла площадью `frac` (0.1…1) его площади.
+ * `hour` — час дня, рядом с которым кусок лучше всего встанет.
  */
-export function exactOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>): (HourOwner | null)[] {
+export interface Rest { owner: HourOwner; frac: number; hour: number }
+
+/** Самый маленький кусок по умолчанию — 10% стекла (запись короче 6 минут рисуется как 6 минут). */
+export const MIN_FRAC = 0.1;
+
+/**
+ * Раскладка дня. Каждая серия получает столько целых стёкол, сколько в ней полных
+ * часов, — там, где у неё больше всего минут; если эти часы уже заняты соседями,
+ * ближайший свободный час рядом с ней. Остаток (например, полчаса) отдаём как `Rest`:
+ * его вырежут куском из стекла (см. pieces.ts). У нужд остаток не нужен — из дня
+ * вынимаются только их целые часы. `minFrac` — самый маленький кусок (доля стекла).
+ */
+export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, minFrac = MIN_FRAC): { owners: (HourOwner | null)[]; rests: Rest[] } {
   const H = HOUR_MS;
   const dayEnd = dayStart + count * H;
-  interface Run { first: HourOwner; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
+  interface Run { first: HourOwner; start: number; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
   const runs = new Map<string, Run>(); // ≈ Dictionary<string, Run>, порядок вставки сохраняется
   let lastEnd = dayStart;
   for (const s of spans) {
@@ -67,7 +61,7 @@ export function exactOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     const o = ownerOf(s, keys);
     let run = runs.get(o.key);
     if (!run) {
-      run = { first: o, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
+      run = { first: o, start: a, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
       runs.set(o.key, run);
     }
     run.total += b - a;
@@ -80,13 +74,8 @@ export function exactOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     }
   }
   const list = [...runs.values()];
-  const sumMs = list.reduce((s, r) => s + r.total, 0);
-  const n = Math.min(count, Math.round(sumMs / H));
-  // Целые часы каждой серии + по одному лишнему тем, у кого остаток больше.
   const quota = list.map((r) => Math.floor(r.total / H));
-  let rest = n - quota.reduce((s, q) => s + q, 0);
-  const byRemainder = list.map((_, i) => i).sort((i, j) => (list[j].total % H) - (list[i].total % H) || i - j);
-  for (const i of byRemainder) if (rest-- > 0) quota[i]++;
+  const mine = list.map(() => new Set<number>()); // часы, отданные серии целиком
 
   const owners: (HourOwner | null)[] = new Array(count).fill(null);
   // Пары (серия, час) по убыванию минут: час достаётся тому, кто занял его плотнее.
@@ -96,6 +85,7 @@ export function exactOwners(spans: Span[], dayStart: number, count = 24, keys?: 
   for (const [i, h] of pairs) {
     if (owners[h] || quota[i] <= 0) continue;
     owners[h] = list[i].best[h];
+    mine[i].add(h);
     quota[i]--;
   }
   // Кому не хватило своих часов — ближайшие свободные (но не в будущем, пока есть другие).
@@ -106,9 +96,21 @@ export function exactOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     const past = (h: number) => (dayStart + h * H < lastEnd ? 0 : 1);
     const free = owners.map((o, h) => (o ? -1 : h)).filter((h) => h >= 0);
     free.sort((x, y) => past(x) - past(y) || dist(x) - dist(y) || x - y);
-    for (const h of free.slice(0, quota[i])) owners[h] = r.first;
+    for (const h of free.slice(0, quota[i])) { owners[h] = r.first; mine[i].add(h); }
   });
-  return owners;
+
+  // Остатки — по времени начала серий. Час куска — тот, где у серии больше всего
+  // минут среди часов, не отданных ей целиком.
+  const rests: Rest[] = [];
+  list.map((r, i) => ({ r, i })).sort((x, y) => x.r.start - y.r.start).forEach(({ r, i }) => {
+    const rest = r.total % H;
+    if (rest <= 0 || r.first.need) return;
+    let hour = -1;
+    r.ms.forEach((ms, h) => { if (ms > 0 && !mine[i].has(h) && (hour < 0 || ms > r.ms[hour])) hour = h; });
+    if (hour < 0) hour = r.ms.indexOf(Math.max(...r.ms));
+    rests.push({ owner: r.best[hour] ?? r.first, frac: Math.max(minFrac, rest / H), hour });
+  });
+  return { owners, rests };
 }
 
 /**

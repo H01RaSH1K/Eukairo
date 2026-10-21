@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { exactOwners, hourOwners, runKeys, spotPlaces } from './layout';
+import { runKeys, spotPlaces, wholeOwners } from './layout';
 
 const H = 3_600_000;
 const span = (id: string, start: number, end: number, activityId = id) => ({ entryId: id, activityId, color: activityId, start, end });
 const ids = (o: ({ entryId: string } | null)[]) => o.map((x) => x?.entryId ?? null);
-
-describe('hourOwners', () => {
-  it('час достаётся записи, занявшей большую часть, и только если ≥ 30 мин', () => {
-    const o = hourOwners([span('a', 0, 0.4 * H), span('b', 0.4 * H, 1.3 * H)], 0, 3);
-    expect(o.map((x) => x?.entryId ?? null)).toEqual(['b', null, null]);
-  });
-});
 
 describe('spotPlaces', () => {
   it('каждому занятому часу — своё стекло, пятен несколько', () => {
@@ -44,35 +37,26 @@ describe('spotPlaces «неровно»', () => {
   });
 });
 
-describe('hourOwners и нужды', () => {
-  it('у часа нужды хозяин помечен need — мозаика его вынимает', () => {
-    const o = hourOwners([{ ...span('s', 0, 8 * H), need: true }, span('w', 8 * H, 10 * H)], 0, 24);
-    expect(o.filter((x) => !x?.need)).toHaveLength(16);
-  });
-});
-
-describe('exactOwners', () => {
-  it('минуты не теряются: запись через границу часа всё равно получает стекло', () => {
-    // 9:40–10:20 — по порогу не досталось бы ни одного часа
-    expect(ids(hourOwners([span('a', 9.67 * H, 10.33 * H)], 0, 24)).filter(Boolean)).toHaveLength(0);
-    expect(ids(exactOwners([span('a', 9.67 * H, 10.33 * H)], 0, 24)).filter(Boolean)).toEqual(['a']);
+describe('wholeOwners', () => {
+  it('целые часы — целые стёкла, остаток — кусок со своей долей', () => {
+    const { owners, rests } = wholeOwners([span('a', 9 * H, 11.5 * H), span('b', 11.5 * H, 13 * H)], 0, 24);
+    // b занимает 12-й час целиком — он и достаётся b; половинки a и b — обе про 11-й час
+    expect(ids(owners).slice(9, 14)).toEqual(['a', 'a', null, 'b', null]);
+    expect(rests.map((r) => [r.owner.entryId, r.frac, r.hour])).toEqual([['a', 0.5, 11], ['b', 0.5, 11]]);
   });
 
-  it('три дела по 20 минут = одно стекло', () => {
-    const o = exactOwners([span('a', 1 * H, 1.33 * H), span('b', 3 * H, 3.33 * H), span('c', 5 * H, 5.34 * H)], 0, 24);
-    expect(ids(o).filter(Boolean)).toEqual(['c']);
+  it('запись короче часа — только кусок, не меньше 10%', () => {
+    const { owners, rests } = wholeOwners([span('a', 9.67 * H, 10.33 * H), span('b', 3 * H, 3.05 * H)], 0, 24);
+    expect(ids(owners).filter(Boolean)).toHaveLength(0);
+    expect(rests.map((r) => r.owner.entryId)).toEqual(['b', 'a']); // по времени
+    expect(rests[0].frac).toBe(0.1);
+    expect(rests[1].frac).toBeCloseTo(0.66, 2);
   });
 
-  it('цветных стёкол = набранных часов, и каждая запись стоит в своих часах', () => {
-    const o = exactOwners([span('a', 9 * H, 11.5 * H), span('b', 11.5 * H, 13 * H)], 0, 24);
-    expect(ids(o).slice(9, 14)).toEqual(['a', 'a', 'a', 'b', null]);
-  });
-
-  it('не хватило своих часов — берёт соседний свободный, а не будущий', () => {
-    // a и c заняли часы 10 и 11; d (0.7 ч) почти весь в 12-м — туда и встаёт
-    const o2 = exactOwners([span('a', 10 * H, 10.9 * H), span('b', 10.9 * H, 11 * H), span('c', 11 * H, 11.9 * H), span('d', 11.9 * H, 12.6 * H)], 0, 24);
-    expect(ids(o2).filter(Boolean)).toHaveLength(3);
-    expect(o2.findIndex((x) => x?.entryId === 'd')).toBe(12);
+  it('у нужды вынимаются только целые часы, остаток не рисуется', () => {
+    const { owners, rests } = wholeOwners([{ ...span('s', 0, 8.5 * H), need: true }, span('w', 9 * H, 10 * H)], 0, 24);
+    expect(owners.filter((x) => x?.need)).toHaveLength(8);
+    expect(rests).toHaveLength(0);
   });
 });
 
@@ -82,10 +66,12 @@ describe('runKeys', () => {
     expect([k.get('a'), k.get('b'), k.get('c'), k.get('d')]).toEqual(['a', 'a', 'c', 'd']);
   });
 
-  it('серия сливается в одну фигуру и в «точном» подсчёте', () => {
+  it('серия считается вместе: 0.6 + 1.3 часа = одно целое стекло и кусок 0.9', () => {
     const spans = [span('a', 9 * H, 9.6 * H, 'w'), span('b', 9.7 * H, 11 * H, 'w')];
-    const o = exactOwners(spans, 0, 24, runKeys(spans));
-    expect(o.slice(9, 11).map((x) => x?.key)).toEqual(['a', 'a']);
-    expect(o.slice(9, 11).map((x) => x?.entryId)).toEqual(['a', 'b']);
+    const { owners, rests } = wholeOwners(spans, 0, 24, runKeys(spans));
+    expect(owners.filter(Boolean).map((x) => x?.key)).toEqual(['a']);
+    expect(rests).toHaveLength(1);
+    expect(rests[0].owner.key).toBe('a');
+    expect(rests[0].frac).toBeCloseTo(0.9, 5);
   });
 });
