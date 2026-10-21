@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cutPieces, stitch } from './pieces';
 import { area, type Pt } from './voronoi';
-import { leadPath } from './patterns';
+import { getPattern, leadPath } from './patterns';
 
 // Сетка n × m квадратов 10 × 10, по строкам.
 const grid = (n: number, m: number) => Array.from({ length: n * m }, (_, i): Pt[] => {
@@ -76,5 +76,18 @@ describe('cutPieces', () => {
     const empty = ps.filter((p) => !p.owner);
     expect(empty.map((p) => p.cell)).toEqual([2, 3]);
     expect(area(empty[0].poly)).toBeCloseTo(90, 3);
+  });
+
+  it('кусок всегда одним целым, и площадь точная — на настоящих стёклах', () => {
+    const { cells } = getPattern('glass', 1, 3, 0.6);
+    for (let i = 0; i < cells.length; i++) for (const frac of [0.1, 0.3, 0.5, 0.75, 0.95]) {
+      const whole = cells.map(() => null);
+      const ps = cutPieces(cells, whole, [{ owner: own('a'), frac, anchor: i }, { owner: own('b'), frac: (1 - frac) / 2, anchor: i }]);
+      for (const k of ['a', 'b']) {
+        const mine = ps.filter((p) => p.owner?.key === k);
+        expect(mine).toHaveLength(1);
+        expect(area(mine[0].poly) / area(cells[mine[0].cell])).toBeCloseTo(k === 'a' ? frac : Math.max(0, (1 - frac) / 2), 3);
+      }
+    }
   });
 });
