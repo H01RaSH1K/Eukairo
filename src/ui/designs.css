@@ -175,7 +175,7 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
 .fb-tools { display: flex; align-items: center; gap: 6px; }
 .today.focus { padding: 0 !important; }
 /* шторки (запись, выбор занятия) остаются: тап по куску в фокусе открывает запись */
-.today.focus > :not(.widget.viz):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque) { display: none !important; }
+.today.focus > :not(.widget.viz):not(.sheet-backdrop):not(.focus-light):not(.focus-plaque):not(.focus-switch) { display: none !important; }
 /* Пустые стёкла — не плоские: у каждого свой лёгкий оттенок (--v из Mosaic.tsx) */
 .today.focus .glass-empty { fill: color-mix(in srgb, var(--glass-empty), var(--glass-tint) calc(var(--v) * 6%)); transition: fill .6s; }
 .today.focus .glass-fill { filter: saturate(1.15); }
@@ -199,6 +199,16 @@ html[data-showcase] .screen { padding-bottom: calc(env(safe-area-inset-bottom) +
   text-shadow: 0 1px 8px var(--ink-shadow); pointer-events: none;
   animation: fade-in 1.2s .6s ease-out both;
 }
+/* переключатель вида стыков (временный, пока выбираем вариант) */
+.focus-switch {
+  position: fixed; left: 8px; right: 8px; top: calc(env(safe-area-inset-top) + 8px); z-index: 3;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+}
+.focus-switch button {
+  border: 0; border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--text); backdrop-filter: blur(8px);
+}
+.focus-switch button.on { background: var(--accent); color: var(--on-color); }
 .today.focus .widget.viz::after { display: none; }
 html[data-focus] .tabbar { display: none; }
 

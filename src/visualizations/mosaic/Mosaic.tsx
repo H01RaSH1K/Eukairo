@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ComponentType } from 'react';
 import type { VisualizationProps } from '../types';
 import { HOUR_MS, dayStarts } from '../../domain/time';
 import { runKeys, spotPlaces, wholeOwners, type HourOwner, type Rest } from './layout';
@@ -43,6 +43,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   // Вид стёкол витража: ползунки в процентах → доли 0…1 (см. Look в patterns.ts).
   const look = { spread: Number(settings.spread ?? 100) / 100, wobble: settings.wobble === undefined ? -1 : Number(settings.wobble) / 100 };
   const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
+  // Как видно стёкла внутри одной фигуры (см. seam в registry.ts).
+  const seamStyle = (settings.seam as string) ?? 'tone';
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
   const now = Date.now();
   // Экран перерисовывается каждую секунду (таймер), а хозяева часов меняются от силы раз
@@ -155,6 +157,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
     seen.current.pairs = new Set(pairs);
     seen.current.sig = pairSig;
   }
+  const facetId = 'facet' + useId().replace(/[^a-zA-Z0-9]/g, '');
   const isFresh = (k: string) => now - (seen.current.fresh.get(k) ?? -1e9) < 1500;
 
   return (
@@ -173,8 +176,9 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
             key={i}
             points={drawn.pts[i]}
             // Обводка цветом заливки прячет тонкие щели между слитыми сегментами.
-            fill={o ? o.color : undefined}
-            stroke={o ? o.color : undefined}
+            // «Оттенки»: у каждого стекла свой сдвиг яркости (по номеру стекла, ±7%).
+            fill={o ? paint(o.color, p.cell, seamStyle) : undefined}
+            stroke={o ? paint(o.color, p.cell, seamStyle) : undefined}
             className={cls}
             // Доля 0…1 — порядок стекла; дизайн может по ней растянуть анимацию появления.
             // --v — свой оттенок у каждого стекла (0…1, постоянный для номера): дизайн может
@@ -184,7 +188,22 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
           />
         );
       })}
-      {drawn.seam && <path d={drawn.seam} className="glass-seam" style={{ strokeWidth: leadWidth[scale] * leadK * 0.3 }} />}
+      {/* «Грани»: поверх каждого цветного стекла — свой градиент (светлее с одного края) */}
+      {seamStyle === 'facet' && (
+        <>
+          <defs>
+            <linearGradient id={facetId} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#fff" stopOpacity="0.22" />
+              <stop offset="0.55" stopColor="#fff" stopOpacity="0" />
+              <stop offset="1" stopColor="#000" stopOpacity="0.22" />
+            </linearGradient>
+          </defs>
+          {pieces.map((p, i) => p.owner && <polygon key={'f' + i} points={drawn.pts[i]} fill={`url(#${facetId})`} className="glass-facet" />)}
+        </>
+      )}
+      {drawn.seam && (seamStyle === 'line' || seamStyle === 'etch') && (
+        <path d={drawn.seam} className={seamStyle === 'etch' ? 'glass-etch' : 'glass-seam'} style={{ strokeWidth: leadWidth[scale] * leadK * (seamStyle === 'etch' ? 0.22 : 0.3) }} />
+      )}
       <path d={drawn.lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK }} />
       {border && <path d={border} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK * 2.6 }} />}
       {nowPoly && <polygon points={toPoints(nowPoly)} className="glass-now" style={{ strokeWidth: leadWidth[scale] * 0.6 }} />}
@@ -198,6 +217,16 @@ function firstFuture(kept: { at: number }[][], now: number): number {
   let i = 0;
   for (const k of kept) for (const x of k) { if (x.at > now) return i; i++; }
   return i;
+}
+
+/**
+ * Цвет стекла. У «Оттенков» каждое стекло чуть светлее или темнее (−7…+7%): сдвиг постоянный
+ * для номера стекла, поэтому стыки внутри фигуры видны без линий.
+ */
+function paint(color: string, cell: number, style: string): string {
+  if (style !== 'tone') return color;
+  const v = ((cell * 2654435761) >>> 0) % 1000 / 1000 * 2 - 1; // −1…1
+  return `color-mix(in srgb, ${color} ${(100 - Math.abs(v) * 14).toFixed(1)}%, ${v > 0 ? '#fff' : '#000'})`;
 }
 
 /** Многоугольник → строка для SVG `points`. */

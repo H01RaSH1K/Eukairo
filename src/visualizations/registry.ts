@@ -39,6 +39,18 @@ const growth: SettingDef = {
   showIf: { id: 'fill', equals: ['spots'] },
 };
 
+/** Как видно стёкла внутри одной фигуры (часы одной серии). */
+export const seam: SettingDef = {
+  id: 'seam', kind: 'choice', title: 'Стёкла внутри фигуры', default: 'tone',
+  options: [
+    { id: 'tone', title: 'Оттенки', hint: 'Каждое стекло чуть светлее или темнее соседа, как настоящее цветное стекло' },
+    { id: 'facet', title: 'Грани', hint: 'У каждого стекла свой блик: светлее с одного края, темнее с другого' },
+    { id: 'etch', title: 'Гравировка', hint: 'Тонкая светлая процарапанная линия по стыку' },
+    { id: 'line', title: 'Черточки', hint: 'Тонкая тёмная линия по стыку' },
+    { id: 'none', title: 'Сплошь', hint: 'Фигура одним куском, стыков не видно' },
+  ],
+};
+
 const lead: SettingDef = {
   id: 'lead', kind: 'choice', title: 'Свинцовые линии', default: 'normal',
   options: [{ id: 'thin', title: 'Тонкие' }, { id: 'normal', title: 'Обычные' }, { id: 'bold', title: 'Толстые' }],
@@ -70,19 +82,19 @@ const freeFills = ['spots', 'flow', 'jar'];
 export const visualizations: VisualizationPlugin[] = [
   {
     id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
-    settings: [fill(allFills), spots, growth, cut, wobble, spread, lead], load: mosaic('glass'),
+    settings: [fill(allFills), spots, growth, cut, wobble, spread, seam, lead], load: mosaic('glass'),
   },
   {
     id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
-    settings: [fill(freeFills), spots, growth, lead], load: mosaic('rose'),
+    settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('rose'),
   },
   {
     id: 'mosaic-tri', title: 'Треугольники', description: 'Час — треугольник, пары складываются в ромбы',
-    settings: [fill(freeFills), spots, growth, lead], load: mosaic('tri'),
+    settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('tri'),
   },
   {
     id: 'mosaic-grid', title: 'Сетка', description: 'Ровные клетки — проще всего читать',
-    settings: [fill(allFills), spots, growth, lead], load: mosaic('grid'),
+    settings: [fill(allFills), spots, growth, seam, lead], load: mosaic('grid'),
   },
 ];
 
