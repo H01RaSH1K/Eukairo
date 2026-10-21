@@ -1,7 +1,6 @@
 // Куски стёкол: остаток серии меньше часа вырезается из стекла так, чтобы площадь куска
-// была той же долей стекла, что остаток — от часа. Край куска — ломаный, как у битого
-// стекла: стекло, которое режем, делится на несколько осколков (свой маленький Вороной),
-// кусок набирается из ближайших осколков, а последний режется прямой ровно по площади.
+// была той же долей стекла, что остаток — от часа. Срез — две прямые с одним изломом
+// (как трещина в стекле): кусок растёт от угла стекла, мелкий выходит компактным, а не полоской.
 // Чистые функции, без React.
 import type { HourOwner } from './layout';
 import { area, clipBy, rng, type Pt } from './voronoi';
@@ -29,61 +28,43 @@ export interface Group { queue: number[]; center: Pt }
  * свежее или объедок после чужого куска. Стёкла с номера `late` (будущие часы) — в последнюю
  * очередь. Если места одним куском нет нигде, остаток собирается из нескольких ближайших объедков.
  * У остатков с `group` — плотная укладка (см. Group).
- * Кусок растёт от края стекла, обращённого к целым стёклам своей серии, — так он сливается
- * с ними в одну фигуру. Прежние куски новым остатком не двигаются (осколки стекла зависят
- * только от его номера).
+ * Кусок растёт от угла стекла, обращённого к целым стёклам своей серии, — так он сливается
+ * с ними в одну фигуру. Прежние куски новым остатком не двигаются (излом среза зависит
+ * только от номера стекла и того, какой это по счёту срез в нём).
  */
 export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[], late = cells.length, groups: Group[] = []): Piece[] {
   const full = cells.map(area);
   const mid = cells.map(centroid);
-  // Свободная часть каждого стекла — список выпуклых осколков (у целых — пусто).
-  // Пока стекло не резали, это оно само одним куском.
-  const free: Pt[][][] = cells.map((c, i) => (whole[i] ? [] : [c]));
-  const freeArea = free.map((f, i) => (f.length ? full[i] : 0));
-  const split = new Set<number>(); // стёкла, уже поделённые на осколки (≈ HashSet<int>)
+  // Свободная часть каждого стекла — выпуклый многоугольник (у целых — пусто): срез
+  // из двух прямых оставляет свободную часть выпуклой, её можно резать снова.
+  const free: (Pt[] | null)[] = cells.map((c, i) => (whole[i] ? null : c));
+  const freeArea = free.map((f, i) => (f ? full[i] : 0));
+  const cutsIn = cells.map(() => 0); // сколько срезов уже было в стекле
   const out: Piece[] = [];
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const penalty = 1e6; // будущие стёкла — только когда прошлых не осталось
   const open = groups.map(() => -1); // начатое стекло каждой группы
   const next = groups.map(() => 0);  // сколько стёкол очереди уже взято
-  const freeMid = (i: number) => (split.has(i) ? centroid(merge(free[i])[0] ?? cells[i]) : mid[i]);
+  const freeMid = (i: number) => (free[i] ? centroid(free[i]!) : mid[i]);
 
   // Кусок площади `want` из свободной части стекла i (если места меньше — всё, что есть).
-  // Растёт от точки края, ближайшей к `toward` (null — снизу): берём осколки по близости
-  // к ней целиком, пока влезают, а следующий режем прямой ровно на недостающую площадь.
+  // Растёт от угла, ближайшего к `toward` (null — снизу).
   const take = (i: number, want: number, owner: HourOwner, toward: Pt | null) => {
-    let got: Pt[][];
+    const poly = free[i]!;
+    let parts: Pt[][];
     if (want >= freeArea[i] - 1e-6) {
-      got = free[i];
-      free[i] = [];
+      parts = [poly];
+      free[i] = null;
     } else {
-      if (!split.has(i)) { free[i] = shards(cells[i], i); split.add(i); }
       const dx = toward ? toward[0] - mid[i][0] : 0, dy = toward ? toward[1] - mid[i][1] : 1;
-      const pts = free[i].flat();
-      const start = pts.reduce((b, p) => (p[0] * dx + p[1] * dy > b[0] * dx + b[1] * dy ? p : b), pts[0]);
-      const order = free[i].map((poly) => ({ poly, d: dist(centroid(poly), start) })).sort((x, y) => x.d - y.d).map((x) => x.poly);
-      got = [];
-      const keep: Pt[][] = [];
-      const cutAt: Pt[] = [];
-      let left = want;
-      for (const poly of order) {
-        const a = area(poly);
-        if (left <= 1e-9) keep.push(poly);
-        else if (a <= left + 1e-9) { got.push(poly); left -= a; }
-        else {
-          const [pc, rest] = slice(poly, left, start, centroid(poly));
-          got.push(pc); keep.push(rest); left = 0;
-          cutAt.push(...pc.filter((p) => !poly.some((q) => q[0] === p[0] && q[1] === p[1])));
-        }
-      }
-      // Новые вершины разреза — и в соседние осколки, чтобы осколки склеивались точно.
-      const all = stitch([...got, ...keep], cutAt);
-      got = all.slice(0, got.length);
-      free[i] = all.slice(got.length);
+      const corner = poly.reduce((b, p) => (p[0] * dx + p[1] * dy > b[0] * dx + b[1] * dy ? p : b), poly[0]);
+      const [got, rest] = chevron(poly, want, corner, i * 31 + cutsIn[i]++);
+      parts = got;
+      free[i] = rest;
     }
-    const a = got.reduce((s, p) => s + area(p), 0);
-    for (const poly of merge(got)) out.push({ poly, owner, cell: i });
-    freeArea[i] = free[i].reduce((s, p) => s + area(p), 0);
+    const a = parts.reduce((s, p) => s + area(p), 0);
+    for (const p of merge(parts)) out.push({ poly: p, owner, cell: i });
+    freeArea[i] = free[i] ? area(free[i]!) : 0;
     return a / full[i];
   };
 
@@ -133,72 +114,46 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
   // Целые стёкла и всё, что осталось свободным.
   cells.forEach((c, i) => {
     if (whole[i]) out.push({ poly: c, owner: whole[i], cell: i });
-    else if (freeArea[i] > 1e-6) for (const poly of split.has(i) ? merge(free[i]) : free[i]) out.push({ poly, owner: null, cell: i });
+    else if (freeArea[i] > 1e-6) out.push({ poly: free[i]!, owner: null, cell: i });
   });
   return out;
 }
 
 /**
- * Режет выпуклый многоугольник прямой, перпендикулярной направлению от его центра к `toward`
- * (null — кусок снизу, как будто стекло наполняется). Кусок площади `want` — со стороны `toward`.
- * Положение линии ищем делением пополам (≈ бинарный поиск по числу).
+ * Срез с изломом: две прямые под углом друг к другу. Кусок — то, что ближе к `corner`
+ * хотя бы по одной из них (объединение двух полуплоскостей), свободная часть — остальное
+ * (пересечение, остаётся выпуклой). Угол излома и небольшой поворот — от `seed`.
+ * Положение прямых ищем делением пополам по площади. Кусок отдаём двумя выпуклыми частями.
  */
-function slice(poly: Pt[], want: number, toward: Pt | null, center: Pt): [Pt[], Pt[]] {
-  let nx = toward ? toward[0] - center[0] : 0;
-  let ny = toward ? toward[1] - center[1] : 1;
-  const len = Math.hypot(nx, ny);
-  if (len < 1e-9) { nx = 0; ny = 1; } else { nx /= len; ny /= len; }
-  // Кусок — точки, у которых проекция на (nx, ny) не меньше c.
-  const proj = poly.map((p) => p[0] * nx + p[1] * ny);
-  let lo = Math.min(...proj), hi = Math.max(...proj);
-  const pieceAt = (c: number) => clipBy(poly, -nx, -ny, -c);
+function chevron(poly: Pt[], want: number, corner: Pt, seed: number): [Pt[][], Pt[]] {
+  const rand = rng(seed + 101);
+  const c0 = centroid(poly);
+  const base = Math.atan2(c0[1] - corner[1], c0[0] - corner[0]) + (rand() - 0.5) * 0.5; // ±14°
+  const bend = 0.3 + rand() * 0.3; // излом 17…34° в каждую сторону
+  const u = [base - bend, base + bend].map((a): Pt => [Math.cos(a), Math.sin(a)]);
+  const proj = (p: Pt, k: number) => (p[0] - corner[0]) * u[k][0] + (p[1] - corner[1]) * u[k][1];
+  const offs = (k: number, c: number) => c + corner[0] * u[k][0] + corner[1] * u[k][1];
+  // Свободная часть при отступе c: дальше c от угла по обеим прямым.
+  const restAt = (c: number) => clipBy(clipBy(poly, -u[0][0], -u[0][1], -offs(0, c)), -u[1][0], -u[1][1], -offs(1, c));
+  const total = area(poly);
+  let lo = 0, hi = Math.max(...poly.map((p) => Math.max(proj(p, 0), proj(p, 1))));
   for (let k = 0; k < 40; k++) {
     const c = (lo + hi) / 2;
-    if (area(pieceAt(c)) > want) lo = c; else hi = c;
+    if (total - area(restAt(c)) > want) hi = c; else lo = c;
   }
   const c = (lo + hi) / 2;
-  return [pieceAt(c), clipBy(poly, nx, ny, c)];
-}
-
-/** Осколков в стекле, которое режем: мелкий кусок — один-два осколка, а не длинная полоска. */
-const SHARDS = 7;
-
-/**
- * Делит выпуклое стекло на SHARDS осколков — маленький Вороной внутри него.
- * Точки случайные, но от номера стекла: одно и то же стекло всегда бьётся одинаково.
- * Один шаг Ллойда (точки → центры своих осколков) делает осколки округлее.
- */
-function shards(poly: Pt[], cell: number): Pt[][] {
-  const rand = rng(cell * 7919 + 13);
-  const xs = poly.map((p) => p[0]), ys = poly.map((p) => p[1]);
-  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  let seeds: Pt[] = [];
-  for (let k = 0; seeds.length < SHARDS && k < 200; k++) {
-    const p: Pt = [x0 + rand() * (x1 - x0), y0 + rand() * (y1 - y0)];
-    if (inside(poly, p)) seeds.push(p);
-  }
-  const cellsOf = (pts: Pt[]) => pts.map((s, i) => pts.reduce((c, o, j) => (j === i || !c.length ? c :
-    clipBy(c, o[0] - s[0], o[1] - s[1], ((o[0] - s[0]) * (o[0] + s[0]) + (o[1] - s[1]) * (o[1] + s[1])) / 2)), poly));
-  seeds = cellsOf(seeds).map((c, i) => (c.length ? centroid(c) : seeds[i]));
-  return cellsOf(seeds).filter((c) => c.length >= 3 && area(c) > 1e-9);
-}
-
-/** Точка внутри выпуклого многоугольника (с любым обходом). */
-function inside(poly: Pt[], p: Pt): boolean {
-  let sign = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length];
-    const c = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
-    if (Math.abs(c) < 1e-12) continue;
-    if (sign === 0) sign = Math.sign(c); else if (Math.sign(c) !== sign) return false;
-  }
-  return true;
+  const a = clipBy(poly, u[0][0], u[0][1], offs(0, c)); // ближе по первой прямой
+  const b = clipBy(clipBy(poly, -u[0][0], -u[0][1], -offs(0, c)), u[1][0], u[1][1], offs(1, c)); // по второй, но не по первой
+  const rest = restAt(c);
+  // Общее ребро частей a и b лежит на первой прямой, но концы у них разные — выравниваем вершины.
+  const parts = stitch([a, b].filter((x) => x.length >= 3 && area(x) > 1e-9), [...a, ...b, ...rest]);
+  return [parts, rest];
 }
 
 /**
- * Склеивает соседние осколки в один многоугольник: общие рёбра (одно и то же ребро,
- * пройденное в двух осколках навстречу) выкидываем, остальные сцепляем в контур.
- * Несвязные части — отдельные контуры. Если что-то не сцепилось — отдаём осколки как есть.
+ * Склеивает соседние части в один многоугольник: общие рёбра (одно и то же ребро,
+ * пройденное в двух частях навстречу) выкидываем, остальные сцепляем в контур.
+ * Если что-то не сцепилось — отдаём части как есть.
  */
 function merge(polys: Pt[][]): Pt[][] {
   if (polys.length < 2) return polys;
