@@ -8,12 +8,12 @@ const HabitSheet = lazy(() => import('./HabitSheet'));
 // Привычки в «Сводках»: строка на привычку, клетка на день периода, справа процент.
 // Пунктирная клетка — в этот день привычка не по расписанию. Тап по строке — карточка привычки.
 export function HabitStats({ period, from, to, now }: { period: Period; from: number; to: number; now: number }) {
-  const { habits, habitMarks, activities, entries } = useData();
+  const { habits, habitMarks, activities, entries, points } = useData();
   const [open, setOpen] = useState<string | null>(null);
   const colors = useMemo(() => habitColors(habits, activities), [habits, activities]);
   const books = useMemo(
-    () => activeHabits(habits).map((h) => new HabitBook(h, activities, entries, habitMarks, now)),
-    [habits, activities, entries, habitMarks, now],
+    () => activeHabits(habits).map((h) => new HabitBook(h, activities, entries, habitMarks, now, points)),
+    [habits, activities, entries, habitMarks, points, now],
   );
   const days = dayStarts(from, to);
   const rows = books.map((b) => ({ b, r: b.rate(from, to) }));

@@ -1,20 +1,12 @@
 // Привычки: засчитан ли день, серии, процент. Чистые функции, про базу и React не знают.
-import type { Activity, Entry, Habit, HabitMark, HabitOption, HabitParam, HabitSet } from '../db/schema';
+import type { Activity, Entry, Habit, HabitMark, Param, Point } from '../db/schema';
+import { COUNT, pointsByDay, sumValues } from './points';
 import { activityColors } from './colors';
 import { addLocalDays, startOfLocalDay, startOfNextLocalDay } from './time';
 import { subtreeIds } from './tree';
 
-/** Ключ дня по местному времени: '2026-10-21'. */
-export function dayKey(t: number): string {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Местная полночь дня по ключу. */
-export function dayStartOf(key: string): number {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d).getTime();
-}
+export { dayKey, dayStartOf } from './time';
+import { dayKey, dayStartOf } from './time';
 
 /** День недели: 0 = понедельник … 6 = воскресенье (в JS getDay() начинает с воскресенья). */
 export const weekdayOf = (t: number) => (new Date(t).getDay() + 6) % 7;
@@ -65,12 +57,17 @@ export function msByDay(entries: Entry[], activityIds: Set<string>, now: number)
 export class HabitBook {
   private marks = new Map<string, HabitMark>();
   private ms = new Map<string, number>();
+  private pts = new Map<string, Point[]>();
   private today: number;
   private since: number;
 
-  constructor(readonly habit: Habit, activities: Activity[], entries: Entry[], marks: HabitMark[], now: number) {
+  constructor(readonly habit: Habit, activities: Activity[], entries: Entry[], marks: HabitMark[], now: number, points: Point[] = []) {
     for (const m of marks) if (m.habitId === habit.id) this.marks.set(m.day, m);
-    if (habit.kind === 'time' && habit.activityId) this.ms = msByDay(entries, subtreeIds(activities, habit.activityId), now);
+    if (habit.activityId && (habit.kind === 'time' || habit.kind === 'points')) {
+      const ids = subtreeIds(activities, habit.activityId);
+      if (habit.kind === 'time') this.ms = msByDay(entries, ids, now);
+      this.pts = pointsByDay(points, ids); // записи без времени — и для points, и как числа на графике у time
+    }
     this.today = startOfLocalDay(now);
     this.since = dayStartOf(habit.since);
   }
@@ -84,41 +81,28 @@ export class HabitBook {
     let progress: number;
     if (h.kind === 'time') progress = marked ? 1 : Math.min(1, ms / ((h.goalMin ?? 1) * 60_000));
     else if (h.kind === 'quit') progress = marked || day > this.today || day < this.since ? 0 : 1;
+    else if (h.kind === 'points') progress = marked || this.pts.has(k) ? 1 : 0;
     else progress = marked ? 1 : 0;
     return { due, done: progress >= 1, progress, ms, marked };
   }
 
-  /** Записи (подходы) за день. Снятая отметка — записей нет (сами они хранятся, вернутся при повторной отметке). */
-  sets(day: number): HabitSet[] {
-    const m = this.marks.get(dayKey(day));
-    return m?.done ? markSets(m) : [];
+  /** Записи без времени за день (по занятию привычки с подзанятиями). */
+  points(day: number): Point[] {
+    return this.pts.get(dayKey(day)) ?? [];
   }
 
   /**
-   * Числа за день: по каждому параметру — сумма по записям, плюс число записей (ключ SETS),
+   * Числа за день: по каждому параметру — сумма по записям, плюс число записей (ключ COUNT),
    * у time ещё минуты из трекинга (ключ TRACKED). `keep` отбирает записи (фильтр по вариантам):
    * если ни одна не подошла, чисел за день нет.
    */
-  values(day: number, keep: (s: HabitSet) => boolean = () => true): Record<string, number> {
-    const v: Record<string, number> = {};
-    const sets = this.sets(day).filter(keep);
-    for (const s of sets) for (const [k, x] of Object.entries(s.values ?? {})) v[k] = (v[k] ?? 0) + x;
-    if (sets.length && this.habit.params?.length) v[SETS] = sets.length;
+  values(day: number, keep: (p: Point) => boolean = () => true): Record<string, number> {
+    const v = sumValues(this.points(day).filter(keep));
     if (this.habit.kind === 'time') {
       const ms = this.ms.get(dayKey(day));
       if (ms) v[TRACKED] = Math.round(ms / 60_000);
     }
     return v;
-  }
-
-  /** Вариант, который чаще всего встречается в записях дня (для цвета точки на графике). */
-  mainChoice(day: number, paramId: string, keep: (s: HabitSet) => boolean = () => true): string | undefined {
-    const n = new Map<string, number>();
-    for (const s of this.sets(day).filter(keep)) {
-      const c = s.choices?.[paramId];
-      if (c) n.set(c, (n.get(c) ?? 0) + 1);
-    }
-    return [...n].sort((a, b) => b[1] - a[1])[0]?.[0];
   }
 
   /** Сегодня ещё не засчитан, но день не кончился — серию это не рвёт. */
@@ -165,39 +149,26 @@ export class HabitBook {
 
 /** Ключ встроенного параметра «минуты по занятию» у привычки по времени. */
 export const TRACKED = 'tracked';
-/** Ключ «сколько записей за день» — считается сам, вписывать не нужно. */
-export const SETS = 'sets';
-
-/** Записи отметки; старая отметка с числами (до подходов) читается как одна запись. */
-export function markSets(m: HabitMark): HabitSet[] {
-  if (m.sets) return m.sets;
-  return m.values ? [{ id: m.id, at: 0, values: m.values }] : [];
-}
-
-/** Параметры для графика: у привычки по занятию первым идут минуты из трекинга. */
-export function chartParams(h: Habit): { id: string; name: string; unit?: string }[] {
+/** Параметры для графика: у привычки по занятию первым идут минуты из трекинга, дальше числа занятия и число записей. */
+export function chartParams(h: Habit, activities: Activity[]): Param[] {
+  const params = (h.activityId && activities.find((a) => a.id === h.activityId)?.params) || [];
   return [
     ...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []),
-    ...(h.params ?? []).filter((p) => !p.options),
-    ...(h.params?.length ? [{ id: SETS, name: 'Подходы' }] : []),
+    ...params.filter((p) => !p.options),
+    ...(h.kind === 'points' || params.length ? [{ id: COUNT, name: 'Записей' }] : []),
   ];
 }
 
-/** Параметры-варианты («Хват: пальцы / кулаки / ладони»): ими красят и фильтруют график. */
-export function choiceParams(h: Habit): (HabitParam & { options: HabitOption[] })[] {
-  return (h.params ?? []).filter((p): p is HabitParam & { options: HabitOption[] } => !!p.options?.length);
-}
-
-/** Цвет варианта по его месту в списке: контрастные между собой, не сливаются с фоном. */
-export const optionColor = (i: number) => OPTION_COLORS[i % OPTION_COLORS.length];
-const OPTION_COLORS = ['#56ccf2', '#f2c94c', '#ff8a65', '#9b8cff', '#6fcf97', '#f78fb3'];
+/** Параметры занятия привычки (для вариантов и формы записи). */
+export const habitParams = (h: Habit, activities: Activity[]): Param[] =>
+  (h.activityId && activities.find((a) => a.id === h.activityId)?.params) || [];
 
 /** Активные привычки по порядку. */
 export const activeHabits = (habits: Habit[]) => habits.filter((h) => !h.archivedAt).sort((a, b) => a.order - b.order);
 
 /** Цвет привычки: у привязанной к занятию — цвет занятия, иначе свой тон. */
 export function habitColor(h: Habit, colors: Map<string, string>): string {
-  return (h.kind === 'time' && h.activityId && colors.get(h.activityId)) || `hsl(${h.hue} 60% 58%)`;
+  return ((h.kind === 'time' || h.kind === 'points') && h.activityId && colors.get(h.activityId)) || `hsl(${h.hue} 60% 58%)`;
 }
 
 /** Цвета всех привычек разом. */
@@ -216,20 +187,4 @@ export function nextHabitHue(habits: Habit[]): number {
     if (next - h > gap) { gap = next - h; best = h + (next - h) / 2; }
   });
   return Math.round(best) % 360;
-}
-
-/**
- * «пальцы, кулаки, ладони» → список вариантов. Старые id сохраняются: сначала по совпадению
- * названия, потом по месту в списке (так переименование «ладони» → «на ладонях» не теряет историю).
- */
-export function parseOptions(text: string, old: HabitOption[], makeId: () => string): HabitOption[] {
-  const names = [...new Set(text.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean))];
-  const used = new Set<string>();
-  const byName = names.map((n) => old.find((o) => o.name === n));
-  byName.forEach((o) => o && used.add(o.id));
-  return names.map((name, i) => {
-    let o = byName[i];
-    if (!o && old[i] && !used.has(old[i].id) && !names.includes(old[i].name)) { o = old[i]; used.add(o.id); }
-    return { id: o?.id ?? makeId(), name };
-  });
 }

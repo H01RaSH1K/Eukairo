@@ -4,7 +4,7 @@
 // чем отдельный запрос на каждый экран.
 import { liveQuery } from 'dexie';
 import { useSyncExternalStore } from 'react';
-import { db, type Activity, type Entry, type Habit, type HabitMark } from './schema';
+import { db, type Activity, type Entry, type Habit, type HabitMark, type Point } from './schema';
 import { closeExpiredTimer, seedIfEmpty } from './commands';
 
 export interface Data {
@@ -16,9 +16,10 @@ export interface Data {
   running: Entry | null;             // идущий таймер
   habits: Habit[];
   habitMarks: HabitMark[];
+  points: Point[];                   // записи без времени, по at
 }
 
-let data: Data = { ready: false, error: null, activities: [], entries: [], settings: {}, running: null, habits: [], habitMarks: [] };
+let data: Data = { ready: false, error: null, activities: [], entries: [], settings: {}, running: null, habits: [], habitMarks: [], points: [] };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -42,20 +43,21 @@ export function startStore() {
   seedIfEmpty()
     .then(() => {
       liveQuery(async () => {
-        const [activities, entries, settings, habits, habitMarks] = await Promise.all([
+        const [activities, entries, settings, habits, habitMarks, points] = await Promise.all([
           db.activities.toArray(),
           db.entries.orderBy('start').toArray(),
           db.settings.toArray(),
           db.habits.toArray(),
           db.habitMarks.toArray(),
+          db.points.orderBy('at').toArray(),
         ]);
-        return { activities, entries, settings, habits, habitMarks };
+        return { activities, entries, settings, habits, habitMarks, points };
       }).subscribe({
-        next: ({ activities, entries, settings, habits, habitMarks }) => {
+        next: ({ activities, entries, settings, habits, habitMarks, points }) => {
           // Идущая — последняя по start с end = null (записи не пересекаются).
           let running: Entry | null = null;
           for (let i = entries.length - 1; i >= 0; i--) if (entries[i].end === null) { running = entries[i]; break; }
-          data = { ready: true, error: null, activities, entries, settings: Object.fromEntries(settings.map((s) => [s.key, s.value])), running, habits, habitMarks };
+          data = { ready: true, error: null, activities, entries, settings: Object.fromEntries(settings.map((s) => [s.key, s.value])), running, habits, habitMarks, points };
           emit();
           if (running?.plannedEnd && running.plannedEnd <= Date.now()) void closeExpiredTimer();
         },

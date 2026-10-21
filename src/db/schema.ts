@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import { migrateHabitParams } from '../domain/points';
 
 // Занятие — узел дерева. parentId = null → корневое.
 // interface в TS ≈ record/POCO в C#, но существует только при компиляции:
@@ -16,6 +17,7 @@ export interface Activity {
   timerMaxMin?: number;
   archivedAt?: number;
   need?: boolean;            // «нужда» (сон, еда…): не полезное время, вынимает часы из мозаики дня; наследуется детьми
+  params?: Param[];          // что вписывать в записи без времени: «Отжимания, раз», «Хват: пальцы / кулаки»
   updatedAt: number;
 }
 
@@ -32,12 +34,26 @@ export interface Entry {
   updatedAt: number;
 }
 
-// Привычка. Три вида засчёта:
+// Запись без времени — момент и числа: «20 отжиманий, кулаки, пол», «вес 72 кг».
+// Принадлежит занятию, как и запись времени, но мозаику не заполняет: длительности у неё нет.
+export interface Point {
+  id: string;
+  activityId: string;
+  at: number;                       // когда (мс UTC)
+  values?: Record<string, number>;  // id параметра занятия → число (≈ Dictionary<string, double>)
+  choices?: Record<string, string>; // id параметра-варианта → id выбранного варианта
+  note?: string;
+  updatedAt: number;
+}
+
+// Привычка. Четыре вида засчёта:
 //   check — галочка: тапнул, и день засчитан;
 //   time  — время занятия: засчитывается сама, когда за день протрекано goalMin минут
 //           по занятию activityId (вместе с подзанятиями);
-//   quit  — «держусь»: день засчитан, пока не отметил срыв.
-export type HabitKind = 'check' | 'time' | 'quit';
+//   quit  — «держусь»: день засчитан, пока не отметил срыв;
+//   points — по записям занятия: засчитан, когда за день есть запись без времени
+//           по занятию activityId (вместе с подзанятиями), например подход отжиманий.
+export type HabitKind = 'check' | 'time' | 'quit' | 'points';
 
 export interface Habit {
   id: string;
@@ -45,28 +61,29 @@ export interface Habit {
   icon?: string;              // эмодзи
   hue: number;                // тон цвета; у привычки по занятию цвет берётся у занятия
   kind: HabitKind;
-  activityId?: string;        // только для time
+  activityId?: string;        // для time и points
   goalMin?: number;           // только для time: сколько минут в день
   weekdays?: number[];        // дни недели, 0 = пн … 6 = вс; нет = каждый день
-  params?: HabitParam[];      // что ещё записывать при отметке: «Отжимания, раз», «Вес, кг»
+  /** @deprecated старый формат (до записей без времени): переезжает на занятие при открытии базы. */
+  params?: Param[];
   order: number;
   since: string;              // день начала 'ГГГГ-ММ-ДД': раньше него дни не в счёт
   archivedAt?: number;
   updatedAt: number;
 }
 
-// Параметр привычки — то, что вписываешь в каждую запись (подход). Обычно число (по нему рисуется график),
+// Параметр занятия — то, что вписываешь в запись без времени. Обычно число (по нему рисуется график),
 // а с `options` — вариант из списка: «Хват: пальцы / кулаки / ладони». Варианты красят точки
-// на графике и позволяют оставить только сопоставимые дни.
-export interface HabitParam {
+// на графике и позволяют оставить только сопоставимые записи.
+export interface Param {
   id: string;
   name: string;               // «Отжимания», «Хват»
   unit?: string;              // «раз», «мин», «км»; у варианта нет
-  options?: HabitOption[];    // есть → параметр-вариант, нет → число
+  options?: ParamOption[];    // есть → параметр-вариант, нет → число
 }
 
 // Вариант храним по id, а не по тексту: переименовал «ладони» в «на ладонях» — история не потерялась.
-export interface HabitOption {
+export interface ParamOption {
   id: string;
   name: string;
 }
@@ -80,17 +97,9 @@ export interface HabitMark {
   habitId: string;
   day: string;                // 'ГГГГ-ММ-ДД' по местному времени
   done: boolean;
-  sets?: HabitSet[];          // записи за день: «20 раз, кулаки, пол», «15 раз, ладони, скамья»
-  values?: Record<string, number>; // старый формат: одна запись на день (читается как один подход)
+  /** @deprecated старый формат: числа за день — переезжают в записи без времени. */
+  values?: Record<string, number>;
   updatedAt: number;
-}
-
-// Одна невременная запись (подход) внутри дня привычки: числа и выбранные варианты.
-export interface HabitSet {
-  id: string;
-  at: number;                      // когда записан (мс UTC), для порядка в списке
-  values?: Record<string, number>; // id параметра → число (≈ Dictionary<string, double>)
-  choices?: Record<string, string>; // id параметра-варианта → id выбранного варианта
 }
 
 export interface Setting {
@@ -106,6 +115,7 @@ export const db = new Dexie('eukairo') as Dexie & {
   settings: EntityTable<Setting, 'key'>;
   habits: EntityTable<Habit, 'id'>;
   habitMarks: EntityTable<HabitMark, 'id'>;
+  points: EntityTable<Point, 'id'>;
 };
 
 // Схема: первое поле — первичный ключ, остальные — индексы.
@@ -121,4 +131,20 @@ db.version(1).stores({
 db.version(2).stores({
   habits: 'id',
   habitMarks: 'id, habitId, day',
+});
+
+// v3: записи без времени. Старые параметры привычек переезжают на занятия, числа из отметок —
+// в записи (как миграция с переносом данных в EF Core). Сама перекладка — чистая функция
+// в domain/points.ts, её же использует импорт старых бэкапов.
+db.version(3).stores({
+  points: 'id, at, activityId',
+}).upgrade(async (tx) => {
+  const [activities, habits, habitMarks] = await Promise.all([
+    tx.table('activities').toArray(), tx.table('habits').toArray(), tx.table('habitMarks').toArray(),
+  ]);
+  const m = migrateHabitParams({ activities, habits, habitMarks }, Date.now());
+  await tx.table('activities').bulkPut(m.activities);
+  await tx.table('habits').bulkPut(m.habits);
+  await tx.table('habitMarks').bulkPut(m.habitMarks);
+  await tx.table('points').bulkPut(m.points);
 });

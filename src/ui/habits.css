@@ -148,3 +148,18 @@
 .set-text { flex: 1; font-size: 15px; }
 .set-row .btn.small { margin: 0; padding: 4px 10px; }
 .form .btn-row .btn { flex: 1 1 0; min-width: 0; }
+.set-row.editing { box-shadow: inset 0 0 0 1.5px var(--accent); }
+
+/* записи без времени в ленте: тонкая строка-точка между записями времени */
+.point-row {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: 0; border-left: 2px solid var(--line); margin-left: 12px;
+  padding: 4px 8px; color: var(--text); font: inherit; font-size: 14px; text-align: left;
+}
+.point-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-left: -14px; box-shadow: 0 0 0 3px var(--bg); }
+.point-time { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 13px; }
+.point-name { flex: none; }
+.point-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.point-stats .chips-scroll { margin-bottom: 8px; }
+.point-stats .chips-scroll button { background: var(--control); }
+.day-points { max-height: none; }

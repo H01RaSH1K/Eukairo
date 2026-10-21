@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Activity, Entry, Habit, HabitMark } from '../db/schema';
-import { HabitBook, SETS, TRACKED, chartParams, choiceParams, dayKey, dayStartOf, msByDay, parseOptions, scheduleText } from './habits';
+import type { Activity, Entry, Habit, HabitMark, Point } from '../db/schema';
+import { HabitBook, TRACKED, chartParams, dayKey, dayStartOf, msByDay, scheduleText } from './habits';
+import { COUNT } from './points';
 import { addLocalDays } from './time';
 
 const MIN = 60_000;
@@ -11,8 +12,8 @@ const day = (n: number) => addLocalDays(today, n);
 const habit = (h: Partial<Habit>): Habit => ({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0, ...h });
 const mark = (n: number, done = true, values?: Record<string, number>): HabitMark =>
   ({ id: `h:${dayKey(day(n))}`, habitId: 'h', day: dayKey(day(n)), done, values, updatedAt: 0 });
-const book = (h: Partial<Habit>, marks: HabitMark[], entries: Entry[] = [], acts: Activity[] = []) =>
-  new HabitBook(habit(h), acts, entries, marks, now);
+const book = (h: Partial<Habit>, marks: HabitMark[], entries: Entry[] = [], acts: Activity[] = [], points: Point[] = []) =>
+  new HabitBook(habit(h), acts, entries, marks, now, points);
 
 describe('дни', () => {
   it('ключ дня и обратно', () => {
@@ -65,41 +66,29 @@ describe('серии', () => {
   });
 });
 
-describe('параметры-варианты', () => {
-  const grip = { id: 'grip', name: 'Хват', options: [{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'кулаки' }] };
-  const h = habit({ params: [{ id: 'reps', name: 'Отжимания' }, grip] });
+describe('привычка по записям занятия', () => {
+  const acts: Activity[] = [
+    { id: 'sport', parentId: null, name: 'Спорт', order: 0, updatedAt: 0 },
+    { id: 'push', parentId: 'sport', name: 'Отжимания', order: 0, updatedAt: 0, params: [
+      { id: 'reps', name: 'Отжимания' }, { id: 'grip', name: 'Хват', options: [{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'кулаки' }] },
+    ] },
+  ];
+  const pt = (id: string, n: number, reps: number, grip: string): Point =>
+    ({ id, activityId: 'push', at: day(n) + 18 * 3_600_000, values: { reps }, choices: { grip }, updatedAt: 0 });
+  const pts = [pt('1', -1, 20, 'b'), pt('2', -1, 15, 'a'), pt('3', -1, 10, 'b')];
+  const h = { kind: 'points' as const, activityId: 'push' };
 
-  it('на график идут числа и число подходов, варианты — отдельно', () => {
-    expect(chartParams(h).map((p) => p.id)).toEqual(['reps', SETS]);
-    expect(choiceParams(h).map((p) => p.id)).toEqual(['grip']);
+  it('день засчитан, когда есть запись (и по подзанятиям)', () => {
+    const b = book(h, [], [], acts, pts);
+    expect(b.status(day(-1)).done).toBe(true);
+    expect(b.status(day(-2)).done).toBe(false);
+    expect(book({ kind: 'points', activityId: 'sport' }, [], [], acts, pts).status(day(-1)).done).toBe(true);
   });
-  it('подходы складываются, фильтр берёт только подходящие', () => {
-    const m: HabitMark = {
-      ...mark(-1), sets: [
-        { id: '1', at: 1, values: { reps: 20 }, choices: { grip: 'b' } },
-        { id: '2', at: 2, values: { reps: 15 }, choices: { grip: 'a' } },
-        { id: '3', at: 3, values: { reps: 10 }, choices: { grip: 'b' } },
-      ],
-    };
-    const b = book(h, [m]);
-    expect(b.values(day(-1))).toEqual({ reps: 45, [SETS]: 3 });
-    const fist = (s: { choices?: Record<string, string> }) => s.choices?.grip === 'b';
-    expect(b.values(day(-1), fist)).toEqual({ reps: 30, [SETS]: 2 });
+  it('на график идут числа занятия и число записей; фильтр берёт только подходящие записи', () => {
+    expect(chartParams(habit(h), acts).map((p) => p.id)).toEqual(['reps', COUNT]);
+    const b = book(h, [], [], acts, pts);
+    expect(b.values(day(-1))).toEqual({ reps: 45, [COUNT]: 3 });
+    expect(b.values(day(-1), (p) => p.choices?.grip === 'b')).toEqual({ reps: 30, [COUNT]: 2 });
     expect(b.values(day(-1), () => false)).toEqual({});
-    expect(b.mainChoice(day(-1), 'grip')).toBe('b');
-  });
-  it('старая отметка с числами — один подход; снятая — без подходов', () => {
-    expect(book(h, [mark(-1, true, { reps: 30 })]).values(day(-1))).toEqual({ reps: 30, [SETS]: 1 });
-    expect(book(h, [mark(-1, false, { reps: 30 })]).values(day(-1))).toEqual({});
-  });
-  it('разбор строки сохраняет id: по названию, потом по месту', () => {
-    let n = 0;
-    const make = () => 'new' + n++;
-    expect(parseOptions('кулаки, пальцы, ладони', grip.options, make)).toEqual([
-      { id: 'b', name: 'кулаки' }, { id: 'a', name: 'пальцы' }, { id: 'new0', name: 'ладони' },
-    ]);
-    // переименовали «кулаки» → «на кулаках»: id тот же, история не теряется
-    expect(parseOptions('пальцы, на кулаках', grip.options, make)).toEqual([{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'на кулаках' }]);
-    expect(parseOptions(' , ,', grip.options, make)).toEqual([]);
   });
 });

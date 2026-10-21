@@ -29,7 +29,7 @@ export default function Habits({ onBack }: { onBack: () => void }) {
             <span className="dot" style={{ background: colors.get(h.id) }} />
             <span className="tree-name">
               {h.icon ? `${h.icon} ` : ''}{h.name}
-              <span className="dim small"> · {scheduleText(h)}{h.kind === 'time' ? ` · ${h.goalMin} мин` : h.kind === 'quit' ? ' · держусь' : ''}</span>
+              <span className="dim small"> · {scheduleText(h)}{h.kind === 'time' ? ` · ${h.goalMin} мин` : h.kind === 'quit' ? ' · держусь' : h.kind === 'points' ? ' · по записям' : ''}</span>
             </span>
             <button className="tree-chevron" disabled={i === 0} aria-label="Выше" onClick={(e) => { e.stopPropagation(); void reorderHabit(h.id, -1); }}>↑</button>
             <button className="tree-chevron" disabled={i === list.length - 1} aria-label="Ниже" onClick={(e) => { e.stopPropagation(); void reorderHabit(h.id, 1); }}>↓</button>

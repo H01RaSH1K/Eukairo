@@ -7,6 +7,7 @@ import { useData } from '../../db/store';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
 import { HabitStats } from '../habits/HabitStats';
+import { PointStats } from '../points/PointStats';
 import { ChartKindSwitch, LineChart, saveChart, scrub, savedChart, type ChartKind } from '../../ui/LineChart';
 import { ExpandButton, FullChart, fullChartHeight } from '../../ui/FullChart';
 
@@ -32,7 +33,7 @@ export default function Stats() {
   const useful = useMemo(() => activities.filter((a) => !needs.has(a.id)), [activities, needs]);
 
   const [offset, setOffset] = useState(0); // 0 = текущий период, -1 = предыдущий…
-  const [view, setView] = useState<'time' | 'habits'>('time');
+  const [view, setView] = useState<'time' | 'habits' | 'points'>('time');
   const isCurrent = offset === 0;
   const { from, to } = periodRange(period, shiftPeriod(period, now, offset));
   const prev = periodRange(period, from - 1);
@@ -67,6 +68,7 @@ export default function Stats() {
         <div className="chips">
           <button aria-pressed={view === 'time'} onClick={() => setView('time')}>Время</button>
           <button aria-pressed={view === 'habits'} onClick={() => setView('habits')}>Привычки</button>
+          <button aria-pressed={view === 'points'} onClick={() => setView('points')}>Записи</button>
         </div>
       </div>
       <Segmented
@@ -79,6 +81,13 @@ export default function Stats() {
         <>
           <div className="widget pad">{nav}</div>
           <HabitStats period={period} from={from} to={to} now={now} />
+        </>
+      )}
+
+      {view === 'points' && (
+        <>
+          <div className="widget pad">{nav}</div>
+          <PointStats period={period} from={from} to={to} now={now} />
         </>
       )}
 

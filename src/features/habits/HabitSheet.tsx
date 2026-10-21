@@ -1,174 +1,45 @@
 import { useState, type CSSProperties } from 'react';
-import type { HabitSet } from '../../db/schema';
 import { setHabitMark } from '../../db/commands';
 import { useData } from '../../db/store';
-import { HabitBook, WEEKDAYS, chartParams, choiceParams, dayKey, optionColor, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
+import { HabitBook, WEEKDAYS, chartParams, dayKey, habitColors, habitParams, scheduleText, weekdayOf } from '../../domain/habits';
+import { choiceParams } from '../../domain/points';
 import { addLocalDays, dayStarts, periodRange, shiftPeriod, startOfLocalDay } from '../../domain/time';
 import { Sheet } from '../../ui/Sheet';
-import { ChartKindSwitch, LineChart, scrub, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
-import { ExpandButton, FullChart, fullChartHeight } from '../../ui/FullChart';
+import { ParamChart } from '../points/ParamChart';
+import { PointSheet } from '../points/PointSheet';
 import { HabitEditor } from './HabitEditor';
-import { MarkSheet } from './MarkSheet';
 
-const KIND_TEXT = { check: 'галочка', quit: 'держусь', time: 'по занятию' } as const;
+const KIND_TEXT = { check: 'галочка', quit: 'держусь', time: 'время занятия', points: 'по записям занятия' } as const;
 
-// Карточка привычки: серия, рекорд, процент, месяц сеткой и график параметров по дням.
+// Карточка привычки: серия, рекорд, процент, месяц сеткой и график чисел из записей по дням.
 // Тап по дню в календаре — отметить или снять (так правятся прошлые дни).
 export default function HabitSheet({ id, day, onClose }: { id: string; day: number; onClose: () => void }) {
-  const { habits, habitMarks, activities, entries } = useData();
+  const { habits, habitMarks, activities, entries, points } = useData();
   const now = Date.now();
   const habit = habits.find((h) => h.id === id);
   const [month, setMonth] = useState(0);  // 0 = месяц открытого дня, -1 = предыдущий…
-  const [param, setParam] = useState<string | null>(null);       // столбики: какой параметр
-  const [shown, setShown] = useState<Set<string> | null>(null);   // линия: какие параметры включены
-  const [asking, setAsking] = useState<number | null>(null); // день, за который спрашиваем числа
+  const [asking, setAsking] = useState<number | null>(null); // день, за который открыты записи
   const [editing, setEditing] = useState(false);
-  const [chart, setChart] = useState<ChartKind>(() => savedChart('habit'));
-  const [pick, setPick] = useState<number | null>(null);  // день, выбранный тапом по графику
-  const [full, setFull] = useState(false);                // график на весь экран
-  const [by, setBy] = useState<string | null>(null);      // каким вариантом красить («Хват»)
-  // Фильтр: параметр → выбранные варианты (≈ Dictionary<string, HashSet<string>>).
-  // Внутри параметра — «или» (кулаки или ладони), между параметрами — «и» (… и на полу).
-  const [filter, setFilter] = useState<Record<string, string[]>>({});
-  const pickChart = (k: ChartKind) => { setChart(k); saveChart('habit', k); };
   if (!habit) return null; // удалили, пока карточка была открыта
-  const book = new HabitBook(habit, activities, entries, habitMarks, now);
+  const book = new HabitBook(habit, activities, entries, habitMarks, now, points);
 
   const color = habitColors([habit], activities).get(habit.id)!;
   const today = startOfLocalDay(now);
   const { from, to } = periodRange('month', shiftPeriod('month', day, month));
   const days = dayStarts(from, to);
   const r30 = book.rate(addLocalDays(today, -29), today + 1);
-  const params = chartParams(habit);
-  const pid = params.find((p) => p.id === param)?.id ?? params[0]?.id;
-
-  // Варианты: точки красятся по выбранному варианту дня, а тап по варианту оставляет только его дни —
-  // так «на кулаках» сравнивается с «на кулаках», а не с «на пальцах».
-  const cps = choiceParams(habit);
-  const cp = cps.find((p) => p.id === by) ?? cps[0];
-  const optIndex = (id: string | undefined) => cp?.options.findIndex((o) => o.id === id) ?? -1;
-  // Фильтр отбирает записи (подходы), а не дни: в сумму за день идут только подходящие подходы.
-  const keepSet = (s: HabitSet) => Object.entries(filter).every(([id, ids]) => !ids.length || ids.includes(s.choices?.[id] ?? ''));
-  const toggleOption = (pid: string, oid: string) => {
-    const cur = filter[pid] ?? [];
-    setFilter({ ...filter, [pid]: cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid] });
-  };
-  const tint = (i: number) => {
-    const k = optIndex(cp ? book.mainChoice(days[i], cp.id, keepSet) : undefined); // точка — цветом самого частого варианта дня
-    return k >= 0 ? optionColor(k) : 'var(--text-dim)';
-  };
-  const dayValues = days.map((d) => book.values(d, keepSet));
-  const colored = !!cp && (filter[cp.id] ?? []).length !== 1; // один вариант оставлен — красить нечем
+  const numbers = chartParams(habit, activities);
+  const params = habitParams(habit, activities);
 
   const tapDay = (d: number) => {
     if (d > today) return;
     const s = book.status(d), k = dayKey(d);
     if (habit.kind === 'quit') void setHabitMark(habit.id, k, !s.marked);
-    else if (habit.params?.length) setAsking(d); // подходы за день: добавить или удалить
+    else if (habit.kind === 'points') setAsking(d); // записи за день: добавить или удалить
     else if (s.marked) void setHabitMark(habit.id, k, false);
     else if (habit.kind === 'time' && s.done) return; // засчитано трекингом — снимать нечего
     else void setHabitMark(habit.id, k, true);
   };
-
-  // Значения выбранного параметра по дням месяца (null — не вписано).
-  const values = dayValues.map((v) => (pid ? v[pid] ?? null : null));
-  const got = values.filter((v): v is number => v !== null);
-  const max = Math.max(1, ...got);
-  const unit = params.find((p) => p.id === pid)?.unit;
-  // Линия: несколько параметров сразу, у каждого свой цвет (первый — цвет привычки).
-  const on = shown ?? new Set(pid ? [pid] : []);
-  const toggle = (id: string) => {
-    const next = new Set(on);
-    if (next.has(id)) { if (next.size > 1) next.delete(id); } else next.add(id);
-    setShown(next);
-  };
-  const lineColor = (i: number) => (i === 0 ? color : SERIES_COLORS[(i - 1) % SERIES_COLORS.length]);
-  const series = params.map((p, i) => ({
-    id: p.id, color: lineColor(i),
-    values: dayValues.map((v) => v[p.id] ?? null),
-    pointColors: colored ? days.map((_, k) => tint(k)) : undefined,
-  }))
-    .filter((s) => on.has(s.id));
-  const sameUnit = new Set(series.map((s) => params.find((p) => p.id === s.id)?.unit ?? '')).size <= 1;
-  const W = 300, H = 70, bw = W / days.length;
-  const lastPast = Math.max(0, days.filter((d) => d <= today).length - 1); // будущие дни не выбираем
-
-  // Что показать над графиком: выбранный тапом день и числа по нему, иначе — итог месяца.
-  const dayName = (i: number) => new Date(days[i]).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' });
-  const caption = () => {
-    if (pick !== null) {
-      const list = chart === 'line' ? series : pid ? [{ id: pid, color, values }] : [];
-      return (
-        <div className="small chart-pick" onClick={() => setPick(null)}>
-          <b>{dayName(pick)}</b>
-          {list.map((x) => {
-            const p = params.find((q) => q.id === x.id)!;
-            const v = x.values[pick];
-            return <span key={x.id}> · <span className="dot" style={{ background: x.color }} /> {p.name} {v === null ? '—' : `${round(v)}${p.unit ? ' ' + p.unit : ''}`}</span>;
-          })}
-          {cps.map((c) => {
-            // все варианты, что были в подходах дня: «хват: кулаки, ладони»
-            const names = [...new Set(book.sets(days[pick]).filter(keepSet).map((x) => x.choices?.[c.id]))]
-              .map((id) => c.options.find((q) => q.id === id)?.name).filter(Boolean);
-            return names.length > 0 && <span key={c.id}> · {c.name.toLowerCase()}: {names.join(', ')}</span>;
-          })}
-        </div>
-      );
-    }
-    return (
-      <div className="dim small">
-        {chart === 'line' && series.length > 1 && !sameUnit && 'У каждой линии своя шкала: сравнивай ход, а не высоту. '}
-        {chart === 'line' && series.length > 1 ? 'Тапни день, чтобы увидеть числа.' : got.length
-          ? `среднее ${round(got.reduce((a, b) => a + b, 0) / got.length)} · максимум ${round(Math.max(...got))}${unit ? ' ' + unit : ''} · дней с числом: ${got.length}`
-          : 'В этом месяце чисел нет. Они вписываются при отметке.'}
-      </div>
-    );
-  };
-
-  // График целиком (кнопки, сам график, подпись). Рисуется дважды: в карточке (h = 70) и на весь экран.
-  const chartBody = (h: number, isFull: boolean) => (
-    <>
-      <div className="chart-bar-row">
-        <div className="chips">
-          {chart === 'bars'
-            ? params.map((p) => <button key={p.id} aria-pressed={p.id === pid} onClick={() => setParam(p.id)}>{p.name}</button>)
-            // в режиме линии параметры включаются по отдельности, точка — цвет линии
-            : params.map((p, i) => (
-              <button key={p.id} aria-pressed={on.has(p.id)} onClick={() => toggle(p.id)}>
-                <span className="dot" style={{ background: on.has(p.id) ? lineColor(i) : 'var(--line)' }} /> {p.name}
-              </button>
-            ))}
-        </div>
-        <ChartKindSwitch value={chart} onChange={pickChart} />
-        {!isFull && <ExpandButton onClick={() => setFull(true)} />}
-      </div>
-      {/* строка на каждый параметр-вариант: тап по варианту включает его в фильтр, можно несколько;
-          тап по названию — красить точки этим параметром (цветные кружки — у него) */}
-      {cps.map((c) => (
-        <div key={c.id} className="chips variant-chips">
-          <button className="variant-by" aria-pressed={c.id === cp?.id} onClick={() => setBy(c.id)}>{c.name}</button>
-          {c.options.map((o, i) => (
-            <button key={o.id} aria-pressed={(filter[c.id] ?? []).includes(o.id)} onClick={() => toggleOption(c.id, o.id)}>
-              {c.id === cp?.id && <span className="dot" style={{ background: optionColor(i) }} />} {o.name}
-            </button>
-          ))}
-        </div>
-      ))}
-      <svg viewBox={`0 0 ${W} ${h + 14}`} className="bars scrub" style={isFull ? { height: 'auto' } : undefined}
-        {...scrub(days.length, (f) => Math.min(lastPast, Math.floor(f * days.length)), pick, setPick)}>
-        <line x1="0" x2={W} y1={h} y2={h} stroke="var(--line)" />
-        {chart === 'bars' && values.map((v, i) => v !== null && (
-          <rect key={i} x={i * bw + 1} y={h - (v / max) * h} width={bw - 2} height={Math.max(1, (v / max) * h)} rx="1.5" fill={colored ? tint(i) : color}
-            opacity={pick === null || pick === i ? 1 : 0.35} />
-        ))}
-        {chart === 'line' && <LineChart series={series} bw={bw} h={h} scale={sameUnit ? 'shared' : 'own'} picked={pick} />}
-        {days.map((d, i) => (i % 5 === 0 || i === days.length - 1) && (
-          <text key={d} x={i * bw + bw / 2} y={h + 12} textAnchor="middle" className="bar-label">{new Date(d).getDate()}</text>
-        ))}
-      </svg>
-      {caption()}
-    </>
-  );
 
   return (
     <Sheet onClose={onClose}>
@@ -191,9 +62,9 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
         </div>
 
         <div className="stat-nav">
-          <button className="nav-arrow" onClick={() => { setMonth(month - 1); setPick(null); }}>‹</button>
+          <button className="nav-arrow" onClick={() => setMonth(month - 1)}>‹</button>
           <div className="stat-period">{new Date(from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
-          <button className="nav-arrow" disabled={to > today} onClick={() => { setMonth(month + 1); setPick(null); }}>›</button>
+          <button className="nav-arrow" disabled={to > today} onClick={() => setMonth(month + 1)}>›</button>
         </div>
         <div className="habit-cal">
           {WEEKDAYS.map((w) => <span key={w} className="wd">{w}</span>)}
@@ -211,28 +82,21 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
           })}
         </div>
 
-        {params.length > 0 && (
-          <div className="habit-chart">
-            {chartBody(H, false)}
-          </div>
-        )}
-        {full && (
-          <FullChart title={<>{habit.icon} {habit.name} · {new Date(from).toLocaleDateString('ru-RU', { month: 'long' })}</>} onClose={() => setFull(false)}>
-            <div className="habit-chart full">{chartBody(fullChartHeight(W, 190), true)}</div>
-          </FullChart>
+        {numbers.length > 0 && (
+          <ParamChart days={days} today={today} numbers={numbers} choices={choiceParams(params)} color={color} chartKey="habit"
+            pointsAt={(i) => book.points(days[i])} valuesAt={(i, keep) => book.values(days[i], keep)}
+            fullTitle={<>{habit.icon} {habit.name} · {new Date(from).toLocaleDateString('ru-RU', { month: 'long' })}</>}
+            empty={habit.kind === 'time' ? 'В этом месяце времени по занятию нет.' : 'В этом месяце записей нет. Тапни день, чтобы добавить.'} />
         )}
 
         {habit.kind === 'time' && <p className="dim small">Засчитывается сама, когда протрекано {habit.goalMin} мин. Забыл таймер — тапни день в календаре.</p>}
+        {habit.kind === 'points' && <p className="dim small">Засчитывается сама, когда за день есть запись по занятию. Тап по дню — записи этого дня.</p>}
         {habit.kind === 'quit' && <p className="dim small">День засчитан, пока не отмечен срыв. Тап по дню — отметить или снять срыв.</p>}
       </div>
 
-      {asking !== null && <MarkSheet habit={habit} day={asking} onClose={() => setAsking(null)} />}
+      {asking !== null && habit.activityId && <PointSheet activityId={habit.activityId} day={asking} onClose={() => setAsking(null)} />}
       {editing && <HabitEditor habit={habit} onClose={() => setEditing(false)} onRemoved={onClose} />}
     </Sheet>
   );
 }
 
-const round = (v: number) => Math.round(v * 10) / 10;
-
-// Цвета второй и следующих линий (первая — цвет привычки).
-const SERIES_COLORS = ['#e8e8ee', '#f2c94c', '#56ccf2', '#ff8a65'];

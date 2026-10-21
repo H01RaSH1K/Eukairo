@@ -9,6 +9,7 @@ import { childrenOf, forgetAfter, isHidden, isNeed, pathOf, subtreeIds, timerRan
 import { Sheet } from '../../ui/Sheet';
 import { shortMin } from '../today/Dial';
 import { ActivityPicker } from './ActivityPicker';
+import { ParamsEditor, fromDraft, toDraft, type DraftParam } from '../points/ParamsEditor';
 
 // Экран «Занятия»: дерево целиком, тап по строке — карточка занятия (название, цвет,
 // диапазон таймера, порог забытого таймера, перенос, «Завершить», удаление).
@@ -89,6 +90,7 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
   a: Activity; isNew: boolean; all: Activity[]; color: string; onClose: () => void; onAddChild: () => void;
 }) {
   const [name, setName] = useState(a.name);
+  const [params, setParams] = useState<DraftParam[]>(() => toDraft(a.params)); // пишутся при закрытии листа
   const [moving, setMoving] = useState(false);
   const isRoot = a.parentId === null;
   const siblings = childrenOf(all, a.parentId);
@@ -99,7 +101,11 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
   const needByParent = !a.need && a.parentId !== null && isNeed(all, a.parentId);
 
   const commitName = () => { if (name.trim() && name.trim() !== a.name) void updateActivity(a.id, { name: name.trim() }); };
-  const close = () => { commitName(); onClose(); };
+  const commitParams = () => {
+    const next = fromDraft(params);
+    if (JSON.stringify(next) !== JSON.stringify(a.params ?? [])) void updateActivity(a.id, { params: next.length ? next : undefined });
+  };
+  const close = () => { commitName(); commitParams(); onClose(); };
 
   const remove = async () => {
     if (!confirm(`Удалить «${a.name}»${childrenOf(all, a.id).length ? ' вместе с подзанятиями' : ''}?`)) return;
@@ -166,8 +172,17 @@ function ActivitySheet({ a, isNew, all, color, onClose, onAddChild }: {
             onChange={(e) => void updateActivity(a.id, { need: e.target.checked || undefined })} />
         </label>
 
+        <div className="range-edit flat">
+          <div className="setting-title">Записи без времени</div>
+          <div className="setting-hint">
+            Что вписывать в запись: числа («Отжимания, раз», «Вес, кг») и варианты («Хват: пальцы, кулаки, ладони»).
+            Записи добавляются в «Ленте» кнопкой ＋ и по привычке «по записям».
+          </div>
+          <ParamsEditor value={params} onChange={setParams} />
+        </div>
+
         <div className="btn-row">
-          <button className="btn" onClick={() => { commitName(); onAddChild(); }}>＋ Подзанятие</button>
+          <button className="btn" onClick={() => { commitName(); commitParams(); onAddChild(); }}>＋ Подзанятие</button>
           <button className="btn" onClick={() => setMoving(true)}>Перенести</button>
           <button className="btn arrow" disabled={index <= 0} onClick={() => void reorderActivity(a.id, -1)} aria-label="Выше">↑</button>
           <button className="btn arrow" disabled={index < 0 || index >= siblings.length - 1} onClick={() => void reorderActivity(a.id, 1)} aria-label="Ниже">↓</button>

@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, type Entry } from './schema';
 import {
-  addHabitSet, removeHabitSet, setHabitMark,
+  deletePoint, savePoint,
   addActivity, archiveActivity, closeExpiredTimer, deleteActivity, logEntry, moveActivity, reorderActivity,
   saveEntry, seedIfEmpty, startTimer, stopTimer,
 } from './commands';
@@ -15,7 +15,7 @@ const entries = () => db.entries.orderBy('start').toArray();
 
 beforeEach(async () => {
   vi.useRealTimers();
-  await Promise.all([db.activities.clear(), db.entries.clear(), db.settings.clear()]);
+  await Promise.all([db.activities.clear(), db.entries.clear(), db.settings.clear(), db.points.clear()]);
 });
 
 describe('таймер', () => {
@@ -120,7 +120,7 @@ describe('импорт бэкапа', () => {
     const e: Entry = { id: 'e1', activityId: 'a', start: 0, end: 10 * MIN, source: 'manual', updatedAt: 5 };
     await db.entries.put(e);
     const r = await mergeBackup({
-      app: 'eukairo', schemaVersion: 1, exportedAt: '', settings: [], habits: [], habitMarks: [],
+      app: 'eukairo', schemaVersion: 1, exportedAt: '', settings: [], habits: [], habitMarks: [], points: [],
       activities: [{ id: 'a', parentId: null, name: 'A', order: 0, updatedAt: 1 }],
       entries: [{ ...e, end: 20 * MIN, updatedAt: 3 }, { ...e, id: 'e2', start: 30 * MIN, end: 40 * MIN }],
     });
@@ -130,23 +130,14 @@ describe('импорт бэкапа', () => {
   });
 });
 
-describe('отметки привычек', () => {
-  it('подходы: добавить, снять галочку и вернуть, удалить последний', async () => {
-    await db.habits.put({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0 });
-    await addHabitSet('h', '2026-10-20', { values: { reps: 30 }, choices: { grip: 'b' } });
-    await addHabitSet('h', '2026-10-20', { values: { reps: 20 } });
-    await setHabitMark('h', '2026-10-20', false);
-    await setHabitMark('h', '2026-10-20', true);
-    let m = (await db.habitMarks.get('h:2026-10-20'))!;
-    expect(m.done).toBe(true);
-    expect(m.sets!.map((s) => s.values!.reps)).toEqual([30, 20]);
-    for (const s of m.sets!) await removeHabitSet('h', '2026-10-20', s.id);
-    m = (await db.habitMarks.get('h:2026-10-20'))!;
-    expect(m).toMatchObject({ done: false, sets: [] });
-  });
-  it('подход до начала привычки сдвигает начало', async () => {
-    await db.habits.put({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-10', updatedAt: 0 });
-    await addHabitSet('h', '2026-10-05', { values: { reps: 1 } });
-    expect((await db.habits.get('h'))!.since).toBe('2026-10-05');
+describe('записи без времени', () => {
+  it('сохранить, поправить, удалить; занятие с записями не удаляется, а завершается', async () => {
+    const a = await addActivity(null, 'Отжимания');
+    await savePoint({ id: 'p1', activityId: a, at: 1, values: { reps: 20 } });
+    await savePoint({ id: 'p1', activityId: a, at: 1, values: { reps: 25 } });
+    expect((await db.points.get('p1'))!.values).toEqual({ reps: 25 });
+    expect(await deleteActivity(a)).toBe('archived');
+    await deletePoint('p1');
+    expect(await db.points.count()).toBe(0);
   });
 });
