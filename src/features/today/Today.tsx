@@ -10,7 +10,7 @@ import { ChargeTray, ClockTray, DialTray, TilesTray } from './controls/Trays';
 import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
-import { MIN_MS, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
+import { MIN_MS, startOfLocalDay, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
 import { answerForgotten, saveEntry, snoozeBackupBanner, startTimer, stopTimer } from '../../db/commands';
 import { settingOf, useData } from '../../db/store';
 import { shareBackup } from '../../db/backup';
@@ -25,6 +25,7 @@ import { Sheet } from '../../ui/Sheet';
 import { useNow } from '../../ui/useNow';
 import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
+import { PointSheet } from '../points/PointSheet';
 import { HabitStrip } from '../habits/HabitStrip';
 
 const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
@@ -38,6 +39,7 @@ export default function Today() {
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
+  const [noting, setNoting] = useState<string | null>(null); // занятие «без времени»: вместо таймера — лист записи
   // Куда листали в последний раз — для анимации «страница справа / слева».
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
   const go = (next: number) => { if (next === offset) return; setDir(next > offset ? 'fwd' : 'back'); setOffset(next); };
@@ -299,14 +301,17 @@ export default function Today() {
 
       {picking && (
         <ActivityPicker
-          activities={activities.filter((a) => !isTimeless(activities, a.id))}
+          activities={activities}
           colors={colors}
           title="Занятие"
-          onPick={(id) => { setChosen(id); setPicking(false); }}
+          note={(id) => isTimeless(activities, id) ? 'запись' : undefined}
+          onPick={(id) => { if (isTimeless(activities, id)) setNoting(id); else setChosen(id); setPicking(false); }}
           onClose={() => setPicking(false)}
           footer={<button className="btn ghost" onClick={() => { setPicking(false); newRetro(); }}>＋ Добавить запись задним числом</button>}
         />
       )}
+
+      {noting && <PointSheet activityId={noting} day={startOfLocalDay(now)} onClose={() => setNoting(null)} />}
 
       {selected && <EntrySheet entry={selected.entry} isNew={selected.isNew} onClose={() => setSelected(null)} />}
 
