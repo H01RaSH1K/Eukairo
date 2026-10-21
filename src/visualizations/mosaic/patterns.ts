@@ -3,7 +3,7 @@
 // поэтому у каждого дня своё число сегментов (`counts`): поспал 8 ч — в дне 16 стёкол.
 // Узор отдаёт многоугольники в порядке часов. Соседние по времени часы
 // стараемся ставить рядом и на картинке, чтобы длинная запись слилась в одну фигуру.
-import { rng, voronoi, type Pt } from './voronoi';
+import { area, neighbours, rng, voronoi, type Pt } from './voronoi';
 
 export type PatternId = 'glass' | 'rose' | 'tri' | 'grid';
 
@@ -159,32 +159,27 @@ function hex(sl: Slots, aspect: number, seed: number, relax = 0): Pattern {
   return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl), relax);
 }
 
-/** Центр масс многоугольника (по площади, а не по вершинам). */
-function centroid(poly: Pt[]): Pt {
-  let a = 0, cx = 0, cy = 0;
-  poly.forEach((p, i) => {
-    const q = poly[(i + 1) % poly.length];
-    const cr = p[0] * q[1] - q[0] * p[1];
-    a += cr; cx += (p[0] + q[0]) * cr; cy += (p[1] + q[1]) * cr;
-  });
-  return Math.abs(a) < 1e-9 ? poly[0] : [cx / (3 * a), cy / (3 * a)];
-}
+/** Выравнивание площадей: доля разницы площадей, идущая в вес за шаг, и предел веса (в долях целевой площади). */
+const STEP = 0.15, CAP = 1.5;
 
 /** Вороной по точкам часов и пустых мест: первые — сегменты, вторые — декор. */
 function fromSeeds(sl: Slots, h: number, hours: Pt[], empty: Pt[], reach: number, relax = 0): Pattern {
-  let seeds = [...hours, ...empty];
-  let all = voronoi(seeds, W, h, reach);
-  // Выравнивание (алгоритм Ллойда): каждую точку двигаем в центр её стекла и режем заново.
-  // Крупные стёкла отдают место мелким, и за несколько шагов размеры почти сравниваются,
-  // а порядок часов сохраняется — точки сдвигаются лишь немного.
-  for (let k = 0; k < relax; k++) {
-    // Шаг чуть «с разгоном» (×1.8 вместо ×1) — сходится в несколько раз быстрее.
-    seeds = all.map((poly, i) => {
-      if (poly.length < 3) return seeds[i];
-      const c = centroid(poly), s = seeds[i];
-      return [Math.min(W, Math.max(0, s[0] + 1.8 * (c[0] - s[0]))), Math.min(h, Math.max(0, s[1] + 1.8 * (c[1] - s[1])))];
-    });
-    all = voronoi(seeds, W, h, reach);
+  const seeds = [...hours, ...empty];
+  const near = neighbours(seeds, reach); // точки не двигаются — соседей считаем один раз
+  let all = voronoi(seeds, W, h, reach, undefined, near);
+  // Выравнивание площадей: точки стоят где стояли (форма стёкол остаётся неровной),
+  // а у каждой появляется вес. Крупному стеклу вес понижаем, мелкому — повышаем,
+  // граница между ними сдвигается, и за несколько десятков шагов площади почти равны.
+  if (relax > 0 && seeds.length > 1) {
+    const target = (W * h) / seeds.length;
+    const weights = new Array<number>(seeds.length).fill(0);
+    const cap = CAP * target;
+    for (let k = 0; k < relax; k++) {
+      // Шаг маленький и вес ограничен: иначе у близких точек граница «перепрыгивает»
+      // и узор начинает дрожать вместо того, чтобы сходиться.
+      all.forEach((poly, i) => { weights[i] = Math.max(-cap, Math.min(cap, weights[i] + STEP * (target - area(poly)))); });
+      all = voronoi(seeds, W, h, reach, weights, near);
+    }
   }
   return { w: W, h, cells: all.slice(0, hours.length), decor: all.slice(hours.length), day: sl.day };
 }
@@ -270,7 +265,8 @@ function grid(sl: Slots, aspect: number): Pattern {
 function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId, cut: number, relax: number): Pattern {
   const cuts = [
     () => jittered(sl, aspect, 0.6, seed, relax),   // ровные неровные стёкла
-    () => jittered(sl, aspect, 0.98, seed, relax),  // осколки
+    // осколки; при выравнивании чуть меньше разброс — слипшиеся точки не дают площадям сойтись
+    () => jittered(sl, aspect, relax ? 0.85 : 0.98, seed, relax),
     () => hex(sl, aspect, seed, relax),             // соты
     () => spiral(n, aspect, seed),           // спираль от центра (у копилки заполняется от центра)
   ];
@@ -294,7 +290,7 @@ const cache = new Map<string, Pattern>();
  * `aspect` — ширина / высота места под картину,
  * `weekday` — день недели первого дня (0 = пн), нужен календарю месяца,
  * `cut` — нарезка витража (−1 = по дате),
- * `relax` — сколько шагов выравнивания размеров стёкол (0 — как нарезалось).
+ * `relax` — сколько шагов выравнивания площадей стёкол (0 — как нарезалось).
  */
 export function getPattern(id: PatternId, days: number | number[] = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0, cut = -1, relax = 0): Pattern {
   // number | number[] — «или то, или другое» (в C# тут были бы две перегрузки).

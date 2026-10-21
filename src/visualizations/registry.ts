@@ -70,7 +70,7 @@ const cut: SettingDef = {
 const size: SettingDef = {
   id: 'size', kind: 'choice', title: 'Размер стёкол', default: 'equal',
   options: [
-    { id: 'equal', title: 'Одинаковые', hint: 'Стёкла почти одного размера, форма у каждого своя' },
+    { id: 'equal', title: 'Одинаковые', hint: 'Площадь у стёкол почти одна, а форма у каждого своя' },
     { id: 'varied', title: 'Разные', hint: 'Как нарезалось: есть и крупные, и мелкие' },
   ],
 };

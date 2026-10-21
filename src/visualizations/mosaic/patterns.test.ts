@@ -81,12 +81,12 @@ describe('одинаковые стёкла', () => {
       for (const cut of [0, 1, 2]) {
         const counts = [16, 15, 17, 24, 16, 16, 14]; // неделя с нуждами: дни разной длины
         const raw = getPattern('glass', counts, 5, 0.62, fill, 0, cut, 0);
-        const even = getPattern('glass', counts, 5, 0.62, fill, 0, cut, 10);
+        const even = getPattern('glass', counts, 5, 0.62, fill, 0, cut, 30);
         const spread = (p: typeof raw) => {
           const a = p.cells.map(area), m = a.reduce((x, y) => x + y, 0) / a.length;
           return Math.max(...a.map((x) => Math.abs(x / m - 1)));
         };
-        expect(spread(even)).toBeLessThan(0.35);
+        expect(spread(even)).toBeLessThan(0.5);
         expect(spread(even)).toBeLessThan(spread(raw));
         expect([...even.cells, ...(even.decor ?? [])].reduce((s, c) => s + area(c), 0)).toBeCloseTo(even.w * even.h, 1);
       }

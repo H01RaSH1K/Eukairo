@@ -37,8 +37,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const exact = settings.count !== 'threshold';
   const minMs = Number(settings.threshold) * 60_000;
   const cut = settings.cut === undefined || settings.cut === 'auto' ? -1 : Number(settings.cut);
-  // «Одинаковые» стёкла: 10 шагов выравнивания размеров (см. fromSeeds в patterns.ts).
-  const relax = settings.size === 'varied' ? 0 : 10;
+  // «Одинаковые» стёкла: 30 шагов выравнивания площадей (см. fromSeeds в patterns.ts).
+  const relax = settings.size === 'varied' ? 0 : 30;
   const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
   const now = Date.now();
