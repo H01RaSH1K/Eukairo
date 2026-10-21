@@ -3,21 +3,112 @@ import type { Span } from '../types';
 import { HOUR_MS } from '../../domain/time';
 import { rng, type Pt } from './voronoi';
 
-/** Хозяин часа: запись, занявшая больше всего времени в этом часе, если хотя бы полчаса. */
-export interface HourOwner { entryId: string; color: string; need?: boolean }
+/**
+ * Хозяин часа: запись, чьё стекло это. `key` — «серия», по ней стёкла сливаются
+ * в одну фигуру (несколько записей одного занятия почти подряд — одна серия).
+ */
+export interface HourOwner { entryId: string; key: string; color: string; need?: boolean }
 
-export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = HOUR_MS / 2): (HourOwner | null)[] {
+/** Перерыв меньше этого между записями одного занятия не рвёт серию. */
+const RUN_GAP = HOUR_MS / 2;
+
+/**
+ * Серии: записи одного занятия с перерывом меньше получаса склеиваем.
+ * Возвращает entryId → ключ серии (entryId её первой записи). `spans` отсортированы по началу.
+ */
+export function runKeys(spans: Span[]): Map<string, string> {
+  const out = new Map<string, string>();
+  // Последняя серия каждого занятия: где закончилась и как зовётся.
+  const last = new Map<string, { end: number; key: string }>();
+  for (const s of spans) {
+    const prev = last.get(s.activityId);
+    const key = prev && s.start - prev.end < RUN_GAP ? prev.key : s.entryId;
+    out.set(s.entryId, key);
+    last.set(s.activityId, { end: Math.max(s.end, prev?.key === key ? prev.end : 0), key });
+  }
+  return out;
+}
+
+/** «По порогу»: час достаётся записи, занявшей больше всего времени в нём, если хотя бы `minMs`. */
+export function hourOwners(spans: Span[], dayStart: number, count = 24, minMs = HOUR_MS / 2, keys?: Map<string, string>): (HourOwner | null)[] {
   return Array.from({ length: count }, (_, h) => {
     const a = dayStart + h * HOUR_MS;
     const b = a + HOUR_MS;
-    let best: HourOwner | null = null;
+    let best: Span | null = null;
     let bestMs = 0;
     for (const s of spans) {
       const ms = Math.min(s.end, b) - Math.max(s.start, a);
-      if (ms > bestMs) { bestMs = ms; best = { entryId: s.entryId, color: s.color, need: s.need }; }
+      if (ms > bestMs) { bestMs = ms; best = s; }
     }
-    return bestMs >= minMs ? best : null;
+    return best && bestMs >= minMs ? ownerOf(best, keys) : null;
   });
+}
+
+const ownerOf = (s: Span, keys?: Map<string, string>): HourOwner =>
+  ({ entryId: s.entryId, key: keys?.get(s.entryId) ?? s.entryId, color: s.color, need: s.need });
+
+/**
+ * «Точно»: минуты не теряются. Цветных стёкол в дне — столько, сколько набрано часов
+ * (округлённо), и делятся они между сериями по их времени: сначала целые часы,
+ * остаток — тем, у кого дробная часть больше (метод наибольшего остатка).
+ * Стекло серия получает там, где у неё больше всего минут; если эти часы уже заняты
+ * соседями — ближайший свободный час рядом с ней.
+ */
+export function exactOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>): (HourOwner | null)[] {
+  const H = HOUR_MS;
+  const dayEnd = dayStart + count * H;
+  interface Run { first: HourOwner; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
+  const runs = new Map<string, Run>(); // ≈ Dictionary<string, Run>, порядок вставки сохраняется
+  let lastEnd = dayStart;
+  for (const s of spans) {
+    const a = Math.max(s.start, dayStart), b = Math.min(s.end, dayEnd);
+    if (b <= a) continue;
+    lastEnd = Math.max(lastEnd, b);
+    const o = ownerOf(s, keys);
+    let run = runs.get(o.key);
+    if (!run) {
+      run = { first: o, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
+      runs.set(o.key, run);
+    }
+    run.total += b - a;
+    for (let h = Math.floor((a - dayStart) / H); h < count && dayStart + h * H < b; h++) {
+      const part = Math.min(b, dayStart + (h + 1) * H) - Math.max(a, dayStart + h * H);
+      if (part <= 0) continue;
+      run.ms[h] += part;
+      // В часе серии стекло подписано записью, у которой там больше минут (на неё откроется тап).
+      if (part > run.bestMs[h]) { run.bestMs[h] = part; run.best[h] = o; }
+    }
+  }
+  const list = [...runs.values()];
+  const sumMs = list.reduce((s, r) => s + r.total, 0);
+  const n = Math.min(count, Math.round(sumMs / H));
+  // Целые часы каждой серии + по одному лишнему тем, у кого остаток больше.
+  const quota = list.map((r) => Math.floor(r.total / H));
+  let rest = n - quota.reduce((s, q) => s + q, 0);
+  const byRemainder = list.map((_, i) => i).sort((i, j) => (list[j].total % H) - (list[i].total % H) || i - j);
+  for (const i of byRemainder) if (rest-- > 0) quota[i]++;
+
+  const owners: (HourOwner | null)[] = new Array(count).fill(null);
+  // Пары (серия, час) по убыванию минут: час достаётся тому, кто занял его плотнее.
+  const pairs: [number, number, number][] = [];
+  list.forEach((r, i) => r.ms.forEach((ms, h) => { if (ms > 0) pairs.push([i, h, ms]); }));
+  pairs.sort((p, q) => q[2] - p[2] || p[1] - q[1]);
+  for (const [i, h] of pairs) {
+    if (owners[h] || quota[i] <= 0) continue;
+    owners[h] = list[i].best[h];
+    quota[i]--;
+  }
+  // Кому не хватило своих часов — ближайшие свободные (но не в будущем, пока есть другие).
+  list.forEach((r, i) => {
+    if (quota[i] <= 0) return;
+    const own = r.ms.map((ms, h) => (ms > 0 ? h : -1)).filter((h) => h >= 0);
+    const dist = (h: number) => Math.min(...own.map((x) => Math.abs(x - h)));
+    const past = (h: number) => (dayStart + h * H < lastEnd ? 0 : 1);
+    const free = owners.map((o, h) => (o ? -1 : h)).filter((h) => h >= 0);
+    free.sort((x, y) => past(x) - past(y) || dist(x) - dist(y) || x - y);
+    for (const h of free.slice(0, quota[i])) owners[h] = r.first;
+  });
+  return owners;
 }
 
 /**
@@ -36,12 +127,12 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
   const sum = weights.reduce((a, b) => a + b, 0);
   let acc = 0;
   const bounds = weights.map((w) => (acc += w) / sum * filled.length);
-  // Запись (отрезок часов одного entryId) не рвём между пятнами: она целиком идёт
+  // Серию (отрезок часов одного key) не рвём между пятнами: она целиком идёт
   // в то пятно, куда попадает её середина. Так часы одной записи сливаются.
   const sizes = new Array<number>(count).fill(0);
   for (let i = 0; i < filled.length;) {
     let j = i;
-    while (j < filled.length && filled[j].entryId === filled[i].entryId) j++;
+    while (j < filled.length && filled[j].key === filled[i].key) j++;
     const mid = (i + j) / 2;
     const spot = Math.max(0, bounds.findIndex((b) => mid <= b));
     sizes[spot] += j - i;
