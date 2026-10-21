@@ -4,6 +4,7 @@ import { HOUR_MS, dayStarts } from '../../domain/time';
 import { runKeys, spotPlaces, wholeOwners, type HourOwner, type Rest } from './layout';
 import { centroid, cutPieces, stitch, type Cut, type Group } from './pieces';
 import { dayBorderPath, getPattern, leadPath, seedFor, type FillId, type PatternId } from './patterns';
+import { tone } from './tone';
 import type { Pt } from './voronoi';
 import './mosaic.css';
 
@@ -188,21 +189,20 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
           />
         );
       })}
-      {/* «Грани»: поверх каждого цветного стекла — свой градиент (светлее с одного края) */}
-      {seamStyle === 'facet' && (
+      {/* «Грани»: поверх каждого цветного стекла — свой градиент, стекло под своим углом к свету */}
+      {(seamStyle === 'facet' || seamStyle === 'both') && (
         <>
           <defs>
-            <linearGradient id={facetId} x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#fff" stopOpacity="0.22" />
-              <stop offset="0.55" stopColor="#fff" stopOpacity="0" />
-              <stop offset="1" stopColor="#000" stopOpacity="0.22" />
-            </linearGradient>
+            {FACETS.map((f, k) => (
+              <linearGradient key={k} id={facetId + k} {...f}>
+                <stop offset="0" stopColor="#fff" stopOpacity={seamStyle === 'both' ? 0.14 : 0.2} />
+                <stop offset="0.5" stopColor="#fff" stopOpacity="0" />
+                <stop offset="1" stopColor="#000" stopOpacity={seamStyle === 'both' ? 0.14 : 0.2} />
+              </linearGradient>
+            ))}
           </defs>
-          {pieces.map((p, i) => p.owner && <polygon key={'f' + i} points={drawn.pts[i]} fill={`url(#${facetId})`} className="glass-facet" />)}
+          {pieces.map((p, i) => p.owner && <polygon key={'f' + i} points={drawn.pts[i]} fill={`url(#${facetId}${facetOf(p.cell)})`} className="glass-facet" />)}
         </>
-      )}
-      {drawn.seam && (seamStyle === 'line' || seamStyle === 'etch') && (
-        <path d={drawn.seam} className={seamStyle === 'etch' ? 'glass-etch' : 'glass-seam'} style={{ strokeWidth: leadWidth[scale] * leadK * (seamStyle === 'etch' ? 0.22 : 0.3) }} />
       )}
       <path d={drawn.lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK }} />
       {border && <path d={border} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK * 2.6 }} />}
@@ -219,15 +219,22 @@ function firstFuture(kept: { at: number }[][], now: number): number {
   return i;
 }
 
-/**
- * Цвет стекла. У «Оттенков» каждое стекло чуть светлее или темнее (−7…+7%): сдвиг постоянный
- * для номера стекла, поэтому стыки внутри фигуры видны без линий.
- */
+/** Цвет стекла: у «Оттенков» свой у каждого стекла (см. tone.ts), «вместе» — мягче. */
 function paint(color: string, cell: number, style: string): string {
-  if (style !== 'tone') return color;
-  const v = ((cell * 2654435761) >>> 0) % 1000 / 1000 * 2 - 1; // −1…1
-  return `color-mix(in srgb, ${color} ${(100 - Math.abs(v) * 14).toFixed(1)}%, ${v > 0 ? '#fff' : '#000'})`;
+  return style === 'tone' ? tone(color, cell) : style === 'both' ? tone(color, cell, 0.6) : color;
 }
+
+/** Номер одного из FACETS градиентов для стекла (постоянный для номера). */
+const facetOf = (cell: number) => (((cell + 7) * 2246822519) >>> 0) % FACETS.length;
+
+/**
+ * Свет на гранях: 8 направлений «откуда светлее», все — примерно сверху (20°…160° от оси x,
+ * ось y вниз), чтобы картина читалась как освещённая с одной стороны, но каждое стекло по-своему.
+ */
+const FACETS = Array.from({ length: 8 }, (_, k) => {
+  const a = ((20 + (k * 140) / 7) * Math.PI) / 180;
+  return { x1: 0.5 - 0.5 * Math.cos(a), y1: 0.5 - 0.5 * Math.sin(a), x2: 0.5 + 0.5 * Math.cos(a), y2: 0.5 + 0.5 * Math.sin(a) };
+});
 
 /** Многоугольник → строка для SVG `points`. */
 function toPoints(poly: Pt[]): string {
