@@ -1,5 +1,5 @@
 // Привычки: засчитан ли день, серии, процент. Чистые функции, про базу и React не знают.
-import type { Activity, Entry, Habit, HabitMark, HabitOption, HabitParam } from '../db/schema';
+import type { Activity, Entry, Habit, HabitMark, HabitOption, HabitParam, HabitSet } from '../db/schema';
 import { activityColors } from './colors';
 import { addLocalDays, startOfLocalDay, startOfNextLocalDay } from './time';
 import { subtreeIds } from './tree';
@@ -88,9 +88,22 @@ export class HabitBook {
     return { due, done: progress >= 1, progress, ms, marked };
   }
 
-  /** Числа параметров, вписанные за день (у time ещё «минуты» — из трекинга, ключ TRACKED). */
-  values(day: number): Record<string, number> {
-    const v = { ...this.marks.get(dayKey(day))?.values };
+  /** Записи (подходы) за день. Снятая отметка — записей нет (сами они хранятся, вернутся при повторной отметке). */
+  sets(day: number): HabitSet[] {
+    const m = this.marks.get(dayKey(day));
+    return m?.done ? markSets(m) : [];
+  }
+
+  /**
+   * Числа за день: по каждому параметру — сумма по записям, плюс число записей (ключ SETS),
+   * у time ещё минуты из трекинга (ключ TRACKED). `keep` отбирает записи (фильтр по вариантам):
+   * если ни одна не подошла, чисел за день нет.
+   */
+  values(day: number, keep: (s: HabitSet) => boolean = () => true): Record<string, number> {
+    const v: Record<string, number> = {};
+    const sets = this.sets(day).filter(keep);
+    for (const s of sets) for (const [k, x] of Object.entries(s.values ?? {})) v[k] = (v[k] ?? 0) + x;
+    if (sets.length && this.habit.params?.length) v[SETS] = sets.length;
     if (this.habit.kind === 'time') {
       const ms = this.ms.get(dayKey(day));
       if (ms) v[TRACKED] = Math.round(ms / 60_000);
@@ -98,9 +111,14 @@ export class HabitBook {
     return v;
   }
 
-  /** Варианты, выбранные за день: id параметра → id варианта. */
-  choices(day: number): Record<string, string> {
-    return this.marks.get(dayKey(day))?.choices ?? {};
+  /** Вариант, который чаще всего встречается в записях дня (для цвета точки на графике). */
+  mainChoice(day: number, paramId: string, keep: (s: HabitSet) => boolean = () => true): string | undefined {
+    const n = new Map<string, number>();
+    for (const s of this.sets(day).filter(keep)) {
+      const c = s.choices?.[paramId];
+      if (c) n.set(c, (n.get(c) ?? 0) + 1);
+    }
+    return [...n].sort((a, b) => b[1] - a[1])[0]?.[0];
   }
 
   /** Сегодня ещё не засчитан, но день не кончился — серию это не рвёт. */
@@ -147,10 +165,22 @@ export class HabitBook {
 
 /** Ключ встроенного параметра «минуты по занятию» у привычки по времени. */
 export const TRACKED = 'tracked';
+/** Ключ «сколько записей за день» — считается сам, вписывать не нужно. */
+export const SETS = 'sets';
+
+/** Записи отметки; старая отметка с числами (до подходов) читается как одна запись. */
+export function markSets(m: HabitMark): HabitSet[] {
+  if (m.sets) return m.sets;
+  return m.values ? [{ id: m.id, at: 0, values: m.values }] : [];
+}
 
 /** Параметры для графика: у привычки по занятию первым идут минуты из трекинга. */
 export function chartParams(h: Habit): { id: string; name: string; unit?: string }[] {
-  return [...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []), ...(h.params ?? []).filter((p) => !p.options)];
+  return [
+    ...(h.kind === 'time' ? [{ id: TRACKED, name: 'Время', unit: 'мин' }] : []),
+    ...(h.params ?? []).filter((p) => !p.options),
+    ...(h.params?.length ? [{ id: SETS, name: 'Подходы' }] : []),
+  ];
 }
 
 /** Параметры-варианты («Хват: пальцы / кулаки / ладони»): ими красят и фильтруют график. */

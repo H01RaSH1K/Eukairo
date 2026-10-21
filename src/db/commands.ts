@@ -4,12 +4,12 @@
 //
 // async/await — как в C#: функция возвращает Promise (≈ Task), экраны обычно
 // не ждут результата — база сама сообщит об изменении, и экран перерисуется.
-import { db, type Activity, type Entry, type Habit } from './schema';
+import { db, type Activity, type Entry, type Habit, type HabitSet } from './schema';
 import { nextHue } from '../domain/colors';
 import { resolveOverlaps } from '../domain/overlaps';
 import { canMoveTo, childrenOf, subtreeIds } from '../domain/tree';
 import type { ForgottenAnswer } from '../domain/forgotten';
-import { dayKey, nextHabitHue } from '../domain/habits';
+import { dayKey, markSets, nextHabitHue } from '../domain/habits';
 
 let idCounter = 0;
 export const newId = () => crypto.randomUUID?.() ?? `id-${Date.now()}-${idCounter++}`;
@@ -206,23 +206,46 @@ export function updateHabit(id: string, patch: HabitPatch) {
 }
 
 /**
- * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'), с числами и вариантами параметров.
+ * Отметить или снять отметку за день (`day` — ключ 'ГГГГ-ММ-ДД'). Записи (подходы) не трогаем:
+ * сняли и снова поставили галочку — подходы вернутся.
  * Если отмечают день раньше начала привычки — начало сдвигается на него:
  * значит, привычка на самом деле началась раньше.
  */
-export function setHabitMark(
-  habitId: string, day: string, done: boolean,
-  values?: Record<string, number>, choices?: Record<string, string>,
-) {
+export function setHabitMark(habitId: string, day: string, done: boolean) {
   return db.transaction('rw', db.habits, db.habitMarks, async () => {
-    const now = Date.now();
     const id = `${habitId}:${day}`;
-    // Без новых значений оставляем прежние: сняли и снова поставили галочку — числа не пропадут.
     const old = await db.habitMarks.get(id);
-    await db.habitMarks.put({ id, habitId, day, done, values: values ?? old?.values, choices: choices ?? old?.choices, updatedAt: now });
-    const h = await db.habits.get(habitId);
-    if (h && done && day < h.since) await db.habits.update(habitId, { since: day, updatedAt: now });
+    await db.habitMarks.put({ ...old, id, habitId, day, done, updatedAt: Date.now() });
+    if (done) await moveSince(habitId, day);
   });
+}
+
+/** Добавить запись (подход) за день; день при этом засчитан. */
+export function addHabitSet(habitId: string, day: string, set: Pick<HabitSet, 'values' | 'choices'>) {
+  return db.transaction('rw', db.habits, db.habitMarks, async () => {
+    const id = `${habitId}:${day}`, now = Date.now();
+    const old = await db.habitMarks.get(id);
+    // снятая отметка: старые подходы не воскрешаем, день начинается заново
+    const sets = old?.done ? markSets(old) : [];
+    await db.habitMarks.put({ id, habitId, day, done: true, sets: [...sets, { id: newId(), at: now, ...set }], updatedAt: now });
+    await moveSince(habitId, day);
+  });
+}
+
+/** Удалить запись; без записей день больше не засчитан. */
+export function removeHabitSet(habitId: string, day: string, setId: string) {
+  return db.transaction('rw', db.habitMarks, async () => {
+    const id = `${habitId}:${day}`;
+    const old = await db.habitMarks.get(id);
+    if (!old) return;
+    const sets = markSets(old).filter((s) => s.id !== setId);
+    await db.habitMarks.put({ id, habitId, day, done: sets.length > 0, sets, updatedAt: Date.now() });
+  });
+}
+
+async function moveSince(habitId: string, day: string) {
+  const h = await db.habits.get(habitId);
+  if (h && day < h.since) await db.habits.update(habitId, { since: day, updatedAt: Date.now() });
 }
 
 /** Сдвинуть в списке: -1 — выше, +1 — ниже. */

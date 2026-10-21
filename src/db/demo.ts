@@ -1,7 +1,7 @@
 // Демо-данные: дерево занятий и ~5 недель правдоподобных записей.
 // Нужны, чтобы посмотреть мозаику и сводки на «живых» данных. Модуль грузится
 // только по кнопке «Ещё → Демо-данные» и в стартовый бандл не попадает.
-import { db, type Activity, type Entry, type Habit, type HabitMark } from './schema';
+import { db, type Activity, type Entry, type Habit, type HabitMark, type HabitSet } from './schema';
 import { newId } from './commands';
 import { addLocalDays, HOUR_MS, MIN_MS, startOfLocalDay } from '../domain/time';
 import { dayKey, weekdayOf } from '../domain/habits';
@@ -128,7 +128,7 @@ const demoHabits: Habit[] = [
   { id: 'h-teeth', name: 'Почистить зубы вечером', icon: '🪥', hue: 150, kind: 'check' },
   { id: 'h-dishes', name: 'Помыть посуду', icon: '🍽️', hue: 195, kind: 'check' },
   { id: 'h-push', name: 'Анжуманя', icon: '💪', hue: 30, kind: 'check', params: [
-    { id: 'reps', name: 'Отжимания', unit: 'раз' }, { id: 'sets', name: 'Подходы' },
+    { id: 'reps', name: 'Отжимания', unit: 'раз' },
     { id: 'grip', name: 'Хват', options: [{ id: 'palm', name: 'ладони' }, { id: 'fist', name: 'кулаки' }, { id: 'fing', name: 'пальцы' }] },
     { id: 'legs', name: 'Ноги', options: [{ id: 'floor', name: 'пол' }, { id: 'bench', name: 'скамья' }, { id: 'high', name: 'высоко' }] },
   ] },
@@ -141,21 +141,27 @@ function makeDemoMarks(now: number): HabitMark[] {
   const rand = rng(7);
   const marks: HabitMark[] = [];
   const today = startOfLocalDay(now);
-  const mark = (habitId: string, day: number, values?: Record<string, number>, choices?: Record<string, string>) =>
-    marks.push({ id: `${habitId}:${dayKey(day)}`, habitId, day: dayKey(day), done: true, values, choices, updatedAt: now });
+  const mark = (habitId: string, day: number, sets?: Omit<HabitSet, 'id' | 'at'>[]) =>
+    marks.push({
+      id: `${habitId}:${dayKey(day)}`, habitId, day: dayKey(day), done: true, updatedAt: now,
+      sets: sets?.map((s, i) => ({ id: `${habitId}:${dayKey(day)}:${i}`, at: day + (18 * 60 + i * 3) * 60_000, ...s })),
+    });
   // Сегодняшний день оставляем наполовину отмеченным — чтобы было что потыкать.
   for (let d = -40; d <= 0; d++) {
     const day = addLocalDays(today, d), w = weekdayOf(day), t = d === 0;
     if (!t && rand() < 0.9) mark('h-teeth', day);
     if ((t || rand() < 0.75)) mark('h-dishes', day);
     // отжиманий понемногу больше: прогресс видно на графике
-    // хват меняется, и на пальцах выходит заметно меньше — для этого и нужен фильтр по варианту
+    // 2–4 подхода в день, хват и ноги меняются; на пальцах выходит заметно меньше — для этого и фильтр
     if (rand() < (t ? 0 : 0.8)) {
-      const grip = ['palm', 'fist', 'fing'][Math.floor(rand() * 3)], legs = rand() < 0.7 ? 'floor' : rand() < 0.6 ? 'bench' : 'high';
-      const k = { palm: 1, fist: 0.8, fing: 0.45 }[grip]! * (legs === 'floor' ? 1 : legs === 'bench' ? 0.85 : 0.7);
-      mark('h-push', day, { reps: Math.round((20 + (d + 40) * 0.6 + rand() * 8) * k), sets: 2 + Math.round(rand() * 2) }, { grip, legs });
+      const n = 2 + Math.floor(rand() * 3);
+      mark('h-push', day, Array.from({ length: n }, () => {
+        const grip = ['palm', 'fist', 'fing'][Math.floor(rand() * 3)], legs = rand() < 0.7 ? 'floor' : rand() < 0.6 ? 'bench' : 'high';
+        const k = { palm: 1, fist: 0.8, fing: 0.45 }[grip]! * (legs === 'floor' ? 1 : legs === 'bench' ? 0.85 : 0.7);
+        return { values: { reps: Math.round((12 + (d + 40) * 0.3 + rand() * 6) * k) }, choices: { grip, legs } };
+      }));
     }
-    if ([0, 2, 4].includes(w) && !t && rand() < 0.85) mark('h-bar', day, { pull: Math.round(5 + (d + 40) * 0.12 + rand() * 3) });
+    if ([0, 2, 4].includes(w) && !t && rand() < 0.85) mark('h-bar', day, [{ values: { pull: Math.round(5 + (d + 40) * 0.12 + rand() * 3) } }, { values: { pull: Math.round(4 + (d + 40) * 0.1 + rand() * 2) } }]);
     if (!t && rand() < 0.12) mark('h-tok', day); // срыв
   }
   return marks;

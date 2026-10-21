@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import type { HabitSet } from '../../db/schema';
 import { setHabitMark } from '../../db/commands';
 import { useData } from '../../db/store';
 import { HabitBook, WEEKDAYS, chartParams, choiceParams, dayKey, optionColor, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
@@ -45,28 +46,32 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   // так «на кулаках» сравнивается с «на кулаках», а не с «на пальцах».
   const cps = choiceParams(habit);
   const cp = cps.find((p) => p.id === by) ?? cps[0];
-  const choiceAt = (i: number) => (cp ? book.choices(days[i])[cp.id] : undefined);
   const optIndex = (id: string | undefined) => cp?.options.findIndex((o) => o.id === id) ?? -1;
-  const keep = (i: number) => Object.entries(filter).every(([pid, ids]) => !ids.length || ids.includes(book.choices(days[i])[pid]));
+  // Фильтр отбирает записи (подходы), а не дни: в сумму за день идут только подходящие подходы.
+  const keepSet = (s: HabitSet) => Object.entries(filter).every(([id, ids]) => !ids.length || ids.includes(s.choices?.[id] ?? ''));
   const toggleOption = (pid: string, oid: string) => {
     const cur = filter[pid] ?? [];
     setFilter({ ...filter, [pid]: cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid] });
   };
-  const tint = (i: number) => (optIndex(choiceAt(i)) >= 0 ? optionColor(optIndex(choiceAt(i))) : 'var(--text-dim)');
+  const tint = (i: number) => {
+    const k = optIndex(cp ? book.mainChoice(days[i], cp.id, keepSet) : undefined); // точка — цветом самого частого варианта дня
+    return k >= 0 ? optionColor(k) : 'var(--text-dim)';
+  };
+  const dayValues = days.map((d) => book.values(d, keepSet));
   const colored = !!cp && (filter[cp.id] ?? []).length !== 1; // один вариант оставлен — красить нечем
 
   const tapDay = (d: number) => {
     if (d > today) return;
     const s = book.status(d), k = dayKey(d);
     if (habit.kind === 'quit') void setHabitMark(habit.id, k, !s.marked);
+    else if (habit.params?.length) setAsking(d); // подходы за день: добавить или удалить
     else if (s.marked) void setHabitMark(habit.id, k, false);
-    else if (habit.params?.length) setAsking(d);
     else if (habit.kind === 'time' && s.done) return; // засчитано трекингом — снимать нечего
     else void setHabitMark(habit.id, k, true);
   };
 
   // Значения выбранного параметра по дням месяца (null — не вписано).
-  const values = days.map((d, i) => (pid && keep(i) ? book.values(d)[pid] ?? null : null));
+  const values = dayValues.map((v) => (pid ? v[pid] ?? null : null));
   const got = values.filter((v): v is number => v !== null);
   const max = Math.max(1, ...got);
   const unit = params.find((p) => p.id === pid)?.unit;
@@ -80,7 +85,7 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const lineColor = (i: number) => (i === 0 ? color : SERIES_COLORS[(i - 1) % SERIES_COLORS.length]);
   const series = params.map((p, i) => ({
     id: p.id, color: lineColor(i),
-    values: days.map((d, k) => (keep(k) ? book.values(d)[p.id] ?? null : null)),
+    values: dayValues.map((v) => v[p.id] ?? null),
     pointColors: colored ? days.map((_, k) => tint(k)) : undefined,
   }))
     .filter((s) => on.has(s.id));
@@ -102,8 +107,10 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
             return <span key={x.id}> · <span className="dot" style={{ background: x.color }} /> {p.name} {v === null ? '—' : `${round(v)}${p.unit ? ' ' + p.unit : ''}`}</span>;
           })}
           {cps.map((c) => {
-            const o = c.options.find((q) => q.id === book.choices(days[pick])[c.id]);
-            return o && <span key={c.id}> · {c.name.toLowerCase()}: {o.name}</span>;
+            // все варианты, что были в подходах дня: «хват: кулаки, ладони»
+            const names = [...new Set(book.sets(days[pick]).filter(keepSet).map((x) => x.choices?.[c.id]))]
+              .map((id) => c.options.find((q) => q.id === id)?.name).filter(Boolean);
+            return names.length > 0 && <span key={c.id}> · {c.name.toLowerCase()}: {names.join(', ')}</span>;
           })}
         </div>
       );

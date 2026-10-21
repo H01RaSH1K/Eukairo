@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, type Entry } from './schema';
 import {
-  setHabitMark,
+  addHabitSet, removeHabitSet, setHabitMark,
   addActivity, archiveActivity, closeExpiredTimer, deleteActivity, logEntry, moveActivity, reorderActivity,
   saveEntry, seedIfEmpty, startTimer, stopTimer,
 } from './commands';
@@ -131,12 +131,22 @@ describe('импорт бэкапа', () => {
 });
 
 describe('отметки привычек', () => {
-  it('снятие и повторная отметка не теряют числа и варианты', async () => {
+  it('подходы: добавить, снять галочку и вернуть, удалить последний', async () => {
     await db.habits.put({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-01', updatedAt: 0 });
-    await setHabitMark('h', '2026-10-20', true, { reps: 30 }, { grip: 'b' });
+    await addHabitSet('h', '2026-10-20', { values: { reps: 30 }, choices: { grip: 'b' } });
+    await addHabitSet('h', '2026-10-20', { values: { reps: 20 } });
     await setHabitMark('h', '2026-10-20', false);
     await setHabitMark('h', '2026-10-20', true);
-    const m = (await db.habitMarks.get('h:2026-10-20'))!;
-    expect(m).toMatchObject({ done: true, values: { reps: 30 }, choices: { grip: 'b' } });
+    let m = (await db.habitMarks.get('h:2026-10-20'))!;
+    expect(m.done).toBe(true);
+    expect(m.sets!.map((s) => s.values!.reps)).toEqual([30, 20]);
+    for (const s of m.sets!) await removeHabitSet('h', '2026-10-20', s.id);
+    m = (await db.habitMarks.get('h:2026-10-20'))!;
+    expect(m).toMatchObject({ done: false, sets: [] });
+  });
+  it('подход до начала привычки сдвигает начало', async () => {
+    await db.habits.put({ id: 'h', name: 'H', hue: 0, kind: 'check', order: 0, since: '2026-10-10', updatedAt: 0 });
+    await addHabitSet('h', '2026-10-05', { values: { reps: 1 } });
+    expect((await db.habits.get('h'))!.since).toBe('2026-10-05');
   });
 });

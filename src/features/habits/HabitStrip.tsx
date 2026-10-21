@@ -12,7 +12,7 @@ const HabitSheet = lazy(() => import('./HabitSheet'));
 const LONG_MS = 450; // долгий тап — открыть карточку привычки
 
 // Полоска привычек на «Сегодня»: кружок на каждую привычку, которая положена в этот день.
-// Тап — отметить (с параметрами — сначала спросить числа), долгий тап — карточка привычки.
+// Тап — отметить (с параметрами — открыть подходы за день), долгий тап — карточка привычки.
 // Привычка по занятию отмечается сама, тап по ней сразу открывает карточку.
 export function HabitStrip({ day, now }: { day: number; now: number }) {
   const { habits, habitMarks, activities, entries } = useData();
@@ -32,8 +32,8 @@ export function HabitStrip({ day, now }: { day: number; now: number }) {
     const h = b.habit, k = dayKey(day);
     if (h.kind === 'time') setOpen(h.id);
     else if (h.kind === 'quit') void setHabitMark(h.id, k, !s.marked);   // тап = «сорвался» / «нет, держусь»
+    else if (h.params?.length) setAsking(h);   // с параметрами — лист подходов (там же удалить)
     else if (s.done) void setHabitMark(h.id, k, false);
-    else if (h.params?.length) setAsking(h);
     else void setHabitMark(h.id, k, true);
   };
 

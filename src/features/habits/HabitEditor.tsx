@@ -128,8 +128,9 @@ export function HabitEditor({ habit, onClose, onRemoved }: { habit?: Habit; onCl
           <button className="btn ghost" onClick={() => setParams([...params, { id: newId(), name: '', options: [] }])}>＋ Вариант</button>
         </div>
         <div className="setting-hint">
-          Числа и варианты вписываются при отметке. По числам в карточке привычки строится график,
-          варианты («хват: пальцы, кулаки, ладони») красят его точки и позволяют оставить только сопоставимые дни.
+          С параметрами привычка записывается подходами: «20 раз, кулаки, пол», за день сколько угодно.
+          График в карточке складывает подходы за день, варианты («хват: пальцы, кулаки, ладони»)
+          красят точки и фильтруют, какие подходы считать.
         </div>
 
         <button className="btn primary" disabled={!canSave} onClick={() => void save()}>{habit ? 'Сохранить' : 'Создать'}</button>

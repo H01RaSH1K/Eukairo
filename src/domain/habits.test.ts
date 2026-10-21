@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, Entry, Habit, HabitMark } from '../db/schema';
-import { HabitBook, TRACKED, chartParams, choiceParams, dayKey, dayStartOf, msByDay, parseOptions, scheduleText } from './habits';
+import { HabitBook, SETS, TRACKED, chartParams, choiceParams, dayKey, dayStartOf, msByDay, parseOptions, scheduleText } from './habits';
 import { addLocalDays } from './time';
 
 const MIN = 60_000;
@@ -69,15 +69,28 @@ describe('параметры-варианты', () => {
   const grip = { id: 'grip', name: 'Хват', options: [{ id: 'a', name: 'пальцы' }, { id: 'b', name: 'кулаки' }] };
   const h = habit({ params: [{ id: 'reps', name: 'Отжимания' }, grip] });
 
-  it('на график идут только числа, варианты — отдельно', () => {
-    expect(chartParams(h).map((p) => p.id)).toEqual(['reps']);
+  it('на график идут числа и число подходов, варианты — отдельно', () => {
+    expect(chartParams(h).map((p) => p.id)).toEqual(['reps', SETS]);
     expect(choiceParams(h).map((p) => p.id)).toEqual(['grip']);
   });
-  it('вариант дня читается из отметки', () => {
-    const m = { ...mark(-1, true, { reps: 30 }), choices: { grip: 'b' } };
+  it('подходы складываются, фильтр берёт только подходящие', () => {
+    const m: HabitMark = {
+      ...mark(-1), sets: [
+        { id: '1', at: 1, values: { reps: 20 }, choices: { grip: 'b' } },
+        { id: '2', at: 2, values: { reps: 15 }, choices: { grip: 'a' } },
+        { id: '3', at: 3, values: { reps: 10 }, choices: { grip: 'b' } },
+      ],
+    };
     const b = book(h, [m]);
-    expect(b.choices(day(-1))).toEqual({ grip: 'b' });
-    expect(b.choices(day(-2))).toEqual({});
+    expect(b.values(day(-1))).toEqual({ reps: 45, [SETS]: 3 });
+    const fist = (s: { choices?: Record<string, string> }) => s.choices?.grip === 'b';
+    expect(b.values(day(-1), fist)).toEqual({ reps: 30, [SETS]: 2 });
+    expect(b.values(day(-1), () => false)).toEqual({});
+    expect(b.mainChoice(day(-1), 'grip')).toBe('b');
+  });
+  it('старая отметка с числами — один подход; снятая — без подходов', () => {
+    expect(book(h, [mark(-1, true, { reps: 30 })]).values(day(-1))).toEqual({ reps: 30, [SETS]: 1 });
+    expect(book(h, [mark(-1, false, { reps: 30 })]).values(day(-1))).toEqual({});
   });
   it('разбор строки сохраняет id: по названию, потом по месту', () => {
     let n = 0;

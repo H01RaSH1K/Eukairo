@@ -140,3 +140,11 @@
 .variant-chips button.variant-by { background: none; padding-left: 2px; font-weight: 600; min-width: 52px; text-align: left; }
 .variant-chips button.variant-by[aria-pressed='true'] { box-shadow: none; background: none; color: var(--text); }
 .variant-name { margin-right: 2px; }
+
+/* записи (подходы) за день */
+.set-list { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; }
+.set-row { display: flex; align-items: center; gap: 10px; background: var(--control); border-radius: 12px; padding: 6px 6px 6px 12px; }
+.set-n { color: var(--text-dim); font-size: 13px; min-width: 14px; }
+.set-text { flex: 1; font-size: 15px; }
+.set-row .btn.small { margin: 0; padding: 4px 10px; }
+.form .btn-row .btn { flex: 1 1 0; min-width: 0; }
