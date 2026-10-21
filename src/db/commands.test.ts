@@ -119,7 +119,7 @@ describe('импорт бэкапа', () => {
     const e: Entry = { id: 'e1', activityId: 'a', start: 0, end: 10 * MIN, source: 'manual', updatedAt: 5 };
     await db.entries.put(e);
     const r = await mergeBackup({
-      app: 'eukairo', schemaVersion: 1, exportedAt: '', settings: [],
+      app: 'eukairo', schemaVersion: 1, exportedAt: '', settings: [], habits: [], habitMarks: [],
       activities: [{ id: 'a', parentId: null, name: 'A', order: 0, updatedAt: 1 }],
       entries: [{ ...e, end: 20 * MIN, updatedAt: 3 }, { ...e, id: 'e2', start: 30 * MIN, end: 40 * MIN }],
     });

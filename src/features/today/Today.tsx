@@ -25,6 +25,7 @@ import { Sheet } from '../../ui/Sheet';
 import { useNow } from '../../ui/useNow';
 import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
+import { HabitStrip } from '../habits/HabitStrip';
 
 const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
 
@@ -279,6 +280,8 @@ export default function Today() {
   return (
     <div className={'screen fit today' + (design.showcase || focus ? ' fullbleed' : '') + (focus ? ' focus' : '')}>
       {head}
+      {/* привычки — только на масштабе «день»: отмечаются за тот день, что открыт */}
+      {scale === 'day' && <HabitStrip day={from} now={now} />}
       {banner}
       {viz}
       {dialId ? drawer : (

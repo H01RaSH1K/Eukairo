@@ -1,0 +1,98 @@
+/* ——— Привычки ——— */
+
+/* Полоска на «Сегодня»: кружки в ряд; не влезли — листается вбок внутри карточки */
+.habit-strip {
+  display: flex; gap: 2px; padding: 6px 4px 4px; background: var(--surface); border-radius: 16px;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.habit-strip::-webkit-scrollbar { display: none; }
+.today.fullbleed .habit-strip {
+  background: var(--frost); border: 1px solid var(--edge);
+  backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+}
+.habit-chip {
+  flex: 1 0 52px; max-width: 76px; min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  border: 0; background: none; color: var(--text-dim); font: inherit; padding: 0; touch-action: pan-x;
+  -webkit-touch-callout: none;
+}
+.habit-chip svg { width: 40px; height: 40px; display: block; }
+.habit-chip:active svg { transform: scale(.92); }
+.habit-arc { transition: stroke-dasharray .35s ease; }
+.habit-icon { font-size: 16px; fill: var(--text); }
+.habit-label { font-size: 10px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+.habit-chip.done .habit-label { color: var(--text); }
+.habit-chip.broken .habit-label { color: #ff6b6b; }
+.habit-streak { font-size: 9px; height: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* Карточка привычки */
+.habit-card { display: flex; flex-direction: column; gap: 12px; }
+.habit-head { display: flex; align-items: center; gap: 10px; }
+.habit-head > div { flex: 1; min-width: 0; }
+.habit-head h2 { margin: 0; font-size: 19px; }
+.habit-big-icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; flex: none;
+  background: color-mix(in srgb, var(--hc) 25%, transparent); box-shadow: inset 0 0 0 2px var(--hc); }
+.habit-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.habit-stats div { background: var(--chip); border-radius: 12px; padding: 8px 10px; }
+.habit-stats b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.habit-stats span { font-size: 11px; color: var(--text-dim); }
+.habit-card .stat-nav { margin: 0; }
+.habit-card .stat-period { text-transform: capitalize; }
+.habit-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.habit-cal .wd { font-size: 10px; color: var(--text-dim); text-align: center; }
+.cal-day {
+  height: 34px; border: 0; border-radius: 8px; padding: 0; font: inherit; font-size: 12px;
+  background: var(--tile-empty); color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.cal-day.done { background: var(--hc); color: var(--on-color); font-weight: 600; }
+.cal-day.part { background: linear-gradient(to top, var(--hc) var(--f), var(--tile-empty) var(--f)); color: var(--text); }
+.cal-day.broken { background: none; box-shadow: inset 0 0 0 1.5px #ff6b6b; color: #ff6b6b; }
+.cal-day.off { background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.cal-day.future { background: none; opacity: .4; }
+.cal-day.today { outline: 2px solid var(--text); outline-offset: -2px; }
+.habit-chart { display: flex; flex-direction: column; gap: 8px; background: var(--chip); border-radius: 12px; padding: 10px; }
+.habit-chart .chips button { background: var(--control); padding: 4px 10px; font-size: 13px; }
+.habit-chart .bars { height: 84px; }
+
+/* Редактор */
+.kind-list { display: flex; flex-direction: column; gap: 6px; }
+.kind-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; border-radius: 12px; padding: 10px 12px;
+  background: var(--control); color: var(--text); font: inherit; box-shadow: inset 0 0 0 1.5px transparent; }
+.kind-opt span { font-size: 12px; color: var(--text-dim); }
+.kind-opt[aria-pressed='true'] { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.habit-editor .setting-title { margin: 6px 0 0; }
+.habit-editor .setting-hint { margin: 0; }
+.weekday-chips { flex-wrap: nowrap; }
+.weekday-chips button { flex: 1; padding: 7px 0; }
+.param-row .field { padding: 10px 12px; }
+.param-row .unit-input { flex: 0 0 70px; }
+.param-row .btn.small { flex: none; }
+
+/* «Ещё»: две строки-кнопки в одной карточке */
+.two-rows { display: flex; flex-direction: column; gap: 14px; }
+.two-rows .row-btn { background: none; padding: 0; }
+
+/* Сводки: «Время / Привычки» рядом с заголовком */
+.stats-head h1 { flex: 1; }
+.stats-head .chips button { padding: 5px 11px; font-size: 13px; }
+.habit-stats-card { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.habit-total { display: flex; justify-content: space-between; margin: 0 0 10px; }
+.habit-grid { display: flex; flex-direction: column; gap: 6px; }
+.habit-grid-row {
+  display: grid; align-items: center; gap: 2px;
+  grid-template-columns: minmax(0, 1fr) repeat(var(--n), minmax(0, var(--cell, 18px))) 40px;
+}
+.habit-grid.week { --cell: 20px; }
+.habit-grid.month .habit-grid-row { gap: 1px; grid-template-columns: 24px repeat(var(--n), minmax(0, 1fr)) 40px; }
+.habit-grid.month .hg-name { padding: 0; }
+.habit-grid.day { --cell: 22px; }
+.habit-grid-row.head .wd { font-size: 9px; color: var(--text-dim); text-align: center; overflow: visible; white-space: nowrap; }
+.hg-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+.hg-cell { aspect-ratio: 1; border-radius: 4px; background: var(--tile-empty); }
+.habit-grid.month .hg-cell { aspect-ratio: auto; height: 16px; border-radius: 2px; }
+.hg-cell.done { background: var(--hc); }
+.hg-cell.part { background: linear-gradient(to top, var(--hc) var(--f), var(--tile-empty) var(--f)); }
+.hg-cell.off { background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.hg-cell.future { background: none; }
+.hg-pct { text-align: right; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) { .habit-arc { transition: none; } }

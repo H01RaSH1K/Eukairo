@@ -6,6 +6,7 @@ import { HOUR_MS, dayStarts, formatDuration, periodRange, periodTitle, periodTit
 import { useData } from '../../db/store';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
+import { HabitStats } from '../habits/HabitStats';
 
 // Время каждого занятия (только собственные записи) внутри [from, to). Нужды не считаем.
 function ownTotals(entries: Entry[], from: number, to: number, now: number, needs: Set<string>) {
@@ -29,6 +30,7 @@ export default function Stats() {
   const useful = useMemo(() => activities.filter((a) => !needs.has(a.id)), [activities, needs]);
 
   const [offset, setOffset] = useState(0); // 0 = текущий период, -1 = предыдущий…
+  const [view, setView] = useState<'time' | 'habits'>('time');
   const isCurrent = offset === 0;
   const { from, to } = periodRange(period, shiftPeriod(period, now, offset));
   const prev = periodRange(period, from - 1);
@@ -48,21 +50,39 @@ export default function Stats() {
   const prevWord = isCurrent ? prevName : { day: 'дню раньше', week: 'неделе раньше', month: 'месяцу раньше' }[period];
   const go = (next: number) => { setOffset(Math.min(0, next)); setFocus(null); };
 
+  const nav = (
+    <div className="stat-nav">
+      <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
+      <div className="stat-period" onClick={() => go(0)}>{isCurrent ? periodTitles[period] : periodTitle(period, from, to)}</div>
+      <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
+    </div>
+  );
+
   return (
     <div className="screen fit">
-      <h1>Сводки</h1>
+      <div className="page-head stats-head">
+        <h1>Сводки</h1>
+        <div className="chips">
+          <button aria-pressed={view === 'time'} onClick={() => setView('time')}>Время</button>
+          <button aria-pressed={view === 'habits'} onClick={() => setView('habits')}>Привычки</button>
+        </div>
+      </div>
       <Segmented
         options={[{ id: 'day', label: 'Сегодня' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
         value={period}
         onChange={(p) => { setPeriod(p); setOffset(0); setFocus(null); }}
       />
 
+      {view === 'habits' && (
+        <>
+          <div className="widget pad">{nav}</div>
+          <HabitStats period={period} from={from} to={to} now={now} />
+        </>
+      )}
+
+      {view === 'time' && <>
       <div className="widget pad stat-total">
-        <div className="stat-nav">
-          <button className="nav-arrow" onClick={() => go(offset - 1)}>‹</button>
-          <div className="stat-period" onClick={() => go(0)}>{isCurrent ? periodTitles[period] : periodTitle(period, from, to)}</div>
-          <button className="nav-arrow" disabled={isCurrent} onClick={() => go(offset + 1)}>›</button>
-        </div>
+        {nav}
         <div className="big">{formatDuration(total)}</div>
         <div className={delta >= 0 ? 'up' : 'down'}>
           {delta >= 0 ? '▲' : '▼'} {formatDuration(Math.abs(delta))} {isCurrent ? (period === 'day' ? 'к вчера на это время' : `к ${prevName} на этот момент`) : `к ${prevWord}`}
@@ -80,6 +100,7 @@ export default function Stats() {
           activities={useful} colors={colors} now={now} focus={focus}
         />
       </div>
+      </>}
     </div>
   );
 }

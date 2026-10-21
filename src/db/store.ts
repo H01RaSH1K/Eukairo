@@ -4,7 +4,7 @@
 // чем отдельный запрос на каждый экран.
 import { liveQuery } from 'dexie';
 import { useSyncExternalStore } from 'react';
-import { db, type Activity, type Entry } from './schema';
+import { db, type Activity, type Entry, type Habit, type HabitMark } from './schema';
 import { closeExpiredTimer, seedIfEmpty } from './commands';
 
 export interface Data {
@@ -14,9 +14,11 @@ export interface Data {
   entries: Entry[];                  // по start
   settings: Record<string, unknown>; // ключ → значение
   running: Entry | null;             // идущий таймер
+  habits: Habit[];
+  habitMarks: HabitMark[];
 }
 
-let data: Data = { ready: false, error: null, activities: [], entries: [], settings: {}, running: null };
+let data: Data = { ready: false, error: null, activities: [], entries: [], settings: {}, running: null, habits: [], habitMarks: [] };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -40,18 +42,20 @@ export function startStore() {
   seedIfEmpty()
     .then(() => {
       liveQuery(async () => {
-        const [activities, entries, settings] = await Promise.all([
+        const [activities, entries, settings, habits, habitMarks] = await Promise.all([
           db.activities.toArray(),
           db.entries.orderBy('start').toArray(),
           db.settings.toArray(),
+          db.habits.toArray(),
+          db.habitMarks.toArray(),
         ]);
-        return { activities, entries, settings };
+        return { activities, entries, settings, habits, habitMarks };
       }).subscribe({
-        next: ({ activities, entries, settings }) => {
+        next: ({ activities, entries, settings, habits, habitMarks }) => {
           // Идущая — последняя по start с end = null (записи не пересекаются).
           let running: Entry | null = null;
           for (let i = entries.length - 1; i >= 0; i--) if (entries[i].end === null) { running = entries[i]; break; }
-          data = { ready: true, error: null, activities, entries, settings: Object.fromEntries(settings.map((s) => [s.key, s.value])), running };
+          data = { ready: true, error: null, activities, entries, settings: Object.fromEntries(settings.map((s) => [s.key, s.value])), running, habits, habitMarks };
           emit();
           if (running?.plannedEnd && running.plannedEnd <= Date.now()) void closeExpiredTimer();
         },

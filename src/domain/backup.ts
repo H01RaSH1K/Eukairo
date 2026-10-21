@@ -1,7 +1,7 @@
 // Формат бэкапа и слияние при импорте. Чистые функции: про файлы и базу не знают.
-import type { Activity, Entry, Setting } from '../db/schema';
+import type { Activity, Entry, Habit, HabitMark, Setting } from '../db/schema';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2; // 2 — добавились привычки
 
 export interface Backup {
   app: 'eukairo';
@@ -10,6 +10,8 @@ export interface Backup {
   activities: Activity[];
   entries: Entry[];
   settings: Setting[];
+  habits: Habit[];           // в бэкапах версии 1 их нет — читаем как пустые
+  habitMarks: HabitMark[];
 }
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -28,6 +30,17 @@ function isEntry(v: unknown): v is Entry {
     && (e.source === 'timer' || e.source === 'manual') && isNum(e.updatedAt);
 }
 
+function isHabit(v: unknown): v is Habit {
+  const h = v as Habit;
+  return !!h && isStr(h.id) && isStr(h.name) && isNum(h.hue) && ['check', 'time', 'quit'].includes(h.kind)
+    && isNum(h.order) && isStr(h.since) && isNum(h.updatedAt);
+}
+
+function isMark(v: unknown): v is HabitMark {
+  const m = v as HabitMark;
+  return !!m && isStr(m.id) && isStr(m.habitId) && isStr(m.day) && typeof m.done === 'boolean' && isNum(m.updatedAt);
+}
+
 /** Разбирает текст файла. Бросает Error с понятным сообщением, если это не наш бэкап. */
 export function parseBackup(text: string): Backup {
   let raw: Partial<Backup>;
@@ -40,8 +53,12 @@ export function parseBackup(text: string): Backup {
   if (!Array.isArray(raw.entries) || !raw.entries.every(isEntry)) throw new Error('В бэкапе повреждены записи.');
   const ids = new Set(raw.activities.map((a) => a.id));
   if (!raw.entries.every((e) => ids.has(e.activityId))) throw new Error('В бэкапе есть записи без занятия.');
+  const habits = raw.habits ?? [];
+  const habitMarks = raw.habitMarks ?? [];
+  if (!Array.isArray(habits) || !habits.every(isHabit)) throw new Error('В бэкапе повреждены привычки.');
+  if (!Array.isArray(habitMarks) || !habitMarks.every(isMark)) throw new Error('В бэкапе повреждены отметки привычек.');
   const settings = Array.isArray(raw.settings) ? raw.settings.filter((s) => s && isStr(s.key)) : [];
-  return { app: 'eukairo', schemaVersion: raw.schemaVersion, exportedAt: String(raw.exportedAt ?? ''), activities: raw.activities, entries: raw.entries, settings };
+  return { app: 'eukairo', schemaVersion: raw.schemaVersion, exportedAt: String(raw.exportedAt ?? ''), activities: raw.activities, entries: raw.entries, settings, habits, habitMarks };
 }
 
 /**
