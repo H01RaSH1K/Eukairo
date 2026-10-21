@@ -142,26 +142,50 @@ const reachOf = (sl: Slots) => 3 * Math.max(1, ...[...sl.hours, ...sl.empty].map
 // ——— витражи (диаграмма Вороного по разным раскладкам точек) ———
 
 /** Неровный витраж: точка в каждом месте со сдвигом. `jitter` 0…1 — насколько неровно. */
-function jittered(sl: Slots, aspect: number, jitter: number, seed: number): Pattern {
+function jittered(sl: Slots, aspect: number, jitter: number, seed: number, relax = 0): Pattern {
   const h = W / aspect;
   const rand = rng(seed + sl.hours.length);
   const pad = (1 - jitter) / 2;
   const at = (s: Slot): Pt => [s.x + (pad + rand() * jitter) * s.w, s.y + (pad + rand() * jitter) * s.h];
-  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl));
+  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl), relax);
 }
 
 /** Соты: точки рядами со сдвигом на полместа — получаются неровные шестиугольники. */
-function hex(sl: Slots, aspect: number, seed: number): Pattern {
+function hex(sl: Slots, aspect: number, seed: number, relax = 0): Pattern {
   const h = W / aspect;
   const rand = rng(seed);
   const wob = () => (rand() - 0.5) * 0.3;
   const at = (s: Slot): Pt => [s.x + ((s.row % 2 ? 0.75 : 0.25) + wob()) * s.w, s.y + (0.5 + wob()) * s.h];
-  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl));
+  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl), relax);
+}
+
+/** Центр масс многоугольника (по площади, а не по вершинам). */
+function centroid(poly: Pt[]): Pt {
+  let a = 0, cx = 0, cy = 0;
+  poly.forEach((p, i) => {
+    const q = poly[(i + 1) % poly.length];
+    const cr = p[0] * q[1] - q[0] * p[1];
+    a += cr; cx += (p[0] + q[0]) * cr; cy += (p[1] + q[1]) * cr;
+  });
+  return Math.abs(a) < 1e-9 ? poly[0] : [cx / (3 * a), cy / (3 * a)];
 }
 
 /** Вороной по точкам часов и пустых мест: первые — сегменты, вторые — декор. */
-function fromSeeds(sl: Slots, h: number, hours: Pt[], empty: Pt[], reach: number): Pattern {
-  const all = voronoi([...hours, ...empty], W, h, reach);
+function fromSeeds(sl: Slots, h: number, hours: Pt[], empty: Pt[], reach: number, relax = 0): Pattern {
+  let seeds = [...hours, ...empty];
+  let all = voronoi(seeds, W, h, reach);
+  // Выравнивание (алгоритм Ллойда): каждую точку двигаем в центр её стекла и режем заново.
+  // Крупные стёкла отдают место мелким, и за несколько шагов размеры почти сравниваются,
+  // а порядок часов сохраняется — точки сдвигаются лишь немного.
+  for (let k = 0; k < relax; k++) {
+    // Шаг чуть «с разгоном» (×1.8 вместо ×1) — сходится в несколько раз быстрее.
+    seeds = all.map((poly, i) => {
+      if (poly.length < 3) return seeds[i];
+      const c = centroid(poly), s = seeds[i];
+      return [Math.min(W, Math.max(0, s[0] + 1.8 * (c[0] - s[0]))), Math.min(h, Math.max(0, s[1] + 1.8 * (c[1] - s[1])))];
+    });
+    all = voronoi(seeds, W, h, reach);
+  }
   return { w: W, h, cells: all.slice(0, hours.length), decor: all.slice(hours.length), day: sl.day };
 }
 
@@ -243,11 +267,11 @@ function grid(sl: Slots, aspect: number): Pattern {
  * чтобы дни не выглядели одинаково. `seed` — из даты, поэтому у одного
  * и того же дня нарезка всегда одна и та же.
  */
-function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId, cut: number): Pattern {
+function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId, cut: number, relax: number): Pattern {
   const cuts = [
-    () => jittered(sl, aspect, 0.6, seed),   // ровные неровные стёкла
-    () => jittered(sl, aspect, 0.98, seed),  // осколки
-    () => hex(sl, aspect, seed),             // соты
+    () => jittered(sl, aspect, 0.6, seed, relax),   // ровные неровные стёкла
+    () => jittered(sl, aspect, 0.98, seed, relax),  // осколки
+    () => hex(sl, aspect, seed, relax),             // соты
     () => spiral(n, aspect, seed),           // спираль от центра (у копилки заполняется от центра)
   ];
   // Спираль не умеет раскладывать по дням — у «по дням» и «календаря» её нет.
@@ -256,9 +280,9 @@ function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId,
   return cuts[cut < 0 ? seed % k : cut < k ? cut : 0]();
 }
 
-type Builder = (counts: number[], aspect: number, seed: number, fill: FillId, weekday: number, cut: number) => Pattern;
+type Builder = (counts: number[], aspect: number, seed: number, fill: FillId, weekday: number, cut: number, relax: number) => Pattern;
 const builders: Record<PatternId, Builder> = {
-  glass: (c, a, s, f, wd, cut) => glass(slotsFor(f, c, a, wd), sum(c), a, s, f, cut),
+  glass: (c, a, s, f, wd, cut, relax) => glass(slotsFor(f, c, a, wd), sum(c), a, s, f, cut, relax),
   rose: (c) => rose(c), // роза всегда круглая
   tri: (c, a) => tri(sum(c), a),
   grid: (c, a, _s, f, wd) => grid(slotsFor(f, c, a, wd), a),
@@ -269,17 +293,18 @@ const cache = new Map<string, Pattern>();
  * `days` — число полных дней или сколько часов-стёкол в каждом дне (меньше 24, если были нужды),
  * `aspect` — ширина / высота места под картину,
  * `weekday` — день недели первого дня (0 = пн), нужен календарю месяца,
- * `cut` — нарезка витража (−1 = по дате).
+ * `cut` — нарезка витража (−1 = по дате),
+ * `relax` — сколько шагов выравнивания размеров стёкол (0 — как нарезалось).
  */
-export function getPattern(id: PatternId, days: number | number[] = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0, cut = -1): Pattern {
+export function getPattern(id: PatternId, days: number | number[] = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0, cut = -1, relax = 0): Pattern {
   // number | number[] — «или то, или другое» (в C# тут были бы две перегрузки).
   const counts = typeof days === 'number' ? new Array<number>(days).fill(24) : days;
   // Округляем форму, чтобы мелкие изменения размера не пересчитывали узор.
   const a = Math.round(Math.min(3, Math.max(0.3, aspect)) * 20) / 20;
-  const key = `${id}:${counts.join(',')}:${seed}:${a}:${fill}:${weekday}:${cut}`;
+  const key = `${id}:${counts.join(',')}:${seed}:${a}:${fill}:${weekday}:${cut}:${relax}`;
   if (!cache.has(key)) {
     if (cache.size > 60) cache.clear(); // кэш не должен расти бесконечно
-    cache.set(key, builders[id](counts, a, seed, fill, weekday, cut));
+    cache.set(key, builders[id](counts, a, seed, fill, weekday, cut, relax));
   }
   return cache.get(key)!;
 }
