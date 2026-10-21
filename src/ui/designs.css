@@ -29,6 +29,7 @@
   animation-delay: calc(var(--d) * 900ms);
 }
 @keyframes piece-in { from { transform: scale(.2); opacity: 0; } }
+.today.fullbleed .glass-fill.fresh { animation: glass-flash 1.2s ease-out; animation-delay: 0s; }
 .frost {
   background: var(--frost); border: 1px solid var(--edge);
   backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
