@@ -4,7 +4,7 @@ import { useData } from '../../db/store';
 import { HabitBook, WEEKDAYS, chartParams, dayKey, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
 import { addLocalDays, dayStarts, periodRange, shiftPeriod, startOfLocalDay } from '../../domain/time';
 import { Sheet } from '../../ui/Sheet';
-import { ChartKindSwitch, LineChart, TapColumns, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
+import { ChartKindSwitch, LineChart, scrub, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
 import { ExpandButton, FullChart, fullChartHeight } from '../../ui/FullChart';
 import { HabitEditor } from './HabitEditor';
 import { MarkSheet } from './MarkSheet';
@@ -64,6 +64,7 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
     .filter((s) => on.has(s.id));
   const sameUnit = new Set(series.map((s) => params.find((p) => p.id === s.id)?.unit ?? '')).size <= 1;
   const W = 300, H = 70, bw = W / days.length;
+  const lastPast = Math.max(0, days.filter((d) => d <= today).length - 1); // будущие дни не выбираем
 
   // Что показать над графиком: выбранный тапом день и числа по нему, иначе — итог месяца.
   const dayName = (i: number) => new Date(days[i]).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' });
@@ -108,7 +109,8 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
         <ChartKindSwitch value={chart} onChange={pickChart} />
         {!isFull && <ExpandButton onClick={() => setFull(true)} />}
       </div>
-      <svg viewBox={`0 0 ${W} ${h + 14}`} className="bars" style={isFull ? { height: 'auto' } : undefined}>
+      <svg viewBox={`0 0 ${W} ${h + 14}`} className="bars scrub" style={isFull ? { height: 'auto' } : undefined}
+        {...scrub(days.length, (f) => Math.min(lastPast, Math.floor(f * days.length)), pick, setPick)}>
         <line x1="0" x2={W} y1={h} y2={h} stroke="var(--line)" />
         {chart === 'bars' && values.map((v, i) => v !== null && (
           <rect key={i} x={i * bw + 1} y={h - (v / max) * h} width={bw - 2} height={Math.max(1, (v / max) * h)} rx="1.5" fill={color}
@@ -118,7 +120,6 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
         {days.map((d, i) => (i % 5 === 0 || i === days.length - 1) && (
           <text key={d} x={i * bw + bw / 2} y={h + 12} textAnchor="middle" className="bar-label">{new Date(d).getDate()}</text>
         ))}
-        <TapColumns n={days.length} bw={bw} h={h + 14} picked={pick} onPick={setPick} />
       </svg>
       {caption()}
     </>

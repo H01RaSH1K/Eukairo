@@ -1,3 +1,5 @@
+import type { PointerEvent, TouchEvent } from 'react';
+
 // Линейный график, как график функции: точка на каждый столбец, где есть число, точки соединены.
 // Столбцы без числа линия перешагивает. Рисуется внутри чужого <svg> (координаты те же,
 // что у столбиков: ширина столбца bw, высота h), поэтому оси и подписи дней — снаружи.
@@ -81,16 +83,41 @@ function ticks([lo, hi]: [number, number]): number[] {
   return out;
 }
 
-/** Прозрачные полосы на всю высоту, по одной на столбец: тап выбирает столбец (попасть в точку пальцем трудно). */
-export function TapColumns({ n, bw, h, picked, onPick }: { n: number; bw: number; h: number; picked: number | null; onPick: (i: number | null) => void }) {
-  return (
-    <>
-      {Array.from({ length: n }, (_, i) => (
-        <rect key={i} x={i * bw} y={0} width={bw} height={h} fill="transparent" onClick={() => onPick(picked === i ? null : i)} />
-      ))}
-    </>
-  );
+/**
+ * Выбор дня на графике пальцем: тап — выбрать (тап по выбранному — снять),
+ * провёл вбок — выбранный день едет за пальцем. Возвращает обработчики для <svg>.
+ * indexAt(доля ширины 0…1) → номер столбца. Вертикальный жест не трогаем
+ * (touch-action: pan-y в CSS) — им прокручивается лист.
+ */
+export function scrub(n: number, indexAt: (frac: number) => number, picked: number | null, onPick: (i: number | null) => void) {
+  const at = (e: PointerEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(n - 1, indexAt((e.clientX - r.left) / r.width)));
+  };
+  return {
+    onPointerDown: (e: PointerEvent<SVGSVGElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const i = at(e);
+      // тап по уже выбранному снимает выбор — запоминаем, чтобы решить на отпускании
+      drag = { start: e.clientX, moved: false, wasPicked: i === picked };
+      onPick(i);
+    },
+    onPointerMove: (e: PointerEvent<SVGSVGElement>) => {
+      if (!drag) return;
+      if (Math.abs(e.clientX - drag.start) > 6) drag.moved = true;
+      onPick(at(e));
+    },
+    onPointerUp: () => {
+      if (drag && !drag.moved && drag.wasPicked) onPick(null);
+      drag = null;
+    },
+    onPointerCancel: () => { drag = null; },
+    // пока ведём пальцем по графику, лист под ним не должен тянуться вниз
+    onTouchMove: (e: TouchEvent<SVGSVGElement>) => { if (drag?.moved) e.stopPropagation(); },
+  };
 }
+// Один палец — один график, так что достаточно одного состояния на всё приложение.
+let drag: { start: number; moved: boolean; wasPicked: boolean } | null = null;
 
 // Вид графика (столбики или линия) помним на этом телефоне, отдельно для каждого места.
 export type ChartKind = 'bars' | 'line';

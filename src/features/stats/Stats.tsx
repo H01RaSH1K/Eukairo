@@ -7,7 +7,7 @@ import { useData } from '../../db/store';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
 import { HabitStats } from '../habits/HabitStats';
-import { ChartKindSwitch, LineChart, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
+import { ChartKindSwitch, LineChart, saveChart, scrub, savedChart, type ChartKind } from '../../ui/LineChart';
 import { ExpandButton, FullChart, fullChartHeight } from '../../ui/FullChart';
 
 // Время каждого занятия (только собственные записи) внутри [from, to). Нужды не считаем.
@@ -241,6 +241,7 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
   const fmt = (m: number) => (m >= 60 ? `${Math.round(m / 6) / 10} ч` : `${Math.round(m)} мин`);
 
   const pickChart = (k: ChartKind) => { setChart(k); saveChart('stats', k); };
+  const lastPast = Math.max(0, buckets.filter(([a]) => a <= now).length - 1); // дальше будущее — выбирать нечего
   const title = period === 'day' ? 'По часам' : 'По дням';
 
   // Над графиком: выбранный тапом столбец и его числа, иначе — заголовок с переключателями.
@@ -281,15 +282,16 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
           ))}
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H + 16}`} className="bars" style={isFull ? { height: 'auto' } : undefined}>
+      {/* столбец i занимает [i·(bw+gap) − gap/2, (i+1)·(bw+gap) − gap/2) — по доле ширины находим, в какой попал палец */}
+      <svg viewBox={`0 0 ${W} ${H + 16}`} className="bars scrub" style={isFull ? { height: 'auto' } : undefined}
+        {...scrub(buckets.length, (f) => Math.min(lastPast, Math.floor((f * W + gap / 2) / (bw + gap))), picked, setPicked)}>
         {/* шаг точек = столбик + промежуток; сдвиг на полпромежутка — точка по центру столбика */}
         {chart === 'line' && <g transform={`translate(${-gap / 2} 0)`}><LineChart series={lines.filter((l) => on.has(l.id))} bw={bw + gap} h={H} scale="shared" format={fmt} picked={picked} /></g>}
         {data.map((m, i) => {
           let y = H;
           const x = i * (bw + gap);
           return (
-            // Прозрачный прямоугольник на всю высоту — чтобы попасть пальцем и в низкий столбик (и в точку линии).
-            <g key={i} onClick={() => setPicked(picked === i ? null : i)} opacity={chart === 'line' || picked === null || picked === i ? 1 : 0.35}>
+            <g key={i} opacity={chart === 'line' || picked === null || picked === i ? 1 : 0.35}>
               {chart === 'bars' && groups.map((g) => {
                 const h = ((m.get(g.id) ?? 0) / max) * H;
                 if (h <= 0) return null;
@@ -301,7 +303,6 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
                   {period === 'day' ? (i % 6 === 0 ? i : '') : period === 'week' ? new Date(buckets[i][0]).toLocaleDateString('ru-RU', { weekday: 'short' }) : new Date(buckets[i][0]).getDate()}
                 </text>
               )}
-              <rect x={x - gap / 2} y={0} width={bw + gap} height={H + 16} fill="transparent" />
             </g>
           );
         })}

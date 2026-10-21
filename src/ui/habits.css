@@ -125,3 +125,4 @@
 .chart-pick .dot, .bar-pick .dot { width: 8px; height: 8px; }
 /* график не выше 3/4 ширины — ставим его посередине оставшегося места */
 .chart-full .habit-chart.full, .chart-full .full-stats { flex: 1; justify-content: center; }
+.bars.scrub { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
