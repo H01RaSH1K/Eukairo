@@ -4,6 +4,7 @@ import { useData } from '../../db/store';
 import { HabitBook, WEEKDAYS, chartParams, dayKey, habitColors, scheduleText, weekdayOf } from '../../domain/habits';
 import { addLocalDays, dayStarts, periodRange, shiftPeriod, startOfLocalDay } from '../../domain/time';
 import { Sheet } from '../../ui/Sheet';
+import { ChartKindSwitch, LineChart, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
 import { HabitEditor } from './HabitEditor';
 import { MarkSheet } from './MarkSheet';
 
@@ -16,9 +17,12 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const now = Date.now();
   const habit = habits.find((h) => h.id === id);
   const [month, setMonth] = useState(0);  // 0 = месяц открытого дня, -1 = предыдущий…
-  const [param, setParam] = useState<string | null>(null);
+  const [param, setParam] = useState<string | null>(null);       // столбики: какой параметр
+  const [shown, setShown] = useState<Set<string> | null>(null);   // линия: какие параметры включены
   const [asking, setAsking] = useState<number | null>(null); // день, за который спрашиваем числа
   const [editing, setEditing] = useState(false);
+  const [chart, setChart] = useState<ChartKind>(() => savedChart('habit'));
+  const pickChart = (k: ChartKind) => { setChart(k); saveChart('habit', k); };
   if (!habit) return null; // удалили, пока карточка была открыта
   const book = new HabitBook(habit, activities, entries, habitMarks, now);
 
@@ -45,6 +49,17 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
   const got = values.filter((v): v is number => v !== null);
   const max = Math.max(1, ...got);
   const unit = params.find((p) => p.id === pid)?.unit;
+  // Линия: несколько параметров сразу, у каждого свой цвет (первый — цвет привычки).
+  const on = shown ?? new Set(pid ? [pid] : []);
+  const toggle = (id: string) => {
+    const next = new Set(on);
+    if (next.has(id)) { if (next.size > 1) next.delete(id); } else next.add(id);
+    setShown(next);
+  };
+  const lineColor = (i: number) => (i === 0 ? color : SERIES_COLORS[(i - 1) % SERIES_COLORS.length]);
+  const series = params.map((p, i) => ({ id: p.id, color: lineColor(i), values: days.map((d) => book.values(d)[p.id] ?? null) }))
+    .filter((s) => on.has(s.id));
+  const sameUnit = new Set(series.map((s) => params.find((p) => p.id === s.id)?.unit ?? '')).size <= 1;
   const W = 300, H = 70, bw = W / days.length;
 
   return (
@@ -90,20 +105,32 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
 
         {params.length > 0 && (
           <div className="habit-chart">
-            <div className="chips">
-              {params.map((p) => <button key={p.id} aria-pressed={p.id === pid} onClick={() => setParam(p.id)}>{p.name}</button>)}
+            <div className="chart-bar-row">
+              <div className="chips">
+                {chart === 'bars'
+                  ? params.map((p) => <button key={p.id} aria-pressed={p.id === pid} onClick={() => setParam(p.id)}>{p.name}</button>)
+                  // в режиме линии параметры включаются по отдельности, точка — цвет линии
+                  : params.map((p, i) => (
+                    <button key={p.id} aria-pressed={on.has(p.id)} onClick={() => toggle(p.id)}>
+                      <span className="dot" style={{ background: on.has(p.id) ? lineColor(i) : 'var(--line)' }} /> {p.name}
+                    </button>
+                  ))}
+              </div>
+              <ChartKindSwitch value={chart} onChange={pickChart} />
             </div>
             <svg viewBox={`0 0 ${W} ${H + 14}`} className="bars">
               <line x1="0" x2={W} y1={H} y2={H} stroke="var(--line)" />
-              {values.map((v, i) => v !== null && (
+              {chart === 'bars' && values.map((v, i) => v !== null && (
                 <rect key={i} x={i * bw + 1} y={H - (v / max) * H} width={bw - 2} height={Math.max(1, (v / max) * H)} rx="1.5" fill={color} />
               ))}
+              {chart === 'line' && <LineChart series={series} bw={bw} h={H} scale={sameUnit ? 'shared' : 'own'} />}
               {days.map((d, i) => (i % 5 === 0 || i === days.length - 1) && (
                 <text key={d} x={i * bw + bw / 2} y={H + 12} textAnchor="middle" className="bar-label">{new Date(d).getDate()}</text>
               ))}
             </svg>
             <div className="dim small">
-              {got.length
+              {chart === 'line' && series.length > 1 && !sameUnit && 'У каждой линии своя шкала: сравнивай ход, а не высоту. '}
+              {chart === 'line' && series.length > 1 ? '' : got.length
                 ? `среднее ${round(got.reduce((a, b) => a + b, 0) / got.length)} · максимум ${round(Math.max(...got))}${unit ? ' ' + unit : ''} · дней с числом: ${got.length}`
                 : 'В этом месяце чисел нет. Они вписываются при отметке.'}
             </div>
@@ -121,3 +148,6 @@ export default function HabitSheet({ id, day, onClose }: { id: string; day: numb
 }
 
 const round = (v: number) => Math.round(v * 10) / 10;
+
+// Цвета второй и следующих линий (первая — цвет привычки).
+const SERIES_COLORS = ['#e8e8ee', '#f2c94c', '#56ccf2', '#ff8a65'];

@@ -7,6 +7,7 @@ import { useData } from '../../db/store';
 import { Segmented } from '../../ui/Segmented';
 import { useNow } from '../../ui/useNow';
 import { HabitStats } from '../habits/HabitStats';
+import { ChartKindSwitch, LineChart, saveChart, savedChart, type ChartKind } from '../../ui/LineChart';
 
 // Время каждого занятия (только собственные записи) внутри [from, to). Нужды не считаем.
 function ownTotals(entries: Entry[], from: number, to: number, now: number, needs: Set<string>) {
@@ -182,6 +183,8 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
   period: Period; from: number; to: number; entries: Entry[]; activities: Activity[]; colors: Map<string, string>; now: number; focus: string | null;
 }) {
   const [picked, setPicked] = useState<number | null>(null);
+  const [chart, setChart] = useState<ChartKind>(() => savedChart('stats'));
+  const [shown, setShown] = useState<Set<string> | null>(null); // линия: какие линии включены
   const buckets = period === 'day'
     ? Array.from({ length: 24 }, (_, h) => [from + h * HOUR_MS, from + (h + 1) * HOUR_MS])
     : dayStarts(from, to).map((d, i, all) => [d, all[i + 1] ?? to]);
@@ -217,10 +220,36 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
     ? `${i}:00–${i + 1}:00`
     : new Date(buckets[i][0]).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
 
+  // Линия: «Всего» плюс линия на каждое занятие уровня, в минутах. Будущие столбцы — без точки.
+  // По умолчанию включены «Всего» и три самых больших занятия.
+  const TOTAL = '__total';
+  const sumOf = (id: string) => data.reduce((s, m) => s + (m.get(id) ?? 0), 0);
+  const ranked = groups.filter((g) => sumOf(g.id) > 0).sort((a, b) => sumOf(b.id) - sumOf(a.id));
+  const on = shown ?? new Set([TOTAL, ...ranked.slice(0, 3).map((g) => g.id)]);
+  const toggle = (id: string) => {
+    const next = new Set(on);
+    if (next.has(id)) { if (next.size > 1) next.delete(id); } else next.add(id);
+    setShown(next);
+  };
+  const minutes = (get: (i: number) => number) => buckets.map(([a], i) => (a > now ? null : get(i) / 60_000));
+  const lines = [
+    { id: TOTAL, name: 'Всего', color: 'var(--text)', values: minutes((i) => totals[i]) },
+    ...ranked.map((g) => ({ id: g.id, name: g.name, color: colors.get(g.id)!, values: minutes((i) => data[i].get(g.id) ?? 0) })),
+  ];
+  const fmt = (m: number) => (m >= 60 ? `${Math.round(m / 6) / 10} ч` : `${Math.round(m)} мин`);
+
   return (
     <>
-      {picked === null ? (
-        <div className="card-title">{period === 'day' ? 'По часам' : 'По дням'} · тапни столбик</div>
+      {chart === 'line' ? (
+        <div className="card-title chart-head">
+          <span>{period === 'day' ? 'По часам' : 'По дням'}</span>
+          <ChartKindSwitch value={chart} onChange={(k) => { setChart(k); saveChart('stats', k); }} />
+        </div>
+      ) : picked === null ? (
+        <div className="card-title chart-head">
+          <span>{period === 'day' ? 'По часам' : 'По дням'} · тапни столбик</span>
+          <ChartKindSwitch value={chart} onChange={(k) => { setChart(k); saveChart('stats', k); }} />
+        </div>
       ) : (
         <div className="card-title bar-pick" onClick={() => setPicked(null)}>
           <b>{bucketName(picked)}: {formatDuration(totals[picked])}</b>
@@ -229,15 +258,26 @@ function Bars({ period, from, to, entries, activities, colors, now, focus }: {
           ))}
         </div>
       )}
+      {chart === 'line' && (
+        <div className="chips-scroll line-toggles">
+          {lines.map((l) => (
+            <button key={l.id} aria-pressed={on.has(l.id)} onClick={() => toggle(l.id)}>
+              <span className="dot" style={{ background: on.has(l.id) ? l.color : 'var(--line)' }} /> {short(l.name)}
+            </button>
+          ))}
+        </div>
+      )}
       <svg viewBox={`0 0 ${W} ${H + 16}`} className="bars">
+        {/* шаг точек = столбик + промежуток; сдвиг на полпромежутка — точка по центру столбика */}
+        {chart === 'line' && <g transform={`translate(${-gap / 2} 0)`}><LineChart series={lines.filter((l) => on.has(l.id))} bw={bw + gap} h={H} scale="shared" format={fmt} /></g>}
         {data.map((m, i) => {
           let y = H;
           const x = i * (bw + gap);
           return (
             // Прозрачный прямоугольник на всю высоту — чтобы попасть пальцем и в низкий столбик.
-            <g key={i} onClick={() => setPicked(picked === i ? null : i)} opacity={picked === null || picked === i ? 1 : 0.35}>
+            <g key={i} onClick={() => chart === 'bars' && setPicked(picked === i ? null : i)} opacity={picked === null || picked === i ? 1 : 0.35}>
               <rect x={x - gap / 2} y={0} width={bw + gap} height={H + 16} fill="transparent" />
-              {groups.map((g) => {
+              {chart === 'bars' && groups.map((g) => {
                 const h = ((m.get(g.id) ?? 0) / max) * H;
                 if (h <= 0) return null;
                 y -= h;
