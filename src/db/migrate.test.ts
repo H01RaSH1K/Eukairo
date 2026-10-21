@@ -12,6 +12,7 @@ it('база v2 → v3: параметры переезжают на занят�
   old.close();
 
   const { db } = await import('./schema'); // открывается уже новой схемой — срабатывает upgrade
+  expect(await db.activities.get('act-push')).toMatchObject({ timeless: true });
   expect((await db.activities.get('act-push'))!.params).toEqual([{ id: 'reps', name: 'Отжимания' }]);
   expect(await db.habits.get('push')).toMatchObject({ kind: 'points', activityId: 'act-push' });
   expect(await db.points.toArray()).toEqual([expect.objectContaining({ activityId: 'act-push', values: { reps: 30 } })]);

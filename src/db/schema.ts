@@ -149,3 +149,12 @@ db.version(3).stores({
   await tx.table('habitMarks').bulkPut(m.habitMarks);
   await tx.table('points').bulkPut(m.points);
 });
+
+// v4: занятия, созданные переносом из привычек (act-…), — «без времени», если по ним нет отрезков.
+// Нужно базам, которые успели перейти на v3 до появления флага (превью).
+db.version(4).stores({}).upgrade(async (tx) => {
+  const tracked = new Set((await tx.table('entries').toArray()).map((e: Entry) => e.activityId));
+  await tx.table('activities').toCollection().modify((a: Activity) => {
+    if (a.id.startsWith('act-') && !tracked.has(a.id)) a.timeless = true;
+  });
+});
