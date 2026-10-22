@@ -10,6 +10,7 @@ import './ui/theme.css';
 import './ui/designs.css';
 import './ui/themes.css';
 import './ui/habits.css';
+import './ui/desk.css';
 import './settings/design'; // ставит дизайн до первой отрисовки
 
 // Внутри iframe (превью) — помечаем, CSS уберёт чужие отступы (theme.css, data-embedded).

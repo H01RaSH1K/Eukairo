@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from 'react';
 import { useData } from './db/store';
 import Today from './features/today/Today';
+import { DESK, DESK_WIDE, useMedia } from './ui/useMedia';
 
 // «Сегодня» грузится сразу (стартовый экран), остальные вкладки — при первом открытии.
 const Timeline = lazy(() => import('./features/timeline/Timeline'));
@@ -22,6 +23,7 @@ export default function App() {
   // useState ≈ поле, при изменении которого React перерисовывает компонент.
   const [tab, setTab] = useState<Tab>('today');
   const { ready, error } = useData();
+  const desk = useMedia(DESK);
 
   // База открывается доли секунды — до этого рисуем пустой фон, а не пустые экраны.
   if (!ready) return null;
@@ -33,6 +35,8 @@ export default function App() {
       </div>
     );
   }
+
+  if (desk) return <Desk />;
 
   return (
     <>
@@ -51,5 +55,44 @@ export default function App() {
         ))}
       </nav>
     </>
+  );
+}
+
+// ——— Раскладка для ПК ———
+// Слева узкая панель навигации, дальше «Сегодня» на всё свободное место,
+// справа — Лента и Сводки (на широком окне обе сразу, на узком — одна по выбору) или «Ещё».
+// Экраны те же, что на телефоне: каждая панель — это просто телефонный экран нужной ширины.
+type Side = 'timeline' | 'stats' | 'more';
+
+function Desk() {
+  const wide = useMedia(DESK_WIDE);
+  const [side, setSide] = useState<Side>('timeline');
+  // На широком окне Лента и Сводки видны вместе — в меню это один пункт «Обзор».
+  const panes: Side[] = side === 'more' ? ['more'] : wide ? ['timeline', 'stats'] : [side];
+  const items: { id: Side; title: string; icon: string }[] = wide
+    ? [{ id: 'timeline', title: 'Обзор', icon: '◼︎' }, { id: 'more', title: 'Ещё', icon: '•••' }]
+    : [{ id: 'timeline', title: 'Лента', icon: '☰' }, { id: 'stats', title: 'Сводки', icon: '◔' }, { id: 'more', title: 'Ещё', icon: '•••' }];
+  const isOn = (id: Side) => id === side || (wide && id === 'timeline' && side === 'stats');
+
+  return (
+    <div className="desk">
+      <nav className="rail">
+        <img className="rail-logo" src={import.meta.env.BASE_URL + 'favicon.svg'} alt="" />
+        {items.map((t) => (
+          <button key={t.id} aria-current={isOn(t.id) ? 'page' : undefined} onClick={() => setSide(t.id)}>
+            <span className="icon">{t.icon}</span>
+            {t.title}
+          </button>
+        ))}
+      </nav>
+      <main className="pane pane-main"><Today /></main>
+      <Suspense fallback={null}>
+        {panes.map((p) => (
+          <section key={p} className={'pane pane-side ' + p}>
+            {p === 'timeline' ? <Timeline /> : p === 'stats' ? <Stats /> : <More />}
+          </section>
+        ))}
+      </Suspense>
+    </div>
   );
 }
