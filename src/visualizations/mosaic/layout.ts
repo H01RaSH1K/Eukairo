@@ -11,7 +11,7 @@ export interface HourOwner {
   entryId: string; key: string; color: string; need?: boolean;
   /** Стекло собрано из остатков: «pooled» — одного занятия (или родителя), «mixed» — всего подряд. */
   mark?: 'pooled' | 'mixed';
-  /** У «mixed»: из чего собрано — цвета занятий и сколько у каждого (мс), по убыванию. */
+  /** Из чего собрано — цвета занятий и сколько у каждого (мс), по убыванию. */
   mix?: { color: string; ms: number }[];
 }
 
@@ -141,6 +141,13 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
 /** Остаток серии для копилки: сколько, когда кончился, чья запись и цепочка «занятие → предки». */
 export interface Bit { ms: number; end: number; entryId: string; chain: { id: string; color: string }[] }
 
+/** Состав остатков: минуты по цвету занятия (у одного цвета — сумма), больше — первым. */
+function mixOf(bits: Bit[]): { color: string; ms: number }[] {
+  const byColor = new Map<string, number>();
+  for (const b of bits) byColor.set(b.chain[0].color, (byColor.get(b.chain[0].color) ?? 0) + b.ms);
+  return [...byColor].map(([color, ms]) => ({ color, ms })).sort((x, y) => y.ms - x.ms);
+}
+
 /**
  * Копилка остатков. Сначала складываем остатки одного занятия: набралось на целое стекло —
  * стекло его цвета с пометкой «pooled». Что не влезло, поднимается к родителю и складывается
@@ -171,18 +178,16 @@ export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: 
       if (!n) continue;
       const main = group.reduce((x, y) => (y.ms > x.ms ? y : x)); // на тап откроется самый большой остаток
       const end = Math.max(...group.map((b) => b.end));
+      const mix = mixOf(group); // у родителя — цвета детей, из которых набралось
       take(group, n);
-      for (let k = 0; k < n; k++) out.push({ owner: { entryId: main.entryId, key: 'pool:' + id, color: group[0].chain[level].color, mark: 'pooled' }, end });
+      for (let k = 0; k < n; k++) out.push({ owner: { entryId: main.entryId, key: 'pool:' + id, color: group[0].chain[level].color, mark: 'pooled', mix }, end });
     }
   }
   const rest = left.filter((b) => b.ms > 0);
   const n = Math.floor(rest.reduce((s, b) => s + b.ms, 0) / step);
   if (n) {
     const end = Math.max(...rest.map((b) => b.end));
-    // Состав: минуты по цвету занятия (у одного цвета — сумма), больше — первым.
-    const byColor = new Map<string, number>();
-    for (const b of rest) byColor.set(b.chain[0].color, (byColor.get(b.chain[0].color) ?? 0) + b.ms);
-    const mix = [...byColor].map(([color, ms]) => ({ color, ms })).sort((x, y) => y.ms - x.ms);
+    const mix = mixOf(rest);
     for (let k = 0; k < n; k++) out.push({ owner: { entryId: '', key: 'mixed', color: mix[0].color, mark: 'mixed', mix }, end });
   }
   return out;

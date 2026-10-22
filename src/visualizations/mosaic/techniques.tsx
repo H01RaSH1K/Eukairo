@@ -10,6 +10,7 @@
 // Всё случайное — от номера стекла, поэтому картинка не прыгает между перерисовками.
 import type { ReactNode } from 'react';
 import { centroid } from './pieces';
+import { tone } from './tone';
 import { area, clipBy, rng, type Pt } from './voronoi';
 
 type Mix = { color: string; ms: number }[];
@@ -113,6 +114,32 @@ export function technique(kind: string, poly: Pt[], cell: number, id: string, le
     );
   }
 
+  if (kind === 'tiles') {
+    // Мозаика в стекле (и у своего, и у разного): 3–5 мелких стёкол (Вороной от случайных точек внутри), цвета — по минутам:
+    // стёкла по очереди слева направо вдоль случайной оси, каждому — краска его доли площади.
+    if (!mix?.length) return null;
+    const seeds = scatter(poly, Math.min(5, Math.max(3, mix.length + 1)), seed + 9);
+    const tiles = seeds.map((s, i) => seeds.reduce((pl, o, j) => {
+      if (i === j || pl.length < 3) return pl;
+      const nx = o[0] - s[0], ny = o[1] - s[1];
+      return clipBy(pl, nx, ny, (nx * (s[0] + o[0])) / 2 + (ny * (s[1] + o[1])) / 2);
+    }, poly)).filter((t) => t.length >= 3);
+    const a = rng(seed + 4)() * Math.PI;
+    const along = (t: Pt[]) => { const m = centroid(t); return m[0] * Math.cos(a) + m[1] * Math.sin(a); };
+    const total = area(poly);
+    let acc = 0;
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {[...tiles].sort((x, y) => along(x) - along(y)).map((t, k) => {
+          // Краска по доле; у каждого стёклышка свой оттенок, чтобы одноцветные не сливались.
+          const share = area(t) / total, color = tone(pick(mix, Math.min(0.999, acc + share / 2)), cell * 13 + k, 1.6);
+          acc += share;
+          return <polygon key={k} points={pts(t)} fill={color} stroke="var(--glass-lead)" strokeWidth={lead * 0.5} strokeLinejoin="round" />;
+        })}
+      </g>
+    );
+  }
+
   if (!mix?.length) return null;
 
   if (kind === 'fracture') {
@@ -133,30 +160,6 @@ export function technique(kind: string, poly: Pt[], cell: number, id: string, le
       return <path key={'s' + k} d={`M${a[0]} ${a[1]}Q${m[0]} ${m[1]} ${b[0]} ${b[1]}`} fill="none" stroke={pick(mix, rand())} strokeWidth={lead * 0.35} strokeLinecap="round" />;
     });
     return clip(<>{shards}{streams}</>);
-  }
-
-  if (kind === 'tiles') {
-    // Мозаика в стекле: 4–5 мелких стёкол (Вороной от случайных точек внутри), цвета — по минутам:
-    // стёкла по очереди слева направо вдоль случайной оси, каждому — краска его доли площади.
-    const seeds = scatter(poly, Math.min(5, Math.max(3, mix.length + 1)), seed + 9);
-    const tiles = seeds.map((s, i) => seeds.reduce((pl, o, j) => {
-      if (i === j || pl.length < 3) return pl;
-      const nx = o[0] - s[0], ny = o[1] - s[1];
-      return clipBy(pl, nx, ny, (nx * (s[0] + o[0])) / 2 + (ny * (s[1] + o[1])) / 2);
-    }, poly)).filter((t) => t.length >= 3);
-    const a = rng(seed + 4)() * Math.PI;
-    const along = (t: Pt[]) => { const m = centroid(t); return m[0] * Math.cos(a) + m[1] * Math.sin(a); };
-    const total = area(poly);
-    let acc = 0;
-    return (
-      <g style={{ pointerEvents: 'none' }}>
-        {[...tiles].sort((x, y) => along(x) - along(y)).map((t, k) => {
-          const share = area(t) / total, color = pick(mix, Math.min(0.999, acc + share / 2));
-          acc += share;
-          return <polygon key={k} points={pts(t)} fill={color} stroke="var(--glass-lead)" strokeWidth={lead * 0.5} strokeLinejoin="round" />;
-        })}
-      </g>
-    );
   }
 
   if (kind === 'opal') {
