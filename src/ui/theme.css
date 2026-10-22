@@ -434,3 +434,8 @@ html[data-embedded], html[data-embedded] body { height: 100%; overflow: hidden; 
 .need-toggle > span { display: flex; flex-direction: column; }
 .need-toggle .setting-hint { margin-top: 2px; }
 .need-toggle input { flex: none; width: 22px; height: 22px; }
+
+/* Синхронизация */
+.sync-err { color: #ff8a7a; }
+.sync-steps { margin: 0; padding-left: 20px; line-height: 1.5; }
+.sync-steps a { color: var(--accent, #4fb3a9); }
