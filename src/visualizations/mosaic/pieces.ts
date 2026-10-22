@@ -23,17 +23,20 @@ export interface Cut { owner: HourOwner; frac: number; anchor: number; group?: n
  */
 export interface Group { queue: number[]; center: Pt }
 
+/** Форма неполного стекла: «уровень» — налито снизу горизонталью; «клин» — срез с изломом от угла. */
+export type CutShape = 'level' | 'wedge';
+
 /**
  * `whole` — хозяин каждого стекла целиком (null — свободно), `cuts` — остатки по порядку
  * времени. Каждый остаток берёт ближайшее к `anchor` стекло, где свободного места хватает:
  * свежее или объедок после чужого куска. Стёкла с номера `late` (будущие часы) — в последнюю
  * очередь. Если места одним куском нет нигде, остаток собирается из нескольких ближайших объедков.
- * У остатков с `group` — плотная укладка (см. Group).
+ * У остатков с `group` — плотная укладка (см. Group). `shape` — форма среза (см. CutShape).
  * Кусок растёт от угла стекла, обращённого к целым стёклам своей серии, — так он сливается
  * с ними в одну фигуру. Прежние куски новым остатком не двигаются (излом среза зависит
  * только от номера стекла и того, какой это по счёту срез в нём).
  */
-export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[], late = cells.length, groups: Group[] = []): Piece[] {
+export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[], late = cells.length, groups: Group[] = [], shape: CutShape = 'level'): Piece[] {
   const full = cells.map(area);
   const mid = cells.map(centroid);
   // Свободная часть каждого стекла — несколько выпуклых частей (у целых — пусто).
@@ -59,6 +62,19 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
     if (want >= freeArea[i] - 1e-6) {
       got = free[i];
       free[i] = [];
+    } else if (shape === 'level') {
+      // «Уровень жидкости»: стекло наливается снизу ровной горизонталью. Следующий кусок
+      // в том же стекле ложится слоем выше — свободным остаётся верх, всегда выпуклый.
+      got = [];
+      const keep: Pt[][] = [];
+      let left = want;
+      for (const poly of [...free[i]].sort((x, y) => Math.max(...y.map((p) => p[1])) - Math.max(...x.map((p) => p[1])))) {
+        const a = area(poly);
+        if (left <= 1e-9) keep.push(poly);
+        else if (a <= left + 1e-9) { got.push(poly); left -= a; }
+        else { const [b, t] = level(poly, left); got.push(b); keep.push(t); left = 0; }
+      }
+      free[i] = keep;
     } else {
       const dx = toward ? toward[0] - mid[i][0] : 0, dy = toward ? toward[1] - mid[i][1] : 1;
       const proj = (p: Pt) => p[0] * dx + p[1] * dy;
@@ -179,6 +195,18 @@ function chevron(poly: Pt[], want: number, corner: Pt, seed: number): [Pt[], Pt[
     clipBy(clipBy(poly, u[0][0], u[0][1], offs(0, c)), -u[1][0], -u[1][1], -offs(1, c)),   // до первой, но за второй
   ].filter((x) => x.length >= 3 && area(x) > 1e-9);
   return [pieceAt(c), rest];
+}
+
+/** Делит выпуклое стекло горизонталью: низ площади `want` и верх. Высоту ищем делением пополам. */
+function level(poly: Pt[], want: number): [Pt[], Pt[]] {
+  const ys = poly.map((p) => p[1]);
+  let lo = Math.min(...ys), hi = Math.max(...ys); // ось y вниз: низ стекла — большие y
+  for (let k = 0; k < 40; k++) {
+    const y = (lo + hi) / 2;
+    if (area(clipBy(poly, 0, -1, -y)) > want) lo = y; else hi = y;
+  }
+  const y = (lo + hi) / 2;
+  return [clipBy(poly, 0, -1, -y), clipBy(poly, 0, 1, y)];
 }
 
 /**

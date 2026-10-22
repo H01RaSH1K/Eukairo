@@ -12,9 +12,18 @@ const own = (key: string) => ({ entryId: key, key, color: key });
 const sumBy = (ps: ReturnType<typeof cutPieces>, key: string) => ps.filter((p) => p.owner?.key === key).reduce((s, p) => s + area(p.poly), 0);
 
 describe('cutPieces', () => {
-  it('мелкий кусок компактный, а не длинная полоска', () => {
+  it('уровень: стекло налито снизу горизонталью, следующий кусок — слоем выше', () => {
     const cells = grid(1, 1);
-    const ps = cutPieces(cells, [null], [{ owner: own('a'), frac: 0.15, anchor: 0 }]);
+    const ps = cutPieces(cells, [null], [{ owner: own('a'), frac: 0.3, anchor: 0 }, { owner: own('b'), frac: 0.2, anchor: 0 }]);
+    const ys = (k: string) => ps.find((p) => p.owner?.key === k)!.poly.map((p) => p[1]);
+    expect(Math.max(...ys('a'))).toBeCloseTo(10, 6);
+    expect(Math.min(...ys('a'))).toBeCloseTo(7, 3);
+    expect(Math.min(...ys('b'))).toBeCloseTo(5, 3);
+  });
+
+  it('клин: мелкий кусок компактный, а не длинная полоска', () => {
+    const cells = grid(1, 1);
+    const ps = cutPieces(cells, [null], [{ owner: own('a'), frac: 0.15, anchor: 0 }], 1, [], 'wedge');
     const piece = ps.find((p) => p.owner)!;
     const xs = piece.poly.map((p) => p[0]), ys = piece.poly.map((p) => p[1]);
     const [w, h] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
