@@ -126,6 +126,7 @@ function mixOf(bits: Bit[]): { color: string; ms: number }[] {
  * с остатками братьев (стекло цвета родителя), и так до корня. Всё, что осталось, складываем
  * вместе: каждое набранное стекло — сборное «mixed» (с составом цветов). Меньше стекла в конце — не рисуется.
  * `end` у стекла — когда оно «набралось» (конец последнего вошедшего остатка): рядом его и ставим.
+ * У каждого сборного стекла свой `key`: соседние не сливаются в фигуру, между ними обычный свинец.
  */
 export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: number }[] {
   const out: { owner: HourOwner; end: number }[] = [];
@@ -152,7 +153,7 @@ export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: 
       const end = Math.max(...group.map((b) => b.end));
       const mix = mixOf(group); // у родителя — цвета детей, из которых набралось
       take(group, n);
-      for (let k = 0; k < n; k++) out.push({ owner: { entryId: main.entryId, key: 'pool:' + id, color: group[0].chain[level].color, mark: 'pooled', mix }, end });
+      for (let k = 0; k < n; k++) out.push({ owner: { entryId: main.entryId, key: `pool:${id}:${out.length}`, color: group[0].chain[level].color, mark: 'pooled', mix }, end });
     }
   }
   const rest = left.filter((b) => b.ms > 0);
@@ -160,7 +161,7 @@ export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: 
   if (n) {
     const end = Math.max(...rest.map((b) => b.end));
     const mix = mixOf(rest);
-    for (let k = 0; k < n; k++) out.push({ owner: { entryId: '', key: 'mixed', color: mix[0].color, mark: 'mixed', mix }, end });
+    for (let k = 0; k < n; k++) out.push({ owner: { entryId: '', key: `mixed:${out.length}`, color: mix[0].color, mark: 'mixed', mix }, end });
   }
   return out;
 }
