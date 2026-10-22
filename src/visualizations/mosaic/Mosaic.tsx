@@ -5,6 +5,7 @@ import { runKeys, spotPlaces, wholeOwners, type HourOwner, type Rest } from './l
 import { centroid, cutPieces, stitch, type Cut, type Group } from './pieces';
 import { dayBorderPath, getPattern, leadPath, seedFor, type FillId, type PatternId } from './patterns';
 import { tone } from './tone';
+import { technique } from './techniques';
 import type { Pt } from './voronoi';
 import './mosaic.css';
 
@@ -25,7 +26,6 @@ const STEP = { day: HOUR_MS / 2, week: HOUR_MS, month: HOUR_MS };
 const DAY = 24 * HOUR_MS;
 // Частота рельефа у рифлёного стекла (в единицах картины, ширина картины — 100): мельче на мелких стёклах.
 const ripple = { day: 0.45, week: 0.9, month: 1.3 };
-const RAINBOW = ['#d9534f', '#e39a3b', '#d9c54a', '#5bb36a', '#4a8fd6', '#8a5cc7'];
 // Самый маленький кусок стекла: на неделе и месяце стёкла мельче, и щепка тонула бы в свинце.
 const minFrac = { day: 0.1, week: 0.15, month: 0.25 };
 
@@ -56,8 +56,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   // Как видно стёкла внутри одной фигуры (см. seam в registry.ts).
   const seamStyle = (settings.seam as string) ?? 'tone';
   // Как выглядят стёкла, набранные из остатков (см. pooled и mixed в registry.ts).
-  const pooledStyle = (settings.pooled as string) ?? 'thin';
-  const mixedStyle = (settings.mixed as string) ?? 'streak';
+  const pooledStyle = (settings.pooled as string) ?? 'seedy';
+  const mixedStyle = (settings.mixed as string) ?? 'fracture';
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
   const now = Date.now();
   // Экран перерисовывается каждую секунду (таймер), а хозяева часов меняются от силы раз
@@ -175,8 +175,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const collected = (o: HourOwner, i: number): string => {
     if (o.mark === 'pooled') return pooledStyle === 'thin' ? thinFill(o.color, 0.45) : o.color;
     if (mixedStyle === 'streak' || mixedStyle === 'bands') return `url(#${facetId}mx${i})`;
-    if (mixedStyle === 'rainbow') return `url(#${facetId}rb)`;
-    return 'color-mix(in oklab, var(--text) 24%, var(--glass-empty))'; // прозрачное: молочное, без цвета
+    return 'color-mix(in oklab, var(--text) 24%, var(--glass-empty))'; // прозрачное (и основа осколков, опала, «глаза»): молочное
   };
   const isFresh = (k: string) => now - (seen.current.fresh.get(k) ?? -1e9) < 1500;
 
@@ -184,10 +183,6 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
     <div className="glass-box" ref={box}>
     <svg className={'glass ' + scale} viewBox={`-1 -1 ${w + 2} ${h + 2}`}>
       <defs>
-        {/* Радуга для стёкол «всего понемногу»: по диагонали, приглушённая, как цветное стекло */}
-        <linearGradient id={facetId + 'rb'} x1="0" y1="0" x2="1" y2="1">
-          {RAINBOW.map((c, k) => <stop key={k} offset={k / (RAINBOW.length - 1)} stopColor={c} />)}
-        </linearGradient>
         {/* Рифлёное стекло: шум → рельеф под светом сверху-слева, только внутри стекла */}
         <filter id={facetId + 'rp'} x="0" y="0" width="1" height="1">
           <feTurbulence type="fractalNoise" baseFrequency={ripple[scale]} numOctaves="2" seed="7" />
@@ -231,12 +226,14 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
       {/* Сборные стёкла: рифлёная фактура поверх цвета или тонкий контур «стекло в стекле» */}
       {pieces.map((p, i) => {
         const m = p.owner?.mark;
-        if ((m === 'pooled' && pooledStyle === 'ripple') || (m === 'mixed' && mixedStyle === 'clearRipple')) {
+        if (m === 'pooled' && pooledStyle === 'ripple') {
           return <polygon key={'r' + i} points={drawn.pts[i]} fill="#fff" filter={`url(#${facetId}rp)`} className="glass-ripple" />;
         }
         if (m === 'pooled' && pooledStyle === 'inset') {
           return <polygon key={'r' + i} points={toPoints(shrink(p.poly, 0.55))} className="glass-inset" style={{ strokeWidth: leadWidth[scale] * leadK * 0.6 }} />;
         }
+        // Приёмы настоящих витражей (см. techniques.tsx)
+        if (m) return <g key={'r' + i}>{technique(m === 'pooled' ? pooledStyle : mixedStyle, p.poly, p.cell, `${facetId}t${i}`, leadWidth[scale] * leadK, p.owner?.mix)}</g>;
         return null;
       })}
       {/* «Грани»: поверх каждого цветного стекла — свой градиент, стекло под своим углом к свету */}
