@@ -6,6 +6,7 @@ import { liveQuery } from 'dexie';
 import { useSyncExternalStore } from 'react';
 import { db, type Activity, type Entry, type Habit, type HabitMark, type Point } from './schema';
 import { closeExpiredTimer, seedIfEmpty } from './commands';
+import { installTombHooks } from './tombs';
 
 export interface Data {
   ready: boolean;                    // false — база ещё открывается (доли секунды при старте)
@@ -31,6 +32,15 @@ export function useData(): Data {
   );
 }
 
+/** Подписка не из экрана (синхронизация): вызывается после каждого изменения данных. */
+export function subscribeData(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+/** Текущий снимок данных без подписки. */
+export const currentData = () => data;
+
 /** Значение настройки с запасным вариантом. `as T` — «поверь, тут T» (≈ приведение (T)obj). */
 export const settingOf = <T,>(d: Data, key: string, fallback: T): T => (d.settings[key] as T | undefined) ?? fallback;
 
@@ -40,6 +50,7 @@ let started = false;
 export function startStore() {
   if (started) return;
   started = true;
+  installTombHooks(); // до первой команды: каждое удаление попадёт в журнал для синхронизации
   seedIfEmpty()
     .then(() => {
       liveQuery(async () => {

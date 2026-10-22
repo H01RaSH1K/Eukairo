@@ -9,6 +9,7 @@ import Appearance from '../appearance/Appearance';
 import { viewportGap } from '../../ui/viewport';
 import { Sheet } from '../../ui/Sheet';
 import { plural } from '../../domain/time';
+import { connect, disconnect, syncNow, useSync } from '../../db/sync';
 
 const ENTRIES: [string, string, string] = ['запись', 'записи', 'записей'];
 const ACTS: [string, string, string] = ['занятие', 'занятия', 'занятий'];
@@ -25,6 +26,8 @@ export default function More() {
   const [habitsOpen, setHabitsOpen] = useState(false);
   const [lookOpen, setLookOpen] = useState(false);
   const [restore, setRestore] = useState<{ backup?: Backup; error?: string; done?: string } | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const sync = useSync();
   const fileInput = useRef<HTMLInputElement>(null);
   const lastBackup = settingOf<number | null>(data, 'lastBackupAt', null);
   const backupAge = lastBackup === null ? 'не было' : ago(Date.now() - lastBackup);
@@ -58,7 +61,9 @@ export default function More() {
     setRestore({ done: 'Готово: данные заменены бэкапом.' });
   };
   const demo = async () => {
-    if (!confirm('Заменить все занятия, записи и привычки демо-данными (~5 недель)? Сначала лучше сохранить бэкап.')) return;
+    const off = sync.on ? ' Синхронизация на этом устройстве отключится, чтобы демо не попало на другие.' : '';
+    if (!confirm(`Заменить все занятия, записи и привычки демо-данными (~5 недель)? Сначала лучше сохранить бэкап.${off}`)) return;
+    disconnect();
     const { fillDemo } = await import('../../db/demo');
     await fillDemo();
   };
@@ -126,7 +131,11 @@ export default function More() {
         </button>
       </div>
 
-      <div className="widget pad">
+      <div className="widget pad two-rows">
+        <button className="row-btn" onClick={() => setSyncOpen(true)}>
+          <span>Синхронизация</span>
+          <span className={sync.error ? 'sync-err' : 'dim'}>{syncSummary(sync)} ›</span>
+        </button>
         <div className="btn-row demo">
           <span className="card-title">Бэкап: {backupAge}</span>
           <button className="btn small primary" onClick={() => void shareBackup()}>Сохранить</button>
@@ -146,6 +155,8 @@ export default function More() {
         На «Домой»: {standalone ? 'да' : 'нет'} · данные защищены: {persisted === null ? '…' : persisted ? 'да' : 'нет'}<br />
         Экран {screen.height} · окно {window.innerHeight} · поправка {viewportGap()}
       </div>
+
+      {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
 
       {restore && (
         <Sheet title="Восстановление" onClose={() => setRestore(null)}>
@@ -169,6 +180,66 @@ export default function More() {
         </Sheet>
       )}
     </div>
+  );
+}
+
+function syncSummary(s: ReturnType<typeof useSync>): string {
+  if (!s.on) return 'выкл';
+  if (s.busy) return '…';
+  if (s.error) return 'ошибка';
+  return s.lastAt ? '✓' : 'вкл';
+}
+
+// Окно синхронизации: подключение по токену или состояние и «отключить».
+function SyncSheet({ onClose }: { onClose: () => void }) {
+  const s = useSync();
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const go = async () => {
+    setBusy(true); setErr(null); setMsg(null);
+    try { setMsg(await connect(token)); setToken(''); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  const off = () => {
+    if (!confirm('Отключить синхронизацию на этом устройстве? Данные здесь и в гисте останутся.')) return;
+    disconnect(); setMsg(null);
+  };
+
+  return (
+    <Sheet title="Синхронизация" onClose={onClose}>
+      <div className="form">
+        {s.on ? (
+          <>
+            {msg && <p className="center">{msg}</p>}
+            {s.error && <div className="warn">{s.error}</div>}
+            <p className="center">
+              {s.busy ? 'Синхронизирую…' : s.lastAt ? `Всё совпадает с гистом · ${new Date(s.lastAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'Включена'}
+            </p>
+            <p className="dim small center">Сама при открытии, после правок и раз в 2 минуты. Удаления тоже переезжают; при правке одного и того же на двух устройствах побеждает более поздняя.</p>
+            <button className="btn primary" disabled={s.busy} onClick={() => void syncNow()}>Синхронизировать сейчас</button>
+            <button className="btn danger" onClick={off}>Отключить на этом устройстве</button>
+          </>
+        ) : (
+          <>
+            <p className="small">Данные хранятся в твоём приватном GitHub Gist. Нужен токен с одним правом — <b>gist</b>:</p>
+            <ol className="small sync-steps">
+              <li>Открой <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Eukairo" target="_blank" rel="noreferrer">создание токена</a> (войди в GitHub).</li>
+              <li>Срок — «No expiration», галочка стоит только у <b>gist</b>.</li>
+              <li>«Generate token», скопируй <code>ghp_…</code></li>
+              <li>Вставь сюда — на каждом устройстве один и тот же.</li>
+            </ol>
+            <input className="field" placeholder="ghp_…" value={token} autoComplete="off" autoCapitalize="off" spellCheck={false}
+              onChange={(e) => setToken(e.target.value)} />
+            {err && <div className="warn">{err}</div>}
+            <button className="btn primary" disabled={busy || !token.trim()} onClick={() => void go()}>{busy ? 'Подключаю…' : 'Подключить'}</button>
+          </>
+        )}
+      </div>
+    </Sheet>
   );
 }
 

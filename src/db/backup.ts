@@ -4,13 +4,16 @@
 import { db } from './schema';
 import { setSetting } from './commands';
 import { SCHEMA_VERSION, closeExtraRunning, mergeById, parseBackup, type Backup } from '../domain/backup';
+import { addTombs } from './tombs';
+import { SYNC_TABLES, tombKey } from '../domain/sync';
 import { currentAppearance, replaceAppearance, type Appearance } from '../settings/appearance';
 import { currentDesign, replaceDesign } from '../settings/design';
 
 /** Настройки из базы, которые относятся к этому телефону и в бэкап не едут. */
 const LOCAL_ONLY = new Set(['lastBackupAt', 'backupSnoozeUntil', 'forgottenAnswer']);
 
-async function build(): Promise<Backup> {
+/** Весь бэкап одним объектом (его же синхронизация кладёт в гист). */
+export async function buildBackup(): Promise<Backup> {
   const [activities, entries, settings, habits, habitMarks, points] = await Promise.all([
     db.activities.toArray(), db.entries.toArray(), db.settings.toArray(), db.habits.toArray(), db.habitMarks.toArray(), db.points.toArray(),
   ]);
@@ -34,7 +37,7 @@ async function build(): Promise<Backup> {
 
 /** Сохранить бэкап. true — сохранили (меню «Поделиться» не закрыли без выбора). */
 export async function shareBackup(): Promise<boolean> {
-  const json = JSON.stringify(await build());
+  const json = JSON.stringify(await buildBackup());
   const name = `eukairo-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([json], name, { type: 'application/json' });
 
@@ -77,6 +80,12 @@ export function mergeBackup(b: Backup) {
 
 /** Стереть всё и поднять из бэкапа (новый телефон, потерянные данные). */
 export async function replaceWithBackup(b: Backup) {
+  // То, чего нет в бэкапе, считаем удалённым — иначе синхронизация вернула бы это с другого устройства.
+  const gone: string[] = [];
+  for (const t of SYNC_TABLES) {
+    const keep = new Set(b[t].map((x) => x.id));
+    for (const id of await db.table(t).toCollection().primaryKeys()) if (!keep.has(String(id))) gone.push(tombKey(t, String(id)));
+  }
   await db.transaction('rw', [db.activities, db.entries, db.settings, db.habits, db.habitMarks, db.points], async () => {
     await Promise.all([db.activities.clear(), db.entries.clear(), db.habits.clear(), db.habitMarks.clear(), db.points.clear()]);
     await db.activities.bulkPut(b.activities);
@@ -88,6 +97,7 @@ export async function replaceWithBackup(b: Backup) {
       if (s.key !== 'appearance' && s.key !== 'design' && !LOCAL_ONLY.has(s.key)) await db.settings.put(s);
     }
   });
+  addTombs(gone);
   const look = b.settings.find((s) => s.key === 'appearance')?.value;
   if (look) replaceAppearance(look as Appearance);
   const design = b.settings.find((s) => s.key === 'design')?.value;

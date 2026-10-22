@@ -25,6 +25,11 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
+// Синхронизация через Gist: код грузим, только если она включена на этом устройстве.
+try {
+  if (localStorage.getItem('eukairo.sync')) void import('./db/sync').then((m) => m.startSync());
+} catch { /* приватный режим — без синка */ }
+
 // Service worker кэширует приложение для офлайна и тихо ставит обновления.
 registerSW({ immediate: true });
 
