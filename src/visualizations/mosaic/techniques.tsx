@@ -5,11 +5,12 @@
 //   гризайль — узор, нарисованный по стеклу коричнево-серой краской;
 //   осколки Тиффани (fracture & streamers) — в прозрачное стекло вплавлены осколки и нити цветов;
 //   опаловое — молочное стекло с завихрениями цветов;
-//   «бычий глаз» (roundel) — круглые волны от выдувки, кольца цветов.
+//   «бычий глаз» (roundel) — круглые волны от выдувки, кольца цветов;
+//   мозаика в стекле — стекло собрано из нескольких мелких стёкол цветов состава, в тонком свинце.
 // Всё случайное — от номера стекла, поэтому картинка не прыгает между перерисовками.
 import type { ReactNode } from 'react';
 import { centroid } from './pieces';
-import { area, rng, type Pt } from './voronoi';
+import { area, clipBy, rng, type Pt } from './voronoi';
 
 type Mix = { color: string; ms: number }[];
 
@@ -115,39 +116,46 @@ export function technique(kind: string, poly: Pt[], cell: number, id: string, le
   if (!mix?.length) return null;
 
   if (kind === 'fracture') {
-    // Осколки Тиффани: тонкие полупрозрачные хлопья со скруглёнными краями, вытянутые
-    // примерно в одну сторону (как легли при прокатке), и длинные плавные нити через всё стекло.
+    // Осколки Тиффани: острые осколки цветов состава (по минутам) и пара тонких нитей.
     const rand = rng(seed + 3);
-    const flow = rand() * Math.PI; // общее направление хлопьев и нитей
-    const soft = id + 'f';
-    const flakes = scatter(poly, 11, seed).map((p, k) => {
-      const len = size * (0.07 + rand() * 0.12), wid = len * (0.35 + rand() * 0.3);
-      const a = flow + (rand() - 0.5) * 0.8, n = 5 + Math.floor(rand() * 3);
-      // Неровный овал: точки по кругу с разным радиусом, сглаженные кривыми через середины рёбер.
-      const ring = Array.from({ length: n }, (_, j): Pt => {
-        const t = (j / n) * Math.PI * 2, r = 0.65 + rand() * 0.45;
-        const x = Math.cos(t) * len * r, y = Math.sin(t) * wid * r;
-        return [p[0] + x * Math.cos(a) - y * Math.sin(a), p[1] + x * Math.sin(a) + y * Math.cos(a)];
+    const shards = scatter(poly, 16, seed).map((p, k) => {
+      const r = size * (0.04 + rand() * 0.07), a = rand() * Math.PI * 2, n = 3 + Math.floor(rand() * 2);
+      const shape = Array.from({ length: n }, (_, j): Pt => {
+        const b = a + (j * 2 * Math.PI) / n + (rand() - 0.5) * 0.9, d = r * (0.5 + rand() * 0.7);
+        return [p[0] + Math.cos(b) * d, p[1] + Math.sin(b) * d];
       });
-      const mid = (i: number): Pt => { const q = ring[i % n], w = ring[(i + 1) % n]; return [(q[0] + w[0]) / 2, (q[1] + w[1]) / 2]; };
-      const d = `M${mid(0)[0]} ${mid(0)[1]}` + ring.map((_, j) => `Q${ring[(j + 1) % n][0]} ${ring[(j + 1) % n][1]} ${mid(j + 1)[0]} ${mid(j + 1)[1]}`).join('') + 'Z';
-      return <path key={k} d={d} fill={pick(mix, (k + rand()) / 11)} fillOpacity={0.55 + rand() * 0.25} />;
+      return <polygon key={k} points={pts(shape)} fill={pick(mix, (k + rand()) / 16)} fillOpacity={0.85} />;
     });
-    const R = size * 0.9;
     const streams = [0, 1, 2].map((k) => {
-      // Нить: от края до края вдоль общего направления, с лёгкой волной.
-      const off = (k - 1) * size * 0.28 + (rand() - 0.5) * size * 0.15;
-      const a = flow + (rand() - 0.5) * 0.4, nx = -Math.sin(a), ny = Math.cos(a);
-      const at = (t: number, wave: number): Pt => [c[0] + Math.cos(a) * R * t + nx * (off + wave), c[1] + Math.sin(a) * R * t + ny * (off + wave)];
-      const [p0, p1, p2, p3] = [at(-1, 0), at(-0.33, size * 0.3 * (rand() - 0.5)), at(0.33, size * 0.3 * (rand() - 0.5)), at(1, 0)];
-      return <path key={'s' + k} d={`M${p0[0]} ${p0[1]}C${p1[0]} ${p1[1]} ${p2[0]} ${p2[1]} ${p3[0]} ${p3[1]}`} fill="none"
-        stroke={pick(mix, rand())} strokeOpacity={0.8} strokeWidth={size * 0.012} strokeLinecap="round" />;
+      const [a, b] = scatter(poly, 2, seed + 10 + k);
+      if (!a || !b) return null;
+      const m: Pt = [(a[0] + b[0]) / 2 + (rand() - 0.5) * size * 0.4, (a[1] + b[1]) / 2 + (rand() - 0.5) * size * 0.4];
+      return <path key={'s' + k} d={`M${a[0]} ${a[1]}Q${m[0]} ${m[1]} ${b[0]} ${b[1]}`} fill="none" stroke={pick(mix, rand())} strokeWidth={lead * 0.35} strokeLinecap="round" />;
     });
-    return clip(
-      <>
-        <filter id={soft} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation={size * 0.006} /></filter>
-        <g filter={`url(#${soft})`}>{flakes}{streams}</g>
-      </>,
+    return clip(<>{shards}{streams}</>);
+  }
+
+  if (kind === 'tiles') {
+    // Мозаика в стекле: 4–5 мелких стёкол (Вороной от случайных точек внутри), цвета — по минутам:
+    // стёкла по очереди слева направо вдоль случайной оси, каждому — краска его доли площади.
+    const seeds = scatter(poly, Math.min(5, Math.max(3, mix.length + 1)), seed + 9);
+    const tiles = seeds.map((s, i) => seeds.reduce((pl, o, j) => {
+      if (i === j || pl.length < 3) return pl;
+      const nx = o[0] - s[0], ny = o[1] - s[1];
+      return clipBy(pl, nx, ny, (nx * (s[0] + o[0])) / 2 + (ny * (s[1] + o[1])) / 2);
+    }, poly)).filter((t) => t.length >= 3);
+    const a = rng(seed + 4)() * Math.PI;
+    const along = (t: Pt[]) => { const m = centroid(t); return m[0] * Math.cos(a) + m[1] * Math.sin(a); };
+    const total = area(poly);
+    let acc = 0;
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {[...tiles].sort((x, y) => along(x) - along(y)).map((t, k) => {
+          const share = area(t) / total, color = pick(mix, Math.min(0.999, acc + share / 2));
+          acc += share;
+          return <polygon key={k} points={pts(t)} fill={color} stroke="var(--glass-lead)" strokeWidth={lead * 0.5} strokeLinejoin="round" />;
+        })}
+      </g>
     );
   }
 
