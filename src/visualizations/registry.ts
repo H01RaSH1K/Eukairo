@@ -39,18 +39,15 @@ const growth: SettingDef = {
   showIf: { id: 'fill', equals: ['spots'] },
 };
 
-const count: SettingDef = {
-  id: 'count', kind: 'choice', title: 'Подсчёт часов', default: 'exact',
+/** Как видно стёкла внутри одной фигуры (часы одной серии). */
+export const seam: SettingDef = {
+  id: 'seam', kind: 'choice', title: 'Стёкла внутри фигуры', default: 'tone',
   options: [
-    { id: 'exact', title: 'Точно', hint: 'Цветных стёкол столько, сколько набрано часов: минуты не теряются' },
-    { id: 'threshold', title: 'По порогу', hint: 'Стекло часа — записи, занявшей в нём не меньше порога' },
+    { id: 'tone', title: 'Оттенки', hint: 'Стёкла одного цвета чуть разные — светлее/темнее, теплее/холоднее, как из разных листов' },
+    { id: 'facet', title: 'Грани', hint: 'Каждое стекло под своим углом к свету: с одного края светлее, с другого темнее' },
+    { id: 'both', title: 'Оттенки и грани', hint: 'И то и другое, но мягче' },
+    { id: 'none', title: 'Сплошь', hint: 'Фигура одним куском, стыков не видно' },
   ],
-};
-
-const threshold: SettingDef = {
-  id: 'threshold', kind: 'range', title: 'Час закрашивается от', min: 10, max: 50, step: 5, default: 30, unit: 'мин',
-  hint: 'Сколько минут записи нужно, чтобы стекло часа стало её цвета',
-  showIf: { id: 'count', equals: ['threshold'] },
 };
 
 const lead: SettingDef = {
@@ -67,26 +64,36 @@ const cut: SettingDef = {
   ],
 };
 
+const wobble: SettingDef = {
+  id: 'wobble', kind: 'range', title: 'Неровность формы', min: 0, max: 100, step: 10, default: 60, unit: '%',
+  hint: '0 — стёкла почти по сетке, 100 — совсем хаотичные осколки',
+};
+
+const spread: SettingDef = {
+  id: 'spread', kind: 'range', title: 'Разброс площади', min: 0, max: 100, step: 10, default: 30, unit: '%',
+  hint: '0 — все стёкла одной площади, 100 — как нарезалось, без выравнивания',
+};
+
 const allFills = ['calendar', 'rows', 'flow', 'spots', 'jar'];
 // Роза и треугольники не умеют раскладывать по дням — им только свободные заливки.
 const freeFills = ['spots', 'flow', 'jar'];
 
 export const visualizations: VisualizationPlugin[] = [
   {
-    id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
-    settings: [fill(allFills), spots, growth, cut, count, threshold, lead], load: mosaic('glass'),
+    id: 'mosaic-glass', title: 'Витраж', description: 'Стекло — полчаса (на неделе и месяце — час), стёкла одной записи сливаются в одну фигуру',
+    settings: [fill(allFills), spots, growth, cut, wobble, spread, seam, lead], load: mosaic('glass'),
   },
   {
-    id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
-    settings: [fill(freeFills), spots, growth, count, threshold, lead], load: mosaic('rose'),
+    id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо лепестков',
+    settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('rose'),
   },
   {
-    id: 'mosaic-tri', title: 'Треугольники', description: 'Час — треугольник, пары складываются в ромбы',
-    settings: [fill(freeFills), spots, growth, count, threshold, lead], load: mosaic('tri'),
+    id: 'mosaic-tri', title: 'Треугольники', description: 'Стекло — треугольник, пары складываются в ромбы',
+    settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('tri'),
   },
   {
     id: 'mosaic-grid', title: 'Сетка', description: 'Ровные клетки — проще всего читать',
-    settings: [fill(allFills), spots, growth, count, threshold, lead], load: mosaic('grid'),
+    settings: [fill(allFills), spots, growth, seam, lead], load: mosaic('grid'),
   },
 ];
 

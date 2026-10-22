@@ -3,7 +3,7 @@
 // поэтому у каждого дня своё число сегментов (`counts`): поспал 8 ч — в дне 16 стёкол.
 // Узор отдаёт многоугольники в порядке часов. Соседние по времени часы
 // стараемся ставить рядом и на картинке, чтобы длинная запись слилась в одну фигуру.
-import { rng, voronoi, type Pt } from './voronoi';
+import { area, neighbours, rng, voronoi, type Pt } from './voronoi';
 
 export type PatternId = 'glass' | 'rose' | 'tri' | 'grid';
 
@@ -141,27 +141,84 @@ const reachOf = (sl: Slots) => 3 * Math.max(1, ...[...sl.hours, ...sl.empty].map
 
 // ——— витражи (диаграмма Вороного по разным раскладкам точек) ———
 
-/** Неровный витраж: точка в каждом месте со сдвигом. `jitter` 0…1 — насколько неровно. */
-function jittered(sl: Slots, aspect: number, jitter: number, seed: number): Pattern {
+/**
+ * Неровный витраж: точка в каждом месте со сдвигом. `jitter` — насколько неровно:
+ * до 1 точка остаётся в своём месте, больше 1 — может заходить к соседям (форма ещё хаотичнее).
+ */
+function jittered(sl: Slots, aspect: number, jitter: number, seed: number, look: Look): Pattern {
   const h = W / aspect;
   const rand = rng(seed + sl.hours.length);
   const pad = (1 - jitter) / 2;
-  const at = (s: Slot): Pt => [s.x + (pad + rand() * jitter) * s.w, s.y + (pad + rand() * jitter) * s.h];
-  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl));
+  const clamp = (v: number, max: number) => Math.min(max - 0.01, Math.max(0.01, v));
+  const at = (s: Slot): Pt => [clamp(s.x + (pad + rand() * jitter) * s.w, W), clamp(s.y + (pad + rand() * jitter) * s.h, h)];
+  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl), look, seed);
 }
 
-/** Соты: точки рядами со сдвигом на полместа — получаются неровные шестиугольники. */
-function hex(sl: Slots, aspect: number, seed: number): Pattern {
+/** Соты: точки рядами со сдвигом на полместа — получаются неровные шестиугольники. `amp` — сила сдвига. */
+function hex(sl: Slots, aspect: number, seed: number, amp: number, look: Look): Pattern {
   const h = W / aspect;
   const rand = rng(seed);
-  const wob = () => (rand() - 0.5) * 0.3;
+  const wob = () => (rand() - 0.5) * amp;
   const at = (s: Slot): Pt => [s.x + ((s.row % 2 ? 0.75 : 0.25) + wob()) * s.w, s.y + (0.5 + wob()) * s.h];
-  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl));
+  return fromSeeds(sl, h, sl.hours.map(at), sl.empty.map(at), reachOf(sl), look, seed);
+}
+
+/**
+ * Как выглядят стёкла витража (настройки «Оформления»):
+ * `spread` — разброс площади 0…1 (1 — как нарезалось, без выравнивания),
+ * `wobble` — неровность формы 0…1 (−1 — у каждой нарезки своя, как раньше).
+ */
+export interface Look { spread: number; wobble: number }
+const asCut: Look = { spread: 1, wobble: -1 };
+
+/** Выравнивание площадей: доля разницы площадей, идущая в вес за шаг, и предел веса (в долях целевой площади). */
+const STEP = 0.15, CAP = 1.5, RELAX = 30;
+
+/** Раздвигает точки, стоящие ближе `dmin` друг к другу (несколько проходов, на месте). */
+function separate(seeds: Pt[], dmin: number, w: number, h: number) {
+  const near = neighbours(seeds, dmin);
+  for (let pass = 0; pass < 6; pass++) {
+    let moved = false;
+    seeds.forEach((a, i) => near[i].forEach((j) => {
+      if (j < i) return;
+      const b = seeds[j];
+      const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1e-6;
+      if (d >= dmin) return;
+      const push = (dmin - d) / 2, ux = dx / d, uy = dy / d;
+      seeds[i] = [Math.min(w, Math.max(0, a[0] - ux * push)), Math.min(h, Math.max(0, a[1] - uy * push))];
+      seeds[j] = [Math.min(w, Math.max(0, b[0] + ux * push)), Math.min(h, Math.max(0, b[1] + uy * push))];
+      moved = true;
+    }));
+    if (!moved) break;
+  }
 }
 
 /** Вороной по точкам часов и пустых мест: первые — сегменты, вторые — декор. */
-function fromSeeds(sl: Slots, h: number, hours: Pt[], empty: Pt[], reach: number): Pattern {
-  const all = voronoi([...hours, ...empty], W, h, reach);
+function fromSeeds(sl: Slots, h: number, hours: Pt[], empty: Pt[], reach: number, look: Look, seed: number): Pattern {
+  const equalize = look.spread < 1 && hours.length + empty.length > 1;
+  const seeds = [...hours, ...empty];
+  // Почти слипшиеся точки раздвигаем: веса у них «раскачиваются», и площади не сходятся.
+  if (equalize) separate(seeds, 0.4 * Math.sqrt((W * h) / seeds.length), W, h);
+  const near = neighbours(seeds, reach); // точки не двигаются — соседей считаем один раз
+  let all = voronoi(seeds, W, h, reach, undefined, near);
+  // Выравнивание площадей: точки стоят где стояли (форма стёкол остаётся неровной),
+  // а у каждой появляется вес. Крупному стеклу вес понижаем, мелкому — повышаем,
+  // граница между ними сдвигается, и за несколько десятков шагов площади почти равны.
+  // Разброс: у каждого стекла своя целевая площадь — средняя ± spread (сумма та же, что у картины).
+  if (equalize) {
+    const rand = rng(seed * 7 + 3);
+    const raw = seeds.map(() => 1 + look.spread * (2 * rand() - 1));
+    const k0 = (W * h) / raw.reduce((a, b) => a + b, 0);
+    const target = raw.map((r) => r * k0);
+    const weights = new Array<number>(seeds.length).fill(0);
+    const cap = (CAP * W * h) / seeds.length;
+    for (let k = 0; k < RELAX; k++) {
+      // Шаг маленький и вес ограничен: иначе у близких точек граница «перепрыгивает»
+      // и узор начинает дрожать вместо того, чтобы сходиться.
+      all.forEach((poly, i) => { weights[i] = Math.max(-cap, Math.min(cap, weights[i] + STEP * (target[i] - area(poly)))); });
+      all = voronoi(seeds, W, h, reach, weights, near);
+    }
+  }
   return { w: W, h, cells: all.slice(0, hours.length), decor: all.slice(hours.length), day: sl.day };
 }
 
@@ -243,11 +300,13 @@ function grid(sl: Slots, aspect: number): Pattern {
  * чтобы дни не выглядели одинаково. `seed` — из даты, поэтому у одного
  * и того же дня нарезка всегда одна и та же.
  */
-function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId, cut: number): Pattern {
+function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId, cut: number, look: Look): Pattern {
+  // Неровность формы: −1 — у каждой нарезки своя; иначе 0…1 → сдвиг точек от почти сетки до хаоса.
+  const wob = look.wobble;
   const cuts = [
-    () => jittered(sl, aspect, 0.6, seed),   // ровные неровные стёкла
-    () => jittered(sl, aspect, 0.98, seed),  // осколки
-    () => hex(sl, aspect, seed),             // соты
+    () => jittered(sl, aspect, wob < 0 ? 0.6 : 0.2 + 1.3 * wob, seed, look),             // ровные неровные стёкла
+    () => jittered(sl, aspect, wob < 0 ? 0.98 : Math.min(1.8, 0.4 + 1.4 * wob), seed, look), // осколки
+    () => hex(sl, aspect, seed, wob < 0 ? 0.3 : 0.1 + 0.8 * wob, look),                  // соты
     () => spiral(n, aspect, seed),           // спираль от центра (у копилки заполняется от центра)
   ];
   // Спираль не умеет раскладывать по дням — у «по дням» и «календаря» её нет.
@@ -256,9 +315,9 @@ function glass(sl: Slots, n: number, aspect: number, seed: number, fill: FillId,
   return cuts[cut < 0 ? seed % k : cut < k ? cut : 0]();
 }
 
-type Builder = (counts: number[], aspect: number, seed: number, fill: FillId, weekday: number, cut: number) => Pattern;
+type Builder = (counts: number[], aspect: number, seed: number, fill: FillId, weekday: number, cut: number, look: Look) => Pattern;
 const builders: Record<PatternId, Builder> = {
-  glass: (c, a, s, f, wd, cut) => glass(slotsFor(f, c, a, wd), sum(c), a, s, f, cut),
+  glass: (c, a, s, f, wd, cut, look) => glass(slotsFor(f, c, a, wd), sum(c), a, s, f, cut, look),
   rose: (c) => rose(c), // роза всегда круглая
   tri: (c, a) => tri(sum(c), a),
   grid: (c, a, _s, f, wd) => grid(slotsFor(f, c, a, wd), a),
@@ -269,17 +328,18 @@ const cache = new Map<string, Pattern>();
  * `days` — число полных дней или сколько часов-стёкол в каждом дне (меньше 24, если были нужды),
  * `aspect` — ширина / высота места под картину,
  * `weekday` — день недели первого дня (0 = пн), нужен календарю месяца,
- * `cut` — нарезка витража (−1 = по дате).
+ * `cut` — нарезка витража (−1 = по дате),
+ * `look` — разброс площади и неровность формы стёкол (по умолчанию — как нарезалось).
  */
-export function getPattern(id: PatternId, days: number | number[] = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0, cut = -1): Pattern {
+export function getPattern(id: PatternId, days: number | number[] = 1, seed = 0, aspect = 0.7, fill: FillId = 'flow', weekday = 0, cut = -1, look: Look = asCut): Pattern {
   // number | number[] — «или то, или другое» (в C# тут были бы две перегрузки).
   const counts = typeof days === 'number' ? new Array<number>(days).fill(24) : days;
   // Округляем форму, чтобы мелкие изменения размера не пересчитывали узор.
   const a = Math.round(Math.min(3, Math.max(0.3, aspect)) * 20) / 20;
-  const key = `${id}:${counts.join(',')}:${seed}:${a}:${fill}:${weekday}:${cut}`;
+  const key = `${id}:${counts.join(',')}:${seed}:${a}:${fill}:${weekday}:${cut}:${look.spread}:${look.wobble}`;
   if (!cache.has(key)) {
     if (cache.size > 60) cache.clear(); // кэш не должен расти бесконечно
-    cache.set(key, builders[id](counts, a, seed, fill, weekday, cut));
+    cache.set(key, builders[id](counts, a, seed, fill, weekday, cut, look));
   }
   return cache.get(key)!;
 }
@@ -294,10 +354,11 @@ export function seedFor(from: number): number {
 
 /**
  * Свинцовые линии витража: все рёбра, кроме общих рёбер у сегментов
- * одной и той же записи. Так несколько часов одной записи читаются одной фигурой.
- * Возвращает SVG-путь ("M x y L x y …").
+ * одной и той же серии — те идут тонким швом (`seam`). Так несколько часов
+ * одной записи читаются одной фигурой, но сегменты в ней видны.
+ * Возвращает SVG-пути ("M x y L x y …").
  */
-export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
+export function leadPath(cells: Pt[][], owner: (string | null)[]): { lead: string; seam: string } {
   // Ребро → какие сегменты его используют. Ключ — концы, округлённые и упорядоченные,
   // так что ребро соседа (в обратном направлении) даёт тот же ключ (≈ Dictionary<string, List<int>>).
   const r = (v: number) => Math.round(v * 50);
@@ -312,6 +373,7 @@ export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
   }));
 
   const parts: string[] = [];
+  const seams: string[] = [];
   const drawn = new Set<string>();
   cells.forEach((poly) => poly.forEach((p, k) => {
     const q = poly[(k + 1) % poly.length];
@@ -320,9 +382,9 @@ export function leadPath(cells: Pt[][], owner: (string | null)[]): string {
     drawn.add(key);
     const u = users.get(key)!;
     const merged = u.length === 2 && owner[u[0]] !== null && owner[u[0]] === owner[u[1]];
-    if (!merged) parts.push(`M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
+    (merged ? seams : parts).push(`M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
   }));
-  return parts.join('');
+  return { lead: parts.join(''), seam: seams.join('') };
 }
 
 /**

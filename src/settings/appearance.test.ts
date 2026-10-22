@@ -15,6 +15,6 @@ describe('настройки стилей', () => {
     const v = withDefaults(defs, { fill: 'spots' });
     expect(v.fill).toBe('spots');
     expect(v.spots).toBe(5);
-    expect(v.threshold).toBe(30);
+    expect(v.wobble).toBe(60);
   });
 });
