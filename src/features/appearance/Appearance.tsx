@@ -1,6 +1,6 @@
 import { Suspense, useMemo, useState } from 'react';
 import { activityColors } from '../../domain/colors';
-import { toSpans } from '../../domain/spans';
+import { parentsMap, toSpans } from '../../domain/spans';
 import { needIds } from '../../domain/tree';
 import { addLocalDays, periodRange, type Period } from '../../domain/time';
 import { useData } from '../../db/store';
@@ -26,11 +26,12 @@ export default function Appearance({ onBack }: { onBack: () => void }) {
   const needs = useMemo(() => needIds(activities), [activities]);
 
   const { from, to } = periodRange(scale, now);
-  const spans = toSpans(entries, colors, from, to, now, needs);
+  const parents = useMemo(() => parentsMap(activities, colors), [activities, colors]);
+  const spans = toSpans(entries, colors, from, to, now, needs, parents);
   // Миниатюры — прошлый период того же масштаба: он уже целиком заполнен.
   const back = scale === 'day' ? -1 : scale === 'week' ? -7 : -28;
   const y = periodRange(scale, scale === 'month' ? new Date(new Date(from).getFullYear(), new Date(from).getMonth() - 1, 15).getTime() : addLocalDays(now, back));
-  const ySpans = toSpans(entries, colors, y.from, y.to, now, needs);
+  const ySpans = toSpans(entries, colors, y.from, y.to, now, needs, parents);
 
   const Viz = lazyViz(plugin);
   // showIf: настройка видна, только если другая равна одному из значений.

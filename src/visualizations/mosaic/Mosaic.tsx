@@ -12,15 +12,20 @@ import './mosaic.css';
 // и месяце — час, см. STEP). Нарезка стёкол своя у каждого дня/недели/месяца (зависит
 // от даты), чтобы дни не были одинаковыми (день — 48, неделя — 168, месяц — 24 × дней).
 // Время нужд (сон, еда…) из дня вынимается: поспал 8 ч — в дне 32 стекла из 48.
-// Время каждой серии округляется до целых стёкол, неполных стёкол нет.
+// Целые стёкла серии — как есть, остатки копятся: набралось на стекло у одного занятия
+// (или у детей одного родителя) — стекло его цвета со штриховкой, всего подряд — радужное
+// (см. poolOwners в layout.ts). Неполных стёкол нет.
 // Стёкла одной серии (записи одного занятия почти подряд) сливаются в одну фигуру,
 // между ними — тонкий шов.
 
 const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 // Сколько времени в одном стекле: на дне — полчаса (48 стёкол), на неделе и месяце — час.
-// Время каждой серии округляется до целых стёкол, кусков нет: ошибка не больше полстекла.
+// Остатки меньше стекла копятся (см. poolOwners), кусков нет.
 const STEP = { day: HOUR_MS / 2, week: HOUR_MS, month: HOUR_MS };
 const DAY = 24 * HOUR_MS;
+// Шаг штриховки у стёкол из копилки (в единицах картины, ширина картины — 100).
+const stripe = { day: 3, week: 1.6, month: 1.1 };
+const RAINBOW = ['#d9534f', '#e39a3b', '#d9c54a', '#5bb36a', '#4a8fd6', '#8a5cc7'];
 // Самый маленький кусок стекла: на неделе и месяце стёкла мельче, и щепка тонула бы в свинце.
 const minFrac = { day: 0.1, week: 0.15, month: 0.25 };
 
@@ -54,7 +59,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const now = Date.now();
   // Экран перерисовывается каждую секунду (таймер), а хозяева часов меняются от силы раз
   // в минуту — считаем их заново, только когда сменилась минута или сами записи.
-  const sig = spans.map((s) => `${s.entryId}:${s.start}:${Math.floor(s.end / 60_000)}:${s.color}:${s.need ? 1 : 0}`).join('|');
+  const sig = spans.map((s) => `${s.entryId}:${s.start}:${Math.floor(s.end / 60_000)}:${s.color}:${s.need ? 1 : 0}:${s.parents?.map((x) => x.id).join('/') ?? ''}`).join('|');
   const keys = useMemo(() => runKeys(spans), [sig]); // eslint-disable-line react-hooks/exhaustive-deps
   // Целые часы каждого дня и остатки серий; часы, где главная — нужда, выкидываем.
   // `h` — час дня, он нужен, чтобы найти стекло «сейчас» и отличить будущее.
@@ -168,6 +173,16 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   return (
     <div className="glass-box" ref={box}>
     <svg className={'glass ' + scale} viewBox={`-1 -1 ${w + 2} ${h + 2}`}>
+      <defs>
+        {/* Радуга для стёкол «всего понемногу»: по диагонали, приглушённая, как цветное стекло */}
+        <linearGradient id={facetId + 'rb'} x1="0" y1="0" x2="1" y2="1">
+          {RAINBOW.map((c, k) => <stop key={k} offset={k / (RAINBOW.length - 1)} stopColor={c} />)}
+        </linearGradient>
+        {/* Штриховка: светлые косые полосы, шаг — по масштабу стёкол */}
+        <pattern id={facetId + 'st'} patternUnits="userSpaceOnUse" width={stripe[scale]} height={stripe[scale]} patternTransform="rotate(45)">
+          <rect width={stripe[scale] * 0.4} height={stripe[scale]} fill="#fff" opacity="0.28" />
+        </pattern>
+      </defs>
       {decor?.map((poly, i) => (
         <polygon key={'d' + i} points={toPoints(poly)} className="glass-decor" />
       ))}
@@ -178,7 +193,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
           : 'glass-empty' + (p.cell >= futureFrom ? ' glass-future' : '');
         // «Оттенки»: у каждого стекла свой сдвиг яркости (по номеру стекла, ±7%).
         // Неполный час — тонкое стекло: цвет, разбавленный пустым стеклом темы.
-        const color = o ? thinFill(paint(o.color, p.cell, seamStyle), p.frac) : undefined;
+        // Радужное стекло (копилка всего подряд) — общий градиент, см. <defs> ниже.
+        const color = o ? (o.mark === 'rainbow' ? `url(#${facetId}rb)` : thinFill(paint(o.color, p.cell, seamStyle), p.frac)) : undefined;
         return (
           <polygon
             key={i}
@@ -190,10 +206,12 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
             // --v — свой оттенок у каждого стекла (0…1, постоянный для номера): дизайн может
             // подсветить пустые стёкла неравномерно, как настоящее стекло.
             style={{ fill: color, stroke: color, '--d': (p.cell / cells.length).toFixed(3), '--v': (((p.cell * 2654435761) >>> 0) % 1000 / 1000).toFixed(3) } as CSSProperties}
-            onClick={() => o && onSelect(o.entryId)}
+            onClick={() => o?.entryId && onSelect(o.entryId)}
           />
         );
       })}
+      {/* Стёкла из копилки остатков одного занятия — штриховка поверх цвета: «собрано из кусочков» */}
+      {pieces.map((p, i) => p.owner?.mark === 'pooled' && <polygon key={'p' + i} points={drawn.pts[i]} fill={`url(#${facetId}st)`} className="glass-facet" />)}
       {/* «Грани»: поверх каждого цветного стекла — свой градиент, стекло под своим углом к свету */}
       {(seamStyle === 'facet' || seamStyle === 'both') && (
         <>

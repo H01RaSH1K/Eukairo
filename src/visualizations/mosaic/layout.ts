@@ -7,7 +7,11 @@ import { rng, type Pt } from './voronoi';
  * Хозяин часа: запись, чьё стекло это. `key` — «серия», по ней стёкла сливаются
  * в одну фигуру (несколько записей одного занятия почти подряд — одна серия).
  */
-export interface HourOwner { entryId: string; key: string; color: string; need?: boolean }
+export interface HourOwner {
+  entryId: string; key: string; color: string; need?: boolean;
+  /** Стекло собрано из остатков: «pooled» — одного занятия (или родителя), «rainbow» — всего подряд. */
+  mark?: 'pooled' | 'rainbow';
+}
 
 /** Перерыв меньше этого между записями одного занятия не рвёт серию. */
 const RUN_GAP = HOUR_MS / 2;
@@ -48,13 +52,12 @@ export const MIN_FRAC = 0.1;
  * его вырежут куском из стекла (см. pieces.ts). У нужд остаток не нужен — из дня
  * вынимаются только их целые часы. `minFrac` — самый маленький кусок (доля стекла).
  * `step` — сколько времени в одном стекле (по умолчанию час; `count` стёкол в дне).
- * `round` — без кусков: время серии округляется до целых стёкол (полстекла и больше — стекло),
- * остатков нет.
+ * `pool` — без кусков: остатки серий (меньше стекла) копятся, см. poolOwners; `rests` пустой.
  */
-export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, minFrac = MIN_FRAC, step = HOUR_MS, round = false): { owners: (HourOwner | null)[]; rests: Rest[] } {
+export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, minFrac = MIN_FRAC, step = HOUR_MS, pool = false): { owners: (HourOwner | null)[]; rests: Rest[] } {
   const H = step;
   const dayEnd = dayStart + count * H;
-  interface Run { first: HourOwner; start: number; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
+  interface Run { first: HourOwner; span: Span; start: number; end: number; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
   const runs = new Map<string, Run>(); // ≈ Dictionary<string, Run>, порядок вставки сохраняется
   let lastEnd = dayStart;
   for (const s of spans) {
@@ -64,10 +67,11 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     const o = ownerOf(s, keys);
     let run = runs.get(o.key);
     if (!run) {
-      run = { first: o, start: a, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
+      run = { first: o, span: s, start: a, end: b, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
       runs.set(o.key, run);
     }
     run.total += b - a;
+    run.end = Math.max(run.end, b);
     for (let h = Math.floor((a - dayStart) / H); h < count && dayStart + h * H < b; h++) {
       const part = Math.min(b, dayStart + (h + 1) * H) - Math.max(a, dayStart + h * H);
       if (part <= 0) continue;
@@ -77,7 +81,7 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     }
   }
   const list = [...runs.values()];
-  const quota = list.map((r) => (round ? Math.round(r.total / H) : Math.floor(r.total / H)));
+  const quota = list.map((r) => Math.floor(r.total / H));
   const mine = list.map(() => new Set<number>()); // часы, отданные серии целиком
 
   const owners: (HourOwner | null)[] = new Array(count).fill(null);
@@ -91,29 +95,91 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     mine[i].add(h);
     quota[i]--;
   }
-  // Кому не хватило своих часов — ближайшие свободные (но не в будущем, пока есть другие).
-  list.forEach((r, i) => {
-    if (quota[i] <= 0) return;
-    const own = r.ms.map((ms, h) => (ms > 0 ? h : -1)).filter((h) => h >= 0);
+  // Ближайшие к часам `own` свободные стёкла (но не в будущем, пока есть другие).
+  const nearestFree = (own: number[], n: number) => {
     const dist = (h: number) => Math.min(...own.map((x) => Math.abs(x - h)));
     const past = (h: number) => (dayStart + h * H < lastEnd ? 0 : 1);
     const free = owners.map((o, h) => (o ? -1 : h)).filter((h) => h >= 0);
     free.sort((x, y) => past(x) - past(y) || dist(x) - dist(y) || x - y);
-    for (const h of free.slice(0, quota[i])) { owners[h] = r.first; mine[i].add(h); }
+    return free.slice(0, n);
+  };
+  // Кому не хватило своих часов — ближайшие свободные.
+  list.forEach((r, i) => {
+    if (quota[i] <= 0) return;
+    const own = r.ms.map((ms, h) => (ms > 0 ? h : -1)).filter((h) => h >= 0);
+    for (const h of nearestFree(own, quota[i])) { owners[h] = r.first; mine[i].add(h); }
   });
+
+  if (pool) {
+    const slot = (t: number) => Math.min(count - 1, Math.max(0, Math.floor((t - 1 - dayStart) / H)));
+    const bits = list.filter((r) => !r.first.need && r.total % H > 0).map((r) => ({
+      ms: r.total % H, end: r.end, entryId: r.first.entryId,
+      chain: [{ id: r.span.activityId, color: r.span.color }, ...(r.span.parents ?? [])],
+    }));
+    for (const g of poolOwners(bits, H)) {
+      for (const h of nearestFree([slot(g.end)], 1)) owners[h] = g.owner;
+    }
+    return { owners, rests: [] };
+  }
 
   // Остатки — по времени начала серий. Час куска — тот, где у серии больше всего
   // минут среди часов, не отданных ей целиком.
   const rests: Rest[] = [];
   list.map((r, i) => ({ r, i })).sort((x, y) => x.r.start - y.r.start).forEach(({ r, i }) => {
     const rest = r.total % H;
-    if (round || rest <= 0 || r.first.need) return;
+    if (rest <= 0 || r.first.need) return;
     let hour = -1;
     r.ms.forEach((ms, h) => { if (ms > 0 && !mine[i].has(h) && (hour < 0 || ms > r.ms[hour])) hour = h; });
     if (hour < 0) hour = r.ms.indexOf(Math.max(...r.ms));
     rests.push({ owner: r.best[hour] ?? r.first, frac: Math.max(minFrac, rest / H), hour });
   });
   return { owners, rests };
+}
+
+/** Остаток серии для копилки: сколько, когда кончился, чья запись и цепочка «занятие → предки». */
+export interface Bit { ms: number; end: number; entryId: string; chain: { id: string; color: string }[] }
+
+/**
+ * Копилка остатков. Сначала складываем остатки одного занятия: набралось на целое стекло —
+ * стекло его цвета с пометкой «pooled». Что не влезло, поднимается к родителю и складывается
+ * с остатками братьев (стекло цвета родителя), и так до корня. Всё, что осталось, складываем
+ * вместе: каждое набранное стекло — радужное. Меньше стекла в конце — не рисуется.
+ * `end` у стекла — когда оно «набралось» (конец последнего вошедшего остатка): рядом его и ставим.
+ */
+export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: number }[] {
+  const out: { owner: HourOwner; end: number }[] = [];
+  const left = bits.map((b) => ({ ...b })); // ≈ копии: ms будем уменьшать
+  const depth = Math.max(0, ...left.map((b) => b.chain.length));
+  // Забираем `n` стёкол из группы: тратим с самых ранних остатков, поздние остаются копиться дальше.
+  const take = (group: typeof left, n: number) => {
+    let need = n * step;
+    for (const b of [...group].sort((x, y) => x.end - y.end)) {
+      const t = Math.min(b.ms, need);
+      b.ms -= t; need -= t;
+    }
+  };
+  for (let level = 0; level < depth; level++) {
+    const groups = new Map<string, typeof left>();
+    for (const b of left) if (b.ms > 0 && b.chain.length > level) {
+      const id = b.chain[level].id;
+      groups.set(id, [...(groups.get(id) ?? []), b]);
+    }
+    for (const [id, group] of groups) {
+      const n = Math.floor(group.reduce((s, b) => s + b.ms, 0) / step);
+      if (!n) continue;
+      const main = group.reduce((x, y) => (y.ms > x.ms ? y : x)); // на тап откроется самый большой остаток
+      const end = Math.max(...group.map((b) => b.end));
+      take(group, n);
+      for (let k = 0; k < n; k++) out.push({ owner: { entryId: main.entryId, key: 'pool:' + id, color: group[0].chain[level].color, mark: 'pooled' }, end });
+    }
+  }
+  const rest = left.filter((b) => b.ms > 0);
+  const n = Math.floor(rest.reduce((s, b) => s + b.ms, 0) / step);
+  if (n) {
+    const end = Math.max(...rest.map((b) => b.end));
+    for (let k = 0; k < n; k++) out.push({ owner: { entryId: '', key: 'rainbow', color: '', mark: 'rainbow' }, end });
+  }
+  return out;
 }
 
 /**

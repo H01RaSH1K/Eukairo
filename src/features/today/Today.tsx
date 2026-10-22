@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import type { Entry } from '../../db/schema';
 import { activityColors } from '../../domain/colors';
-import { toSpans, usefulMs } from '../../domain/spans';
+import { parentsMap, toSpans, usefulMs } from '../../domain/spans';
 import { canTrack, isHidden, isTimeless, needIds, pathOf, timerRange } from '../../domain/tree';
 import { Dial } from './Dial';
 import { ChargeCards } from './controls/ChargeCards';
@@ -49,7 +49,8 @@ export default function Today() {
   const { from, to } = periodRange(scale, shiftPeriod(scale, now, offset));
   const isCurrent = offset === 0;
   const needs = useMemo(() => needIds(activities), [activities]);
-  const spans = toSpans(entries, colors, from, to, now, needs);
+  const parents = useMemo(() => parentsMap(activities, colors), [activities, colors]);
+  const spans = toSpans(entries, colors, from, to, now, needs, parents);
   const total = usefulMs(spans); // нужды в полезное время не идут
   const look = useAppearance();
   const design = useDesign();

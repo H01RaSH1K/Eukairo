@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runKeys, spotPlaces, wholeOwners } from './layout';
+import { poolOwners, runKeys, spotPlaces, wholeOwners } from './layout';
 
 const H = 3_600_000;
 const span = (id: string, start: number, end: number, activityId = id) => ({ entryId: id, activityId, color: activityId, start, end });
@@ -60,15 +60,32 @@ describe('wholeOwners', () => {
   });
 });
 
-describe('wholeOwners с округлением', () => {
-  it('стекло — полчаса: время серии округляется до целых стёкол, кусков нет', () => {
-    const S = H / 2;
-    const spans = [span('a', 9 * H, 10.75 * H), span('b', 12 * H, 12.2 * H), span('c', 14 * H, 14.25 * H)];
+describe('копилка остатков', () => {
+  const S = H / 2;
+  const M = 60_000;
+  const bit = (id: string, ms: number, end: number, ...parents: string[]) =>
+    ({ ms, end, entryId: id, chain: [{ id, color: id }, ...parents.map((p) => ({ id: p, color: p }))] });
+
+  it('целые получасы — как есть, остаток не округляется', () => {
+    const spans = [span('a', 9 * H, 10.75 * H), span('b', 12 * H, 12.2 * H)];
     const { owners, rests } = wholeOwners(spans, 0, 48, undefined, 0.1, S, true);
     expect(rests).toHaveLength(0);
-    const n = (id: string) => owners.filter((o) => o?.entryId === id).length;
-    expect([n('a'), n('b'), n('c')]).toEqual([4, 0, 1]); // 1 ч 45 → 2 ч; 12 мин → 0; 15 мин → полчаса
-    expect(owners.length).toBe(48);
+    expect(owners.filter((o) => o?.entryId === 'a' && !o.mark)).toHaveLength(3); // 1 ч 45 → 3 получаса, 15 мин в копилку
+    expect(owners.filter(Boolean)).toHaveLength(3);                          // 15 + 12 мин < получаса — ничего
+  });
+
+  it('остатки одного занятия набрали полчаса — стекло его цвета со штриховкой', () => {
+    const out = poolOwners([bit('a', 20 * M, 10 * H), bit('a', 15 * M, 14 * H)], S);
+    expect(out.map((g) => [g.owner.key, g.owner.mark, g.end])).toEqual([['pool:a', 'pooled', 14 * H]]);
+  });
+
+  it('у одного занятия не набралось — складываем с братьями у родителя, остальное — радуга', () => {
+    const out = poolOwners([
+      bit('a', 20 * M, 10 * H, 'work'), bit('b', 15 * M, 11 * H, 'work'), // 35 мин у «work» → стекло work
+      bit('c', 25 * M, 12 * H), bit('d', 10 * M, 13 * H),                 // 5 + 25 + 10 = 40 → радуга
+    ], S);
+    expect(out.map((g) => g.owner.key)).toEqual(['pool:work', 'rainbow']);
+    expect(out[0].owner.color).toBe('work');
   });
 });
 
