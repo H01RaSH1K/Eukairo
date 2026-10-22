@@ -12,6 +12,24 @@ const own = (key: string) => ({ entryId: key, key, color: key });
 const sumBy = (ps: ReturnType<typeof cutPieces>, key: string) => ps.filter((p) => p.owner?.key === key).reduce((s, p) => s + area(p.poly), 0);
 
 describe('cutPieces', () => {
+  it('тонкое стекло: остаток берёт целое свежее стекло рядом со своим часом, доля — в frac', () => {
+    const cells = grid(4, 1);
+    const ps = cutPieces(cells, [own('a'), null, null, null], [{ owner: own('a'), frac: 0.5, anchor: 1 }, { owner: own('b'), frac: 0.25, anchor: 1 }], 4, [], 'thin');
+    const a = ps.find((p) => p.owner?.key === 'a' && p.frac !== undefined)!;
+    const b = ps.find((p) => p.owner?.key === 'b')!;
+    expect(a.cell).toBe(1);
+    expect(a.poly).toBe(cells[1]); // стекло не режется
+    expect(a.frac).toBe(0.5);
+    expect(b.cell).toBe(2);        // занятое стекло второй раз не берётся
+    expect(ps.filter((p) => !p.owner).map((p) => p.cell)).toEqual([3]);
+  });
+
+  it('тонкое стекло: свежих стёкол нет — остаток не рисуется', () => {
+    const cells = grid(2, 1);
+    const ps = cutPieces(cells, [own('a'), own('a')], [{ owner: own('b'), frac: 0.5, anchor: 0 }], 2, [], 'thin');
+    expect(ps.some((p) => p.owner?.key === 'b')).toBe(false);
+  });
+
   it('уровень: стекло налито снизу горизонталью, следующий кусок — слоем выше', () => {
     const cells = grid(1, 1);
     const ps = cutPieces(cells, [null], [{ owner: own('a'), frac: 0.3, anchor: 0 }, { owner: own('b'), frac: 0.2, anchor: 0 }]);

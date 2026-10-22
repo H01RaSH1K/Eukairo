@@ -1,13 +1,16 @@
-// Куски стёкол: остаток серии меньше часа вырезается из стекла так, чтобы площадь куска
-// была той же долей стекла, что остаток — от часа. Срез — две прямые с одним изломом
-// (как трещина в стекле): кусок растёт от угла стекла, цельный и выпуклый, мелкий выходит
-// компактным, а не полоской.
+// Куски стёкол: куда и как лечь остатку серии меньше часа. По умолчанию — «тонкое стекло»:
+// остаток занимает целое стекло, а доля часа видна по силе цвета (срезов нет).
+// Остальные формы режут стекло так, чтобы площадь куска была той же долей стекла,
+// что остаток — от часа (см. CutShape).
 // Чистые функции, без React.
 import type { HourOwner } from './layout';
 import { area, clipBy, rng, type Pt } from './voronoi';
 
-/** Что нарисовать: многоугольник, чей он (null — пустое стекло) и из какого стекла. */
-export interface Piece { poly: Pt[]; owner: HourOwner | null; cell: number }
+/**
+ * Что нарисовать: многоугольник, чей он (null — пустое стекло) и из какого стекла.
+ * `frac` — только у «тонкого стекла»: насколько налито цветом целое стекло (0…1).
+ */
+export interface Piece { poly: Pt[]; owner: HourOwner | null; cell: number; frac?: number }
 
 /**
  * Остаток, который надо вырезать: доля стекла и стекло, рядом с которым ему лучше встать.
@@ -23,8 +26,12 @@ export interface Cut { owner: HourOwner; frac: number; anchor: number; group?: n
  */
 export interface Group { queue: number[]; center: Pt }
 
-/** Форма неполного стекла: «уровень» — налито снизу горизонталью; «клин» — срез с изломом от угла. */
-export type CutShape = 'level' | 'wedge';
+/**
+ * Форма неполного стекла: «тонкое» — целое стекло, но цвет в нём бледнее, по доле часа
+ * (без срезов, площадь не точная); «уровень» — налито снизу горизонталью;
+ * «клин» — срез с изломом от угла.
+ */
+export type CutShape = 'thin' | 'level' | 'wedge';
 
 /**
  * `whole` — хозяин каждого стекла целиком (null — свободно), `cuts` — остатки по порядку
@@ -117,7 +124,35 @@ export function cutPieces(cells: Pt[][], whole: (HourOwner | null)[], cuts: Cut[
     return a / full[i];
   };
 
-  for (const c of cuts) {
+  // «Тонкое стекло»: остаток берёт целое нетронутое стекло — ближайшее к своему часу,
+  // у копилки и пятен — следующее из очереди группы. Стёкол не осталось — остаток не рисуем.
+  if (shape === 'thin') {
+    for (const c of cuts) {
+      const g = c.group !== undefined ? groups[c.group] : undefined;
+      let i = -1;
+      if (g) {
+        while (next[c.group!] < g.queue.length && i < 0) {
+          const q = g.queue[next[c.group!]++];
+          if (freeArea[q] > 1e-6) i = q;
+        }
+      }
+      if (i < 0) {
+        const target = g ? g.center : mid[c.anchor] ?? mid[0];
+        let best = Infinity;
+        free.forEach((_, k) => {
+          if (freeArea[k] <= 1e-6) return;
+          const d = dist(mid[k], target) + (k >= late ? penalty : 0);
+          if (d < best) { best = d; i = k; }
+        });
+      }
+      if (i < 0) break;
+      out.push({ poly: cells[i], owner: c.owner, cell: i, frac: Math.min(1, c.frac) });
+      free[i] = [];
+      freeArea[i] = 0;
+    }
+  }
+
+  for (const c of shape === 'thin' ? [] : cuts) {
     const g = c.group !== undefined ? groups[c.group] : undefined;
     if (g) {
       let need = c.frac;

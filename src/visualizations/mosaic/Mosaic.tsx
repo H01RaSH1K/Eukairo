@@ -12,8 +12,8 @@ import './mosaic.css';
 // своя у каждого дня/недели/месяца (зависит от даты), чтобы дни не были одинаковыми
 // (день — 24, неделя — 168, месяц — 24 × дней; всегда одна картина).
 // Часы нужд (сон, еда…) из дня вынимаются: поспал 8 ч — в дне 16 стёкол.
-// Площадь записи = её время: полные часы — целые стёкла, остаток (например, полчаса) —
-// кусок стекла той же доли площади, отрезанный прямой линией (см. pieces.ts).
+// Полные часы записи — целые стёкла, остаток (например, полчаса) — «тонкое стекло»:
+// тоже целое, но цвет в нём слабее, по доле часа (см. pieces.ts и thinFill ниже).
 // Стёкла одной серии (записи одного занятия почти подряд) сливаются в одну фигуру,
 // между ними — тонкий шов.
 
@@ -116,9 +116,9 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
         else if (sums[s][2]) g.center = [sums[s][0] / sums[s][2], sums[s][1] / sums[s][2]];
         else if (g.queue.length) g.center = centroid(cells[g.queue[0]]);
       });
-      return cutPieces(cells, whole, cuts, futureFrom, groups);
+      return cutPieces(cells, whole, cuts, futureFrom, groups, 'thin');
     }
-    return cutPieces(cells, whole, cuts, futureFrom);
+    return cutPieces(cells, whole, cuts, futureFrom, [], 'thin');
   }, [plan, kept, cells, w, h, timeFill, fill, seed, spotCount, settings.growth, futureFrom]);
 
   // Вершины разрезов вставляем и в соседей, чтобы общие рёбра совпали (см. stitch),
@@ -172,19 +172,20 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
         const cls = o
           ? 'glass-fill' + (o.key === runningKey ? ' live' : '') + (isFresh(pairs[i]) ? ' fresh' : '')
           : 'glass-empty' + (p.cell >= futureFrom ? ' glass-future' : '');
+        // «Оттенки»: у каждого стекла свой сдвиг яркости (по номеру стекла, ±7%).
+        // Неполный час — тонкое стекло: цвет, разбавленный пустым стеклом темы.
+        const color = o ? thinFill(paint(o.color, p.cell, seamStyle), p.frac) : undefined;
         return (
           <polygon
             key={i}
             points={drawn.pts[i]}
-            // Обводка цветом заливки прячет тонкие щели между слитыми сегментами.
-            // «Оттенки»: у каждого стекла свой сдвиг яркости (по номеру стекла, ±7%).
-            fill={o ? paint(o.color, p.cell, seamStyle) : undefined}
-            stroke={o ? paint(o.color, p.cell, seamStyle) : undefined}
             className={cls}
+            // Обводка цветом заливки прячет тонкие щели между слитыми сегментами.
+            // Цвет — через style, а не атрибут fill: в нём var() темы (у атрибутов SVG не работает).
             // Доля 0…1 — порядок стекла; дизайн может по ней растянуть анимацию появления.
             // --v — свой оттенок у каждого стекла (0…1, постоянный для номера): дизайн может
             // подсветить пустые стёкла неравномерно, как настоящее стекло.
-            style={{ '--d': (p.cell / cells.length).toFixed(3), '--v': (((p.cell * 2654435761) >>> 0) % 1000 / 1000).toFixed(3) } as CSSProperties}
+            style={{ fill: color, stroke: color, '--d': (p.cell / cells.length).toFixed(3), '--v': (((p.cell * 2654435761) >>> 0) % 1000 / 1000).toFixed(3) } as CSSProperties}
             onClick={() => o && onSelect(o.entryId)}
           />
         );
@@ -222,6 +223,18 @@ function firstFuture(kept: { at: number }[][], now: number): number {
 /** Цвет стекла: у «Оттенков» свой у каждого стекла (см. tone.ts), «вместе» — мягче. */
 function paint(color: string, cell: number, style: string): string {
   return style === 'tone' ? tone(color, cell) : style === 'both' ? tone(color, cell, 0.6) : color;
+}
+
+/**
+ * Тонкое стекло: доля часа `frac` → сила цвета. Смешиваем в OKLab с пустым стеклом темы:
+ * это прямая линия «цвет → пустое стекло» без поворота тона (в OKLCH оранжевый с тёмно-синим
+ * прошёл бы через малиновый), поэтому стекло выходит тоньше, а не грязнее.
+ * Даже 6 минут чуть окрашивают стекло.
+ */
+function thinFill(color: string, frac?: number): string {
+  if (frac === undefined || frac >= 1) return color;
+  const k = Math.round((0.18 + 0.82 * frac) * 100);
+  return `color-mix(in oklab, ${color} ${k}%, var(--glass-empty))`;
 }
 
 /** Номер одного из FACETS градиентов для стекла (постоянный для номера). */
