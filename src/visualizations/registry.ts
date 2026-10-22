@@ -50,37 +50,6 @@ export const seam: SettingDef = {
   ],
 };
 
-/** Стекло, набранное из остатков одного занятия (или детей одного родителя). */
-export const pooled: SettingDef = {
-  id: 'pooled', kind: 'choice', title: 'Сборное стекло занятия', default: 'seedy',
-  hint: 'Полчаса, набранные из коротких остатков одного занятия',
-  options: [
-    { id: 'seedy', title: 'Пузырчатое', hint: 'Цвет занятия, в стекле застывшие пузырьки воздуха' },
-    { id: 'tiles', title: 'Мозаика в стекле', hint: 'Стекло собрано из нескольких мелких стёкол того же цвета, у родителя — цветов детей' },
-    { id: 'jewel', title: 'Самоцвет', hint: 'Посередине круглая стекляшка в свинцовой оправе' },
-    { id: 'grisaille', title: 'Гризайль', hint: 'Узор, нарисованный по стеклу коричнево-серой краской' },
-    { id: 'thin', title: 'Бледнее', hint: 'Цвет занятия, но тоньше' },
-    { id: 'ripple', title: 'Рифлёное', hint: 'Цвет занятия, стекло с неровной фактурой' },
-    { id: 'inset', title: 'Стекло в стекле', hint: 'Внутри тонкий контур той же формы' },
-    { id: 'plain', title: 'Как обычное' },
-  ],
-};
-
-/** Стекло, набранное из остатков разных занятий. */
-export const mixed: SettingDef = {
-  id: 'mixed', kind: 'choice', title: 'Сборное стекло из разного', default: 'fracture',
-  hint: 'Полчаса, набранные из коротких остатков разных занятий',
-  options: [
-    { id: 'fracture', title: 'Осколки', hint: 'Как у Тиффани: в прозрачное стекло вплавлены осколки и нити цветов этих занятий' },
-    { id: 'tiles', title: 'Мозаика в стекле', hint: 'Стекло собрано из нескольких мелких стёкол цветов этих занятий, по минутам' },
-    { id: 'opal', title: 'Опаловое', hint: 'Молочное стекло с завихрениями цветов этих занятий' },
-    { id: 'roundel', title: 'Бычий глаз', hint: 'Круглые волны от выдувки: кольца цветов этих занятий' },
-    { id: 'streak', title: 'Разводы', hint: 'Цвета занятий перетекают друг в друга, по минутам' },
-    { id: 'bands', title: 'Полосы', hint: 'Цвета занятий полосами, по минутам' },
-    { id: 'clear', title: 'Прозрачное', hint: 'Бесцветное молочное стекло' },
-  ],
-};
-
 const lead: SettingDef = {
   id: 'lead', kind: 'choice', title: 'Свинцовые линии', default: 'normal',
   options: [{ id: 'thin', title: 'Тонкие' }, { id: 'normal', title: 'Обычные' }, { id: 'bold', title: 'Толстые' }],
@@ -111,20 +80,20 @@ const freeFills = ['spots', 'flow', 'jar'];
 
 export const visualizations: VisualizationPlugin[] = [
   {
-    id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
-    settings: [fill(allFills), spots, growth, cut, wobble, spread, seam, pooled, mixed, lead], load: mosaic('glass'),
+    id: 'mosaic-glass', title: 'Витраж', description: 'Стекло — полчаса (на неделе и месяце — час), стёкла одной записи сливаются в одну фигуру',
+    settings: [fill(allFills), spots, growth, cut, wobble, spread, seam, lead], load: mosaic('glass'),
   },
   {
-    id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
-    settings: [fill(freeFills), spots, growth, seam, pooled, mixed, lead], load: mosaic('rose'),
+    id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо лепестков',
+    settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('rose'),
   },
   {
-    id: 'mosaic-tri', title: 'Треугольники', description: 'Час — треугольник, пары складываются в ромбы',
-    settings: [fill(freeFills), spots, growth, seam, pooled, mixed, lead], load: mosaic('tri'),
+    id: 'mosaic-tri', title: 'Треугольники', description: 'Стекло — треугольник, пары складываются в ромбы',
+    settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('tri'),
   },
   {
     id: 'mosaic-grid', title: 'Сетка', description: 'Ровные клетки — проще всего читать',
-    settings: [fill(allFills), spots, growth, seam, pooled, mixed, lead], load: mosaic('grid'),
+    settings: [fill(allFills), spots, growth, seam, lead], load: mosaic('grid'),
   },
 ];
 

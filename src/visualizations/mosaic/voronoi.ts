@@ -71,4 +71,16 @@ export function area(poly: Pt[]): number {
   return Math.abs(a) / 2;
 }
 
+/** Центр масс многоугольника (точнее среднего вершин для длинных кусков). */
+export function centroid(poly: Pt[]): Pt {
+  let a = 0, x = 0, y = 0;
+  poly.forEach((p, i) => {
+    const q = poly[(i + 1) % poly.length];
+    const k = p[0] * q[1] - q[0] * p[1];
+    a += k; x += (p[0] + q[0]) * k; y += (p[1] + q[1]) * k;
+  });
+  if (Math.abs(a) < 1e-12) return poly[0] ?? [0, 0];
+  return [x / (3 * a), y / (3 * a)];
+}
+
 export { rng };

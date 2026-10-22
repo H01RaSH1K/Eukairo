@@ -39,27 +39,16 @@ const ownerOf = (s: Span, keys?: Map<string, string>): HourOwner =>
   ({ entryId: s.entryId, key: keys?.get(s.entryId) ?? s.entryId, color: s.color, need: s.need });
 
 /**
- * Остаток серии меньше часа: кусок стекла площадью `frac` (0.1…1) его площади.
- * `hour` — час дня, рядом с которым кусок лучше всего встанет.
+ * Раскладка дня по стёклам (каждое — `step` времени, `count` штук в дне). Каждая серия получает
+ * столько целых стёкол, сколько в ней полных шагов, — там, где у неё больше всего минут;
+ * если эти стёкла уже заняты соседями — ближайшее свободное рядом с ней. Остатки меньше
+ * стекла копятся и превращаются в сборные стёкла (см. poolOwners). Нужды остатков не копят:
+ * из дня вынимаются только их целые стёкла.
  */
-export interface Rest { owner: HourOwner; frac: number; hour: number }
-
-/** Самый маленький кусок по умолчанию — 10% стекла (запись короче 6 минут рисуется как 6 минут). */
-export const MIN_FRAC = 0.1;
-
-/**
- * Раскладка дня. Каждая серия получает столько целых стёкол, сколько в ней полных
- * часов, — там, где у неё больше всего минут; если эти часы уже заняты соседями,
- * ближайший свободный час рядом с ней. Остаток (например, полчаса) отдаём как `Rest`:
- * его вырежут куском из стекла (см. pieces.ts). У нужд остаток не нужен — из дня
- * вынимаются только их целые часы. `minFrac` — самый маленький кусок (доля стекла).
- * `step` — сколько времени в одном стекле (по умолчанию час; `count` стёкол в дне).
- * `pool` — без кусков: остатки серий (меньше стекла) копятся, см. poolOwners; `rests` пустой.
- */
-export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, minFrac = MIN_FRAC, step = HOUR_MS, pool = false): { owners: (HourOwner | null)[]; rests: Rest[] } {
+export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, step = HOUR_MS): (HourOwner | null)[] {
   const H = step;
   const dayEnd = dayStart + count * H;
-  interface Run { first: HourOwner; span: Span; start: number; end: number; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
+  interface Run { first: HourOwner; span: Span; end: number; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
   const runs = new Map<string, Run>(); // ≈ Dictionary<string, Run>, порядок вставки сохраняется
   let lastEnd = dayStart;
   for (const s of spans) {
@@ -69,7 +58,7 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     const o = ownerOf(s, keys);
     let run = runs.get(o.key);
     if (!run) {
-      run = { first: o, span: s, start: a, end: b, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
+      run = { first: o, span: s, end: b, total: 0, ms: new Array(count).fill(0), best: new Array(count).fill(null), bestMs: new Array(count).fill(0) };
       runs.set(o.key, run);
     }
     run.total += b - a;
@@ -84,7 +73,6 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
   }
   const list = [...runs.values()];
   const quota = list.map((r) => Math.floor(r.total / H));
-  const mine = list.map(() => new Set<number>()); // часы, отданные серии целиком
 
   const owners: (HourOwner | null)[] = new Array(count).fill(null);
   // Пары (серия, час) по убыванию минут: час достаётся тому, кто занял его плотнее.
@@ -94,7 +82,6 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
   for (const [i, h] of pairs) {
     if (owners[h] || quota[i] <= 0) continue;
     owners[h] = list[i].best[h];
-    mine[i].add(h);
     quota[i]--;
   }
   // Ближайшие к часам `own` свободные стёкла (но не в будущем, пока есть другие).
@@ -109,33 +96,18 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
   list.forEach((r, i) => {
     if (quota[i] <= 0) return;
     const own = r.ms.map((ms, h) => (ms > 0 ? h : -1)).filter((h) => h >= 0);
-    for (const h of nearestFree(own, quota[i])) { owners[h] = r.first; mine[i].add(h); }
+    for (const h of nearestFree(own, quota[i])) owners[h] = r.first;
   });
 
-  if (pool) {
-    const slot = (t: number) => Math.min(count - 1, Math.max(0, Math.floor((t - 1 - dayStart) / H)));
-    const bits = list.filter((r) => !r.first.need && r.total % H > 0).map((r) => ({
-      ms: r.total % H, end: r.end, entryId: r.first.entryId,
-      chain: [{ id: r.span.activityId, color: r.span.color }, ...(r.span.parents ?? [])],
-    }));
-    for (const g of poolOwners(bits, H)) {
-      for (const h of nearestFree([slot(g.end)], 1)) owners[h] = g.owner;
-    }
-    return { owners, rests: [] };
+  const slot = (t: number) => Math.min(count - 1, Math.max(0, Math.floor((t - 1 - dayStart) / H)));
+  const bits = list.filter((r) => !r.first.need && r.total % H > 0).map((r) => ({
+    ms: r.total % H, end: r.end, entryId: r.first.entryId,
+    chain: [{ id: r.span.activityId, color: r.span.color }, ...(r.span.parents ?? [])],
+  }));
+  for (const g of poolOwners(bits, H)) {
+    for (const h of nearestFree([slot(g.end)], 1)) owners[h] = g.owner;
   }
-
-  // Остатки — по времени начала серий. Час куска — тот, где у серии больше всего
-  // минут среди часов, не отданных ей целиком.
-  const rests: Rest[] = [];
-  list.map((r, i) => ({ r, i })).sort((x, y) => x.r.start - y.r.start).forEach(({ r, i }) => {
-    const rest = r.total % H;
-    if (rest <= 0 || r.first.need) return;
-    let hour = -1;
-    r.ms.forEach((ms, h) => { if (ms > 0 && !mine[i].has(h) && (hour < 0 || ms > r.ms[hour])) hour = h; });
-    if (hour < 0) hour = r.ms.indexOf(Math.max(...r.ms));
-    rests.push({ owner: r.best[hour] ?? r.first, frac: Math.max(minFrac, rest / H), hour });
-  });
-  return { owners, rests };
+  return owners;
 }
 
 /** Остаток серии для копилки: сколько, когда кончился, чья запись и цепочка «занятие → предки». */
@@ -198,11 +170,8 @@ export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: 
  * примерно (но не ровно) поровну и наращиваем вокруг каждой точки.
  * Возвращает номер стекла для каждого занятого часа (в том же порядке, что `filled`).
  * Центры зависят только от `seed`, поэтому за день точки не прыгают, а пятна растут.
- * `tail` — пометки «в хвост»: такие стёкла (куски остатков) пятно наращивает последними,
- * по краю — тогда их объедки не остаются дырами внутри пятна.
- * `spotOf` (необязательно) — сюда пишется номер пятна каждого часа (≈ out-параметр в C#).
  */
-export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, count = 5, growth: 'round' | 'random' = 'round', tail?: boolean[], spotOf?: number[]): number[] {
+export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, count = 5, growth: 'round' | 'random' = 'round'): number[] {
   const c = cells.map(centroid);
   const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const rand = rng(seed + 17);
@@ -222,11 +191,9 @@ export function spotPlaces(cells: Pt[][], filled: HourOwner[], seed: number, cou
     const mid = (i + j) / 2;
     const spot = Math.max(0, bounds.findIndex((b) => mid <= b));
     sizes[spot] += j - i;
-    for (let k = i; k < j; k++) { members[spot].push(k); if (spotOf) spotOf[k] = spot; }
+    for (let k = i; k < j; k++) members[spot].push(k);
     i = j;
   }
-  // Внутри пятна сначала целые, потом «хвост» (sort устойчивый — порядок времени сохраняется).
-  members.forEach((m) => m.sort((a, b) => Number(!!tail?.[a]) - Number(!!tail?.[b])));
 
   // Центры: каждый следующий — самый далёкий от прежних из 8 случайных стёкол,
   // не у самого края (чтобы пятно не обрезалось рамкой).
