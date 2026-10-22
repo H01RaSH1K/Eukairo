@@ -80,15 +80,15 @@ const freeFills = ['spots', 'flow', 'jar'];
 
 export const visualizations: VisualizationPlugin[] = [
   {
-    id: 'mosaic-glass', title: 'Витраж', description: 'Час — стекло, часы одной записи сливаются в одну фигуру',
+    id: 'mosaic-glass', title: 'Витраж', description: 'Стекло — полчаса (на неделе и месяце — час), стёкла одной записи сливаются в одну фигуру',
     settings: [fill(allFills), spots, growth, cut, wobble, spread, seam, lead], load: mosaic('glass'),
   },
   {
-    id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо из 24 лепестков',
+    id: 'mosaic-rose', title: 'Роза', description: 'Круглое окно: день — кольцо лепестков',
     settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('rose'),
   },
   {
-    id: 'mosaic-tri', title: 'Треугольники', description: 'Час — треугольник, пары складываются в ромбы',
+    id: 'mosaic-tri', title: 'Треугольники', description: 'Стекло — треугольник, пары складываются в ромбы',
     settings: [fill(freeFills), spots, growth, seam, lead], load: mosaic('tri'),
   },
   {
