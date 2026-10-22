@@ -17,7 +17,7 @@ import { shareBackup } from '../../db/backup';
 import { forgottenTimer, type ForgottenAnswer } from '../../domain/forgotten';
 import { defaultActivity, quickActivities } from '../../domain/quick';
 import { findVisualization } from '../../visualizations/registry';
-import { settingsOf, useAppearance } from '../../settings/appearance';
+import { setSetting, settingsOf, useAppearance } from '../../settings/appearance';
 import { setFocus, useDesign } from '../../settings/design';
 import { lazyViz } from '../../visualizations/lazy';
 import { Segmented } from '../../ui/Segmented';
@@ -307,6 +307,19 @@ export default function Today() {
           <div className="focus-light" />
           {/* табличка, как под картиной в музее */}
           <div className="focus-plaque">{periodName} · {formatDuration(total)}</div>
+          {/* временно, пока выбираем: вид сборных стёкол — переключатели прямо тут */}
+          <div className="focus-switch">
+            {plugin.settings.filter((d) => d.id === 'pooled' || d.id === 'mixed').map((d) => d.kind === 'choice' && (
+              <div key={d.id} className="focus-switch-row">
+                <span>{d.id === 'pooled' ? 'Своё' : 'Разное'}</span>
+                {d.options.map((o) => (
+                  <button key={o.id} className={settingsOf(look, scale)[d.id] === o.id ? 'on' : ''} onClick={() => setSetting(scale, plugin.id, d.id, o.id)}>
+                    {o.title}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
         </>
       )}
 

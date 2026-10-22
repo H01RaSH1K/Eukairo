@@ -79,13 +79,14 @@ describe('копилка остатков', () => {
     expect(out.map((g) => [g.owner.key, g.owner.mark, g.end])).toEqual([['pool:a', 'pooled', 14 * H]]);
   });
 
-  it('у одного занятия не набралось — складываем с братьями у родителя, остальное — радуга', () => {
+  it('у одного занятия не набралось — складываем с братьями у родителя, остальное — сборное', () => {
     const out = poolOwners([
       bit('a', 20 * M, 10 * H, 'work'), bit('b', 15 * M, 11 * H, 'work'), // 35 мин у «work» → стекло work
-      bit('c', 25 * M, 12 * H), bit('d', 10 * M, 13 * H),                 // 5 + 25 + 10 = 40 → радуга
+      bit('c', 25 * M, 12 * H), bit('d', 10 * M, 13 * H),                 // 5 + 25 + 10 = 40 → сборное
     ], S);
-    expect(out.map((g) => g.owner.key)).toEqual(['pool:work', 'rainbow']);
+    expect(out.map((g) => g.owner.key)).toEqual(['pool:work', 'mixed']);
     expect(out[0].owner.color).toBe('work');
+    expect(out[1].owner.mix).toEqual([{ color: 'c', ms: 25 * M }, { color: 'd', ms: 10 * M }, { color: 'b', ms: 5 * M }]);
   });
 });
 

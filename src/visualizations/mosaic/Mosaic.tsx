@@ -23,8 +23,8 @@ const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 // Остатки меньше стекла копятся (см. poolOwners), кусков нет.
 const STEP = { day: HOUR_MS / 2, week: HOUR_MS, month: HOUR_MS };
 const DAY = 24 * HOUR_MS;
-// Шаг штриховки у стёкол из копилки (в единицах картины, ширина картины — 100).
-const stripe = { day: 3, week: 1.6, month: 1.1 };
+// Частота рельефа у рифлёного стекла (в единицах картины, ширина картины — 100): мельче на мелких стёклах.
+const ripple = { day: 0.45, week: 0.9, month: 1.3 };
 const RAINBOW = ['#d9534f', '#e39a3b', '#d9c54a', '#5bb36a', '#4a8fd6', '#8a5cc7'];
 // Самый маленький кусок стекла: на неделе и месяце стёкла мельче, и щепка тонула бы в свинце.
 const minFrac = { day: 0.1, week: 0.15, month: 0.25 };
@@ -55,6 +55,9 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
   // Как видно стёкла внутри одной фигуры (см. seam в registry.ts).
   const seamStyle = (settings.seam as string) ?? 'tone';
+  // Как выглядят стёкла, набранные из остатков (см. pooled и mixed в registry.ts).
+  const pooledStyle = (settings.pooled as string) ?? 'thin';
+  const mixedStyle = (settings.mixed as string) ?? 'streak';
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
   const now = Date.now();
   // Экран перерисовывается каждую секунду (таймер), а хозяева часов меняются от силы раз
@@ -168,6 +171,13 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
     seen.current.sig = pairSig;
   }
   const facetId = 'facet' + useId().replace(/[^a-zA-Z0-9]/g, '');
+  // Цвет сборного стекла: «pooled» — одного занятия, «mixed» — из разного (см. poolOwners).
+  const collected = (o: HourOwner, i: number): string => {
+    if (o.mark === 'pooled') return pooledStyle === 'thin' ? thinFill(o.color, 0.45) : o.color;
+    if (mixedStyle === 'streak' || mixedStyle === 'bands') return `url(#${facetId}mx${i})`;
+    if (mixedStyle === 'rainbow') return `url(#${facetId}rb)`;
+    return 'color-mix(in oklab, var(--text) 24%, var(--glass-empty))'; // прозрачное: молочное, без цвета
+  };
   const isFresh = (k: string) => now - (seen.current.fresh.get(k) ?? -1e9) < 1500;
 
   return (
@@ -178,10 +188,18 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
         <linearGradient id={facetId + 'rb'} x1="0" y1="0" x2="1" y2="1">
           {RAINBOW.map((c, k) => <stop key={k} offset={k / (RAINBOW.length - 1)} stopColor={c} />)}
         </linearGradient>
-        {/* Штриховка: светлые косые полосы, шаг — по масштабу стёкол */}
-        <pattern id={facetId + 'st'} patternUnits="userSpaceOnUse" width={stripe[scale]} height={stripe[scale]} patternTransform="rotate(45)">
-          <rect width={stripe[scale] * 0.4} height={stripe[scale]} fill="#fff" opacity="0.28" />
-        </pattern>
+        {/* Рифлёное стекло: шум → рельеф под светом сверху-слева, только внутри стекла */}
+        <filter id={facetId + 'rp'} x="0" y="0" width="1" height="1">
+          <feTurbulence type="fractalNoise" baseFrequency={ripple[scale]} numOctaves="2" seed="7" />
+          <feDiffuseLighting surfaceScale="2" lightingColor="#fff"><feDistantLight azimuth="225" elevation="50" /></feDiffuseLighting>
+          <feComposite in2="SourceAlpha" operator="in" />
+        </filter>
+        {/* Сборное стекло из разного: свой градиент у каждого — цвета занятий по минутам */}
+        {pieces.map((p, i) => p.owner?.mix && (mixedStyle === 'streak' || mixedStyle === 'bands') && (
+          <linearGradient key={'m' + i} id={facetId + 'mx' + i} {...mixDir(p.cell)}>
+            {mixStops(p.owner.mix, mixedStyle === 'bands').map(([at, c], k) => <stop key={k} offset={at} stopColor={c} />)}
+          </linearGradient>
+        ))}
       </defs>
       {decor?.map((poly, i) => (
         <polygon key={'d' + i} points={toPoints(poly)} className="glass-decor" />
@@ -193,8 +211,8 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
           : 'glass-empty' + (p.cell >= futureFrom ? ' glass-future' : '');
         // «Оттенки»: у каждого стекла свой сдвиг яркости (по номеру стекла, ±7%).
         // Неполный час — тонкое стекло: цвет, разбавленный пустым стеклом темы.
-        // Радужное стекло (копилка всего подряд) — общий градиент, см. <defs> ниже.
-        const color = o ? (o.mark === 'rainbow' ? `url(#${facetId}rb)` : thinFill(paint(o.color, p.cell, seamStyle), p.frac)) : undefined;
+        // Сборные стёкла (копилка остатков) — по своим настройкам, см. collected().
+        const color = o ? (o.mark ? collected(o, i) : thinFill(paint(o.color, p.cell, seamStyle), p.frac)) : undefined;
         return (
           <polygon
             key={i}
@@ -210,8 +228,17 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
           />
         );
       })}
-      {/* Стёкла из копилки остатков одного занятия — штриховка поверх цвета: «собрано из кусочков» */}
-      {pieces.map((p, i) => p.owner?.mark === 'pooled' && <polygon key={'p' + i} points={drawn.pts[i]} fill={`url(#${facetId}st)`} className="glass-facet" />)}
+      {/* Сборные стёкла: рифлёная фактура поверх цвета или тонкий контур «стекло в стекле» */}
+      {pieces.map((p, i) => {
+        const m = p.owner?.mark;
+        if ((m === 'pooled' && pooledStyle === 'ripple') || (m === 'mixed' && mixedStyle === 'clearRipple')) {
+          return <polygon key={'r' + i} points={drawn.pts[i]} fill="#fff" filter={`url(#${facetId}rp)`} className="glass-ripple" />;
+        }
+        if (m === 'pooled' && pooledStyle === 'inset') {
+          return <polygon key={'r' + i} points={toPoints(shrink(p.poly, 0.55))} className="glass-inset" style={{ strokeWidth: leadWidth[scale] * leadK * 0.6 }} />;
+        }
+        return null;
+      })}
       {/* «Грани»: поверх каждого цветного стекла — свой градиент, стекло под своим углом к свету */}
       {(seamStyle === 'facet' || seamStyle === 'both') && (
         <>
@@ -257,6 +284,35 @@ function thinFill(color: string, frac?: number): string {
   if (frac === undefined || frac >= 1) return color;
   const k = Math.round((0.18 + 0.82 * frac) * 100);
   return `color-mix(in oklab, ${color} ${k}%, var(--glass-empty))`;
+}
+
+/** Направление градиента сборного стекла: свой угол у каждого стекла (постоянный для номера). */
+function mixDir(cell: number) {
+  const a = ((((cell + 3) * 2654435761) >>> 0) % 360) * Math.PI / 180;
+  return { x1: 0.5 - 0.5 * Math.cos(a), y1: 0.5 - 0.5 * Math.sin(a), x2: 0.5 + 0.5 * Math.cos(a), y2: 0.5 + 0.5 * Math.sin(a) };
+}
+
+/**
+ * Остановки градиента по составу: каждой краске — доля по минутам. `hard` — чёткие полосы
+ * (две остановки на каждой границе), иначе краски перетекают (остановка в середине своей доли).
+ */
+function mixStops(mix: { color: string; ms: number }[], hard: boolean): [number, string][] {
+  const total = mix.reduce((s, m) => s + m.ms, 0) || 1;
+  const out: [number, string][] = [];
+  let at = 0;
+  for (const m of mix) {
+    const next = at + m.ms / total;
+    if (hard) out.push([at, m.color], [next, m.color]);
+    else out.push([(at + next) / 2, m.color]);
+    at = next;
+  }
+  return out;
+}
+
+/** Уменьшенная копия многоугольника вокруг его центра (k — во сколько раз по стороне). */
+function shrink(poly: Pt[], k: number): Pt[] {
+  const c = centroid(poly);
+  return poly.map((p): Pt => [c[0] + k * (p[0] - c[0]), c[1] + k * (p[1] - c[1])]);
 }
 
 /** Номер одного из FACETS градиентов для стекла (постоянный для номера). */

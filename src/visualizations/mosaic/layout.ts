@@ -9,8 +9,10 @@ import { rng, type Pt } from './voronoi';
  */
 export interface HourOwner {
   entryId: string; key: string; color: string; need?: boolean;
-  /** Стекло собрано из остатков: «pooled» — одного занятия (или родителя), «rainbow» — всего подряд. */
-  mark?: 'pooled' | 'rainbow';
+  /** Стекло собрано из остатков: «pooled» — одного занятия (или родителя), «mixed» — всего подряд. */
+  mark?: 'pooled' | 'mixed';
+  /** У «mixed»: из чего собрано — цвета занятий и сколько у каждого (мс), по убыванию. */
+  mix?: { color: string; ms: number }[];
 }
 
 /** Перерыв меньше этого между записями одного занятия не рвёт серию. */
@@ -143,7 +145,7 @@ export interface Bit { ms: number; end: number; entryId: string; chain: { id: st
  * Копилка остатков. Сначала складываем остатки одного занятия: набралось на целое стекло —
  * стекло его цвета с пометкой «pooled». Что не влезло, поднимается к родителю и складывается
  * с остатками братьев (стекло цвета родителя), и так до корня. Всё, что осталось, складываем
- * вместе: каждое набранное стекло — радужное. Меньше стекла в конце — не рисуется.
+ * вместе: каждое набранное стекло — сборное «mixed» (с составом цветов). Меньше стекла в конце — не рисуется.
  * `end` у стекла — когда оно «набралось» (конец последнего вошедшего остатка): рядом его и ставим.
  */
 export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: number }[] {
@@ -177,7 +179,11 @@ export function poolOwners(bits: Bit[], step: number): { owner: HourOwner; end: 
   const n = Math.floor(rest.reduce((s, b) => s + b.ms, 0) / step);
   if (n) {
     const end = Math.max(...rest.map((b) => b.end));
-    for (let k = 0; k < n; k++) out.push({ owner: { entryId: '', key: 'rainbow', color: '', mark: 'rainbow' }, end });
+    // Состав: минуты по цвету занятия (у одного цвета — сумма), больше — первым.
+    const byColor = new Map<string, number>();
+    for (const b of rest) byColor.set(b.chain[0].color, (byColor.get(b.chain[0].color) ?? 0) + b.ms);
+    const mix = [...byColor].map(([color, ms]) => ({ color, ms })).sort((x, y) => y.ms - x.ms);
+    for (let k = 0; k < n; k++) out.push({ owner: { entryId: '', key: 'mixed', color: mix[0].color, mark: 'mixed', mix }, end });
   }
   return out;
 }
