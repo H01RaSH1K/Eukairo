@@ -115,23 +115,40 @@ export function technique(kind: string, poly: Pt[], cell: number, id: string, le
   if (!mix?.length) return null;
 
   if (kind === 'fracture') {
-    // Осколки Тиффани: острые осколки цветов состава (по минутам) и пара тонких нитей.
+    // Осколки Тиффани: тонкие полупрозрачные хлопья со скруглёнными краями, вытянутые
+    // примерно в одну сторону (как легли при прокатке), и длинные плавные нити через всё стекло.
     const rand = rng(seed + 3);
-    const shards = scatter(poly, 16, seed).map((p, k) => {
-      const r = size * (0.04 + rand() * 0.07), a = rand() * Math.PI * 2, n = 3 + Math.floor(rand() * 2);
-      const shape = Array.from({ length: n }, (_, j): Pt => {
-        const b = a + (j * 2 * Math.PI) / n + (rand() - 0.5) * 0.9, d = r * (0.5 + rand() * 0.7);
-        return [p[0] + Math.cos(b) * d, p[1] + Math.sin(b) * d];
+    const flow = rand() * Math.PI; // общее направление хлопьев и нитей
+    const soft = id + 'f';
+    const flakes = scatter(poly, 11, seed).map((p, k) => {
+      const len = size * (0.07 + rand() * 0.12), wid = len * (0.35 + rand() * 0.3);
+      const a = flow + (rand() - 0.5) * 0.8, n = 5 + Math.floor(rand() * 3);
+      // Неровный овал: точки по кругу с разным радиусом, сглаженные кривыми через середины рёбер.
+      const ring = Array.from({ length: n }, (_, j): Pt => {
+        const t = (j / n) * Math.PI * 2, r = 0.65 + rand() * 0.45;
+        const x = Math.cos(t) * len * r, y = Math.sin(t) * wid * r;
+        return [p[0] + x * Math.cos(a) - y * Math.sin(a), p[1] + x * Math.sin(a) + y * Math.cos(a)];
       });
-      return <polygon key={k} points={pts(shape)} fill={pick(mix, (k + rand()) / 16)} fillOpacity={0.85} />;
+      const mid = (i: number): Pt => { const q = ring[i % n], w = ring[(i + 1) % n]; return [(q[0] + w[0]) / 2, (q[1] + w[1]) / 2]; };
+      const d = `M${mid(0)[0]} ${mid(0)[1]}` + ring.map((_, j) => `Q${ring[(j + 1) % n][0]} ${ring[(j + 1) % n][1]} ${mid(j + 1)[0]} ${mid(j + 1)[1]}`).join('') + 'Z';
+      return <path key={k} d={d} fill={pick(mix, (k + rand()) / 11)} fillOpacity={0.55 + rand() * 0.25} />;
     });
+    const R = size * 0.9;
     const streams = [0, 1, 2].map((k) => {
-      const [a, b] = scatter(poly, 2, seed + 10 + k);
-      if (!a || !b) return null;
-      const m: Pt = [(a[0] + b[0]) / 2 + (rand() - 0.5) * size * 0.4, (a[1] + b[1]) / 2 + (rand() - 0.5) * size * 0.4];
-      return <path key={'s' + k} d={`M${a[0]} ${a[1]}Q${m[0]} ${m[1]} ${b[0]} ${b[1]}`} fill="none" stroke={pick(mix, rand())} strokeWidth={lead * 0.35} strokeLinecap="round" />;
+      // Нить: от края до края вдоль общего направления, с лёгкой волной.
+      const off = (k - 1) * size * 0.28 + (rand() - 0.5) * size * 0.15;
+      const a = flow + (rand() - 0.5) * 0.4, nx = -Math.sin(a), ny = Math.cos(a);
+      const at = (t: number, wave: number): Pt => [c[0] + Math.cos(a) * R * t + nx * (off + wave), c[1] + Math.sin(a) * R * t + ny * (off + wave)];
+      const [p0, p1, p2, p3] = [at(-1, 0), at(-0.33, size * 0.3 * (rand() - 0.5)), at(0.33, size * 0.3 * (rand() - 0.5)), at(1, 0)];
+      return <path key={'s' + k} d={`M${p0[0]} ${p0[1]}C${p1[0]} ${p1[1]} ${p2[0]} ${p2[1]} ${p3[0]} ${p3[1]}`} fill="none"
+        stroke={pick(mix, rand())} strokeOpacity={0.8} strokeWidth={size * 0.012} strokeLinecap="round" />;
     });
-    return clip(<>{shards}{streams}</>);
+    return clip(
+      <>
+        <filter id={soft} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation={size * 0.006} /></filter>
+        <g filter={`url(#${soft})`}>{flakes}{streams}</g>
+      </>,
+    );
   }
 
   if (kind === 'opal') {
