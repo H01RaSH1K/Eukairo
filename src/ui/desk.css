@@ -1,0 +1,77 @@
+/* ——— Раскладка для ПК (App.tsx, Desk) ———
+   Включается шириной окна (ui/useMedia.ts). Телефонная раскладка не меняется:
+   всё ниже — только внутри .desk или под тем же media-запросом. */
+
+.desk {
+  --rail-w: 76px;
+  --side-w: 380px;
+  height: 100%;
+  display: flex;
+  background: var(--bg);
+}
+
+/* Навигация — узкая колонка слева вместо таб-бара снизу */
+.rail {
+  flex: none; width: var(--rail-w);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 18px 0;
+  border-right: 1px solid var(--line);
+}
+.rail-logo { width: 38px; height: 38px; border-radius: 10px; margin-bottom: 14px; }
+.rail button {
+  width: 62px; padding: 9px 0 7px; border: 0; border-radius: 14px;
+  background: none; color: var(--text-dim); font: inherit; font-size: 11px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
+}
+.rail button .icon { font-size: 19px; line-height: 1; }
+.rail button:hover { background: var(--soft); color: var(--text); }
+.rail button[aria-current='page'] { background: var(--soft-2); color: var(--accent); }
+.rail button:last-child { margin-top: auto; } /* «Ещё» — внизу, как настройки в настольных приложениях */
+
+/* Панели: каждая — телефонный экран своей ширины. Таб-бара нет — снизу обычный отступ. */
+.pane { position: relative; height: 100%; min-width: 0; }
+.pane-main { flex: 1 1 auto; }
+.pane-side { flex: none; width: var(--side-w); border-left: 1px solid var(--line); }
+.desk .screen,
+html[data-showcase] .desk .screen { padding: 18px 18px 18px; }
+.desk .pane-side .screen { padding: 18px 14px; }
+.pane-side.timeline { width: 340px; }
+
+/* Кнопка ＋ в Ленте — в углу своей панели, а не окна */
+.desk .fab { position: absolute; right: 16px; bottom: 16px; }
+
+/* «Сегодня» на широкой панели: шторка таймера и строки не растягиваются на всю ширину */
+.desk .today > .drawer,
+.desk .today > .banner { width: 100%; max-width: 560px; align-self: center; }
+/* витрина: стекло до самого верха панели (на ПК нет строки состояния) */
+.desk .today.fullbleed .widget.viz { inset: 0; }
+
+/* Фокус (двойной клик по мозаике): только витраж, навигация и панели прячутся */
+html[data-focus] .rail,
+html[data-focus] .pane-side { display: none; }
+
+/* Мышь: курсоры там, где можно нажать */
+.desk button, .desk .gap, .desk .chip { cursor: pointer; }
+.desk button:disabled { cursor: default; }
+.desk .widget.viz { cursor: pointer; }
+
+/* Тонкая полоса прокрутки там, где список может быть длиннее панели (Лента, деревья) */
+.desk ::-webkit-scrollbar { width: 8px; height: 8px; }
+.desk ::-webkit-scrollbar-thumb { background: var(--soft-2); border-radius: 4px; }
+.desk ::-webkit-scrollbar-track { background: none; }
+
+/* Нижние листы на ПК — окно по центру */
+@media (min-width: 1000px) {
+  .sheet-backdrop { align-items: center; justify-content: center; }
+  .sheet {
+    width: min(460px, calc(100vw - 48px)); max-height: 86vh;
+    border-radius: 18px; padding: 14px 20px 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+    animation: pop-in .18s ease-out;
+  }
+  .sheet-grabber { display: none; }
+  /* графики на весь экран — не шире разумного */
+  .chart-full { padding: 24px max(24px, calc((100vw - 1100px) / 2)); }
+}
+@keyframes pop-in { from { opacity: 0; transform: scale(.96); } }
+

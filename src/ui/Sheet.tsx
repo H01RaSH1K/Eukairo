@@ -32,6 +32,13 @@ export function Sheet({ title, onClose, children }: { title?: string; onClose: (
     return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); };
   }, []);
 
+  // На ПК лист закрывается и клавишей Esc.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const move = (y: number, animate: boolean) => {
     const el = sheet.current!;
     el.style.transition = animate ? 'transform .2s ease-out' : 'none';
