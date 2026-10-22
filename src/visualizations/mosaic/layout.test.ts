@@ -60,6 +60,18 @@ describe('wholeOwners', () => {
   });
 });
 
+describe('wholeOwners с округлением', () => {
+  it('стекло — полчаса: время серии округляется до целых стёкол, кусков нет', () => {
+    const S = H / 2;
+    const spans = [span('a', 9 * H, 10.75 * H), span('b', 12 * H, 12.2 * H), span('c', 14 * H, 14.25 * H)];
+    const { owners, rests } = wholeOwners(spans, 0, 48, undefined, 0.1, S, true);
+    expect(rests).toHaveLength(0);
+    const n = (id: string) => owners.filter((o) => o?.entryId === id).length;
+    expect([n('a'), n('b'), n('c')]).toEqual([4, 0, 1]); // 1 ч 45 → 2 ч; 12 мин → 0; 15 мин → полчаса
+    expect(owners.length).toBe(48);
+  });
+});
+
 describe('runKeys', () => {
   it('записи одного занятия с перерывом меньше получаса — одна серия', () => {
     const k = runKeys([span('a', 0, H, 'w'), span('b', 1.2 * H, 2 * H, 'w'), span('c', 3 * H, 4 * H, 'w'), span('d', 4 * H, 5 * H, 'x')]);

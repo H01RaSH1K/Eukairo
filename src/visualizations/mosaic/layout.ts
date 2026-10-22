@@ -47,9 +47,12 @@ export const MIN_FRAC = 0.1;
  * ближайший свободный час рядом с ней. Остаток (например, полчаса) отдаём как `Rest`:
  * его вырежут куском из стекла (см. pieces.ts). У нужд остаток не нужен — из дня
  * вынимаются только их целые часы. `minFrac` — самый маленький кусок (доля стекла).
+ * `step` — сколько времени в одном стекле (по умолчанию час; `count` стёкол в дне).
+ * `round` — без кусков: время серии округляется до целых стёкол (полстекла и больше — стекло),
+ * остатков нет.
  */
-export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, minFrac = MIN_FRAC): { owners: (HourOwner | null)[]; rests: Rest[] } {
-  const H = HOUR_MS;
+export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: Map<string, string>, minFrac = MIN_FRAC, step = HOUR_MS, round = false): { owners: (HourOwner | null)[]; rests: Rest[] } {
+  const H = step;
   const dayEnd = dayStart + count * H;
   interface Run { first: HourOwner; start: number; total: number; ms: number[]; best: (HourOwner | null)[]; bestMs: number[] }
   const runs = new Map<string, Run>(); // ≈ Dictionary<string, Run>, порядок вставки сохраняется
@@ -74,7 +77,7 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
     }
   }
   const list = [...runs.values()];
-  const quota = list.map((r) => Math.floor(r.total / H));
+  const quota = list.map((r) => (round ? Math.round(r.total / H) : Math.floor(r.total / H)));
   const mine = list.map(() => new Set<number>()); // часы, отданные серии целиком
 
   const owners: (HourOwner | null)[] = new Array(count).fill(null);
@@ -104,7 +107,7 @@ export function wholeOwners(spans: Span[], dayStart: number, count = 24, keys?: 
   const rests: Rest[] = [];
   list.map((r, i) => ({ r, i })).sort((x, y) => x.r.start - y.r.start).forEach(({ r, i }) => {
     const rest = r.total % H;
-    if (rest <= 0 || r.first.need) return;
+    if (round || rest <= 0 || r.first.need) return;
     let hour = -1;
     r.ms.forEach((ms, h) => { if (ms > 0 && !mine[i].has(h) && (hour < 0 || ms > r.ms[hour])) hour = h; });
     if (hour < 0) hour = r.ms.indexOf(Math.max(...r.ms));

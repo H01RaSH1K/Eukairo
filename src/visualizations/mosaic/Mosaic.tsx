@@ -8,21 +8,25 @@ import { tone } from './tone';
 import type { Pt } from './voronoi';
 import './mosaic.css';
 
-// Мозаика-витраж: период делится на сегменты, сегмент = час. Нарезка стёкол
-// своя у каждого дня/недели/месяца (зависит от даты), чтобы дни не были одинаковыми
-// (день — 24, неделя — 168, месяц — 24 × дней; всегда одна картина).
-// Часы нужд (сон, еда…) из дня вынимаются: поспал 8 ч — в дне 16 стёкол.
-// Полные часы записи — целые стёкла, остаток (например, полчаса) — «тонкое стекло»:
-// тоже целое, но цвет в нём слабее, по доле часа (см. pieces.ts и thinFill ниже).
+// Мозаика-витраж: период делится на сегменты-стёкла (на дне стекло — полчаса, на неделе
+// и месяце — час, см. STEP). Нарезка стёкол своя у каждого дня/недели/месяца (зависит
+// от даты), чтобы дни не были одинаковыми (день — 48, неделя — 168, месяц — 24 × дней).
+// Время нужд (сон, еда…) из дня вынимается: поспал 8 ч — в дне 32 стекла из 48.
+// Время каждой серии округляется до целых стёкол, неполных стёкол нет.
 // Стёкла одной серии (записи одного занятия почти подряд) сливаются в одну фигуру,
 // между ними — тонкий шов.
 
 const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
+// Сколько времени в одном стекле: на дне — полчаса (48 стёкол), на неделе и месяце — час.
+// Время каждой серии округляется до целых стёкол, кусков нет: ошибка не больше полстекла.
+const STEP = { day: HOUR_MS / 2, week: HOUR_MS, month: HOUR_MS };
+const DAY = 24 * HOUR_MS;
 // Самый маленький кусок стекла: на неделе и месяце стёкла мельче, и щепка тонула бы в свинце.
 const minFrac = { day: 0.1, week: 0.15, month: 0.25 };
 
 function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onSelect }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
+  const step = STEP[scale];
   // Меряем место под картину, чтобы узор заполнил виджет целиком.
   // ResizeObserver ≈ подписка на событие «размер изменился».
   const box = useRef<HTMLDivElement>(null);
@@ -54,9 +58,9 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const keys = useMemo(() => runKeys(spans), [sig]); // eslint-disable-line react-hooks/exhaustive-deps
   // Целые часы каждого дня и остатки серий; часы, где главная — нужда, выкидываем.
   // `h` — час дня, он нужен, чтобы найти стекло «сейчас» и отличить будущее.
-  const plan = useMemo(() => days.map((d) => wholeOwners(spans, d, 24, keys, minFrac[scale])), [sig, from, to, scale]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plan = useMemo(() => days.map((d) => wholeOwners(spans, d, DAY / step, keys, minFrac[scale], step, true)), [sig, from, to, scale]); // eslint-disable-line react-hooks/exhaustive-deps
   const kept = useMemo(
-    () => plan.map((p, di) => p.owners.map((o, h) => ({ o, h, at: days[di] + h * HOUR_MS })).filter((x) => !x.o?.need)),
+    () => plan.map((p, di) => p.owners.map((o, h) => ({ o, h, at: days[di] + h * step })).filter((x) => !x.o?.need)),
     [plan], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const counts = kept.map((k) => k.length);
@@ -138,7 +142,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   // (или последнее стекло) идущей записи.
   let nowPoly: Pt[] | null = null;
   if (timeFill) {
-    const i = dayIdx >= 0 ? nowIndex(kept, dayIdx, Math.floor((now - days[dayIdx]) / HOUR_MS)) : -1;
+    const i = dayIdx >= 0 ? nowIndex(kept, dayIdx, Math.floor((now - days[dayIdx]) / step)) : -1;
     if (i >= 0 && i < cells.length) nowPoly = cells[i];
   } else if (runningKey) {
     const mine = pieces.filter((p) => p.owner?.key === runningKey);
