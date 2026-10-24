@@ -45,7 +45,11 @@ export interface VisualizationProps {
   runningEntryId: string | null;         // идущий таймер — можно анимировать рост
   settings: SettingValues;               // значения настроек этого стиля (с подставленными умолчаниями)
   onSelect: (entryId: string) => void;   // ≈ Action<string>
+  /** Сколько сегментов закрашено полезным из скольких доступных (без нужд) — для таблички в фокусе. `?` — можно не передавать. */
+  onCount?: (c: SegmentCount) => void;
 }
+
+export interface SegmentCount { filled: number; total: number; need: number }
 
 export interface VisualizationPlugin {
   id: string;           // 'mosaic-glass'

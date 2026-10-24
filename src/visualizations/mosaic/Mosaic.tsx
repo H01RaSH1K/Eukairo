@@ -11,7 +11,8 @@ import './mosaic.css';
 // Мозаика-витраж: период делится на сегменты-стёкла (на дне стекло — полчаса, на неделе
 // и месяце — час, см. STEP). Нарезка стёкол своя у каждого дня/недели/месяца (зависит
 // от даты), чтобы дни не были одинаковыми (день — 48, неделя — 168, месяц — 24 × дней).
-// Время нужд (сон, еда…) из дня вынимается: поспал 8 ч — в дне 32 стекла из 48.
+// Время нужд (сон, еда…) — не полезное: его стёкла рисуются по-особому (настройка «Часы нужд»:
+// матовое стекло, блёклый цвет, оправа) или вовсе вынимаются из дня (поспал 8 ч — 32 стекла из 48).
 // Целые стёкла серии — как есть, остатки копятся: набралось на стекло у одного занятия
 // (или у детей одного родителя) или всего подряд — сборное стекло, «мозаика в стекле»
 // (см. poolOwners в layout.ts и tiles.tsx). Неполных стёкол нет.
@@ -24,7 +25,7 @@ const leadWidth = { day: 1.4, week: 0.7, month: 0.45 };
 const STEP = { day: HOUR_MS / 2, week: HOUR_MS, month: HOUR_MS };
 const DAY = 24 * HOUR_MS;
 
-function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onSelect }: VisualizationProps & { pattern: PatternId }) {
+function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onSelect, onCount }: VisualizationProps & { pattern: PatternId }) {
   const days = dayStarts(from, to);
   const step = STEP[scale];
   // Меряем место под картину, чтобы узор заполнил виджет целиком.
@@ -50,18 +51,21 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   const leadK = { thin: 0.6, normal: 1, bold: 1.8 }[settings.lead as string] ?? 1;
   // Как видно стёкла внутри одной фигуры (см. seam в registry.ts).
   const seamStyle = (settings.seam as string) ?? 'tone';
+  // Как рисовать часы нужд (см. needs в registry.ts); «remove» — вынимать из дня, как раньше.
+  const needStyle = (settings.needs as string) ?? 'frost';
+  const dropNeeds = needStyle === 'remove';
   const weekday = (new Date(from).getDay() + 6) % 7; // getDay: 0 = вс → делаем 0 = пн
   const now = Date.now();
   // Экран перерисовывается каждую секунду (таймер), а хозяева часов меняются от силы раз
   // в минуту — считаем их заново, только когда сменилась минута или сами записи.
   const sig = spans.map((s) => `${s.entryId}:${s.start}:${Math.floor(s.end / 60_000)}:${s.color}:${s.need ? 1 : 0}:${s.parents?.map((x) => x.id).join('/') ?? ''}`).join('|');
   const keys = useMemo(() => runKeys(spans), [sig]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Хозяева стёкол каждого дня; стёкла, где главная — нужда, выкидываем.
+  // Хозяева стёкол каждого дня; стёкла, где главная — нужда, выкидываем (только при «Вынимать»).
   // `h` — номер стекла в дне, он нужен, чтобы найти стекло «сейчас» и отличить будущее.
   const plan = useMemo(() => days.map((d) => wholeOwners(spans, d, DAY / step, keys, step)), [sig, from, to, scale]); // eslint-disable-line react-hooks/exhaustive-deps
   const kept = useMemo(
-    () => plan.map((owners, di) => owners.map((o, h) => ({ o, h, at: days[di] + h * step })).filter((x) => !x.o?.need)),
-    [plan], // eslint-disable-line react-hooks/exhaustive-deps
+    () => plan.map((owners, di) => owners.map((o, h) => ({ o, h, at: days[di] + h * step })).filter((x) => !dropNeeds || !x.o?.need)),
+    [plan, dropNeeds], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const counts = kept.map((k) => k.length);
   const { w, h, cells, decor, day } = getPattern(pattern, counts, seedFor(from), aspect, fill === 'spots' ? 'flow' : fill, weekday, cut, look);
@@ -77,14 +81,26 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
     // flatMap ≈ SelectMany: оставшиеся часы всех дней подряд — это и есть стёкла.
     if (timeFill) return kept.flatMap((k) => k.map((x) => x.o)).map((owner, cell) => ({ poly: cells[cell], owner, cell }));
     // `o is HourOwner` — проверка типа, как в C#.
-    const list = kept.flat().map((x) => x.o).filter((o): o is HourOwner => o !== null).slice(0, cells.length);
+    const busy = kept.flat().map((x) => x.o).filter((o): o is HourOwner => o !== null);
+    // Нужды занимают последние стёкла картины (у копилки — верх банки), полезное — остальные.
+    const needs = busy.filter((o) => o.need).slice(0, cells.length);
+    const room = cells.length - needs.length;
+    const list = busy.filter((o) => !o.need).slice(0, room);
     const places = fill === 'spots'
-      ? spotPlaces(cells, list, seed, spotCount, settings.growth === 'random' ? 'random' : 'round')
+      ? spotPlaces(cells.slice(0, room), list, seed, spotCount, settings.growth === 'random' ? 'random' : 'round')
       : list.map((_, i) => i);
     const whole: (HourOwner | null)[] = cells.map(() => null);
     places.forEach((cell, k) => { if (cell >= 0) whole[cell] = list[k]; }); // −1 — стёкол не хватило
+    needs.forEach((o, k) => { whole[room + k] = o; });
     return cells.map((poly, cell) => ({ poly, owner: whole[cell], cell }));
   }, [kept, cells, timeFill, fill, seed, spotCount, settings.growth]);
+
+  // Счётчик стёкол для таблички в фокусе: сколько закрашено полезным, сколько всего было
+  // доступно (без нужд). Сообщаем наверх, только когда числа поменялись.
+  const needCount = plan.reduce((s, owners) => s + owners.filter((o) => o?.need).length, 0);
+  const filled = pieces.filter((p) => p.owner && !p.owner.need).length;
+  const total = (dropNeeds ? cells.length : cells.length - needCount);
+  useEffect(() => { onCount?.({ filled, total, need: needCount }); }, [filled, total, needCount, onCount]);
 
   // Свинец (между разными хозяевами) и швы (внутри одной серии).
   const drawn = useMemo(() => {
@@ -125,16 +141,27 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
   return (
     <div className="glass-box" ref={box}>
     <svg className={'glass ' + scale} viewBox={`-1 -1 ${w + 2} ${h + 2}`}>
+      {needStyle === 'frost' && (
+        // Иней матового стекла: мелкие светлые крапинки узором (≈ текстура, повторяется плиткой).
+        <defs>
+          <pattern className="frost-dots" id={facetId + 'frost'} width={leadWidth[scale] * 2.4} height={leadWidth[scale] * 2.4} patternUnits="userSpaceOnUse">
+            {FROST.map(([x, y, r], k) => <circle key={k} cx={x * leadWidth[scale] * 2.4} cy={y * leadWidth[scale] * 2.4} r={r * leadWidth[scale]} />)}
+          </pattern>
+        </defs>
+      )}
       {decor?.map((poly, i) => (
         <polygon key={'d' + i} points={toPoints(poly)} className="glass-decor" />
       ))}
       {pieces.map((p, i) => {
         const o = p.owner;
-        const cls = o
+        const cls = o?.need
+          ? 'glass-need need-' + needStyle + (o.key === runningKey ? ' live' : '')
+          : o
           ? 'glass-fill' + (o.key === runningKey ? ' live' : '') + (isFresh(pairs[i]) ? ' fresh' : '')
           : 'glass-empty' + (p.cell >= futureFrom ? ' glass-future' : '');
         // «Оттенки»: у каждого стекла свой сдвиг яркости (по номеру стекла, ±7%).
-        const color = o ? paint(o.color, p.cell, seamStyle) : undefined;
+        // Нуждам цвет ставит CSS (класс need-…) из --c — цвета занятия.
+        const color = o && !o.need ? paint(o.color, p.cell, seamStyle) : undefined;
         return (
           <polygon
             key={i}
@@ -144,11 +171,12 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
             // Доля 0…1 — порядок стекла; дизайн может по ней растянуть анимацию появления.
             // --v — свой оттенок у каждого стекла (0…1, постоянный для номера): дизайн может
             // подсветить пустые стёкла неравномерно, как настоящее стекло.
-            style={{ fill: color, stroke: color, '--d': (p.cell / cells.length).toFixed(3), '--v': (((p.cell * 2654435761) >>> 0) % 1000 / 1000).toFixed(3) } as CSSProperties}
+            style={{ fill: color, stroke: color, '--c': o?.color, '--d': (p.cell / cells.length).toFixed(3), '--v': (((p.cell * 2654435761) >>> 0) % 1000 / 1000).toFixed(3) } as CSSProperties}
             onClick={() => o?.entryId && onSelect(o.entryId)}
           />
         );
       })}
+      {needStyle === 'frost' && pieces.map((p, i) => p.owner?.need && <polygon key={'n' + i} points={drawn.pts[i]} fill={`url(#${facetId}frost)`} className="glass-frost" />)}
       {/* Сборные стёкла (из остатков) — мозаика в стекле поверх цвета */}
       {pieces.map((p, i) => p.owner?.mix && <Tiles key={'t' + i} poly={p.poly} cell={p.cell} lead={leadWidth[scale] * leadK} mix={p.owner.mix} />)}
       {/* «Грани»: поверх каждого цветного стекла — свой градиент, стекло под своим углом к свету */}
@@ -163,7 +191,7 @@ function Mosaic({ pattern, scale, from, to, spans, runningEntryId, settings, onS
               </linearGradient>
             ))}
           </defs>
-          {pieces.map((p, i) => p.owner && <polygon key={'f' + i} points={drawn.pts[i]} fill={`url(#${facetId}${facetOf(p.cell)})`} className="glass-facet" />)}
+          {pieces.map((p, i) => p.owner && !p.owner.need && <polygon key={'f' + i} points={drawn.pts[i]} fill={`url(#${facetId}${facetOf(p.cell)})`} className="glass-facet" />)}
         </>
       )}
       <path d={drawn.lead} className="glass-lead" style={{ strokeWidth: leadWidth[scale] * leadK }} />
@@ -185,6 +213,9 @@ function firstFuture(kept: { at: number }[][], now: number): number {
 function paint(color: string, cell: number, style: string): string {
   return style === 'tone' ? tone(color, cell) : style === 'both' ? tone(color, cell, 0.6) : color;
 }
+
+/** Крапинки инея в плитке узора: x, y (доли плитки) и радиус (в толщинах свинца). */
+const FROST: [number, number, number][] = [[0.12, 0.2, 0.18], [0.55, 0.08, 0.12], [0.8, 0.45, 0.2], [0.3, 0.62, 0.14], [0.65, 0.85, 0.16], [0.05, 0.9, 0.1], [0.45, 0.38, 0.09]];
 
 /** Номер одного из FACETS градиентов для стекла (постоянный для номера). */
 const facetOf = (cell: number) => (((cell + 7) * 2246822519) >>> 0) % FACETS.length;
