@@ -20,6 +20,7 @@ import { findVisualization } from '../../visualizations/registry';
 import { settingsOf, useAppearance } from '../../settings/appearance';
 import { setFocus, useDesign } from '../../settings/design';
 import { lazyViz } from '../../visualizations/lazy';
+import type { SegmentCount } from '../../visualizations/types';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/Sheet';
 import { useNow } from '../../ui/useNow';
@@ -35,6 +36,8 @@ export default function Today() {
   const { activities, entries, running: run } = data;
   const now = useNow(1000);
   const [scale, setScale] = useState<Period>('day');
+  // Счётчик сегментов от мозаики (сколько закрашено из скольких) — для таблички в фокусе.
+  const [count, setCount] = useState<SegmentCount | null>(null);
   const [offset, setOffset] = useState(0); // 0 = текущий период, -1 = предыдущий…
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
@@ -190,6 +193,7 @@ export default function Today() {
             spans={spans}
             runningEntryId={run?.id ?? null}
             settings={settingsOf(look, scale)}
+            onCount={setCount}
             onSelect={(id) => {
               const e = entries.find((x) => x.id === id);
               clearTimeout(selectTimer.current);
@@ -306,7 +310,10 @@ export default function Today() {
           {/* свет, проходящий сквозь витраж, — медленно плывёт; тапы проходят насквозь */}
           <div className="focus-light" />
           {/* табличка, как под картиной в музее */}
-          <div className="focus-plaque">{periodName} · {formatDuration(total)}</div>
+          <div className="focus-plaque">
+            {periodName} · {formatDuration(total)}
+            {count && <div className="focus-count">{count.filled} из {count.total} {segmentsWord(count.total)}</div>}
+          </div>
         </>
       )}
 
@@ -327,6 +334,11 @@ export default function Today() {
       {forgotten && <ForgottenDialog entry={forgotten} name={name(forgotten.activityId).at(-1)!} now={now} />}
     </div>
   );
+}
+
+/** «из 21 сегмента», «из 32 сегментов» — после «из» число в родительном падеже. */
+function segmentsWord(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? 'сегмента' : 'сегментов';
 }
 
 // «Таймер идёт 5 ч, всё ещё гуляешь с собакой?»

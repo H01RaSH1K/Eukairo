@@ -256,3 +256,5 @@ html[data-focus] .tabbar { display: none; }
   position: fixed !important; top: env(safe-area-inset-top); left: 0; right: 0; bottom: 0;
 }
 .today.focus .focus-plaque { position: fixed !important; }
+/* счётчик сегментов под итогом: мельче и тише */
+.focus-count { margin-top: 4px; font-size: 10px; letter-spacing: .18em; opacity: .75; font-variant-numeric: tabular-nums; }
