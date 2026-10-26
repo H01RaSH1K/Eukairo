@@ -66,6 +66,27 @@ export function startTimer(activityId: string, durationMs?: number, startAt?: nu
   });
 }
 
+/** Таймер «начну позже»: сам запустится в `at` (хранится в настройках, только на этом устройстве). */
+export interface ScheduledStart { activityId: string; at: number; durationMs?: number }
+
+export function scheduleTimer(s: ScheduledStart) {
+  return setSetting('scheduledStart', s);
+}
+
+export function cancelScheduled() {
+  return db.settings.delete('scheduledStart');
+}
+
+/** Время запланированного старта пришло — запустить с той минуты (даже если приложение открыли позже). */
+export function fireScheduled(now = Date.now()) {
+  return db.transaction('rw', db.entries, db.settings, async () => {
+    const s = (await db.settings.get('scheduledStart'))?.value as ScheduledStart | undefined;
+    if (!s || s.at > now) return;
+    await db.settings.delete('scheduledStart');
+    await startTimer(s.activityId, s.durationMs, s.at);
+  });
+}
+
 /** Таймер на время дошёл до конца — закрыть ровно в назначенную минуту. */
 export function closeExpiredTimer(now = Date.now()) {
   return db.transaction('rw', db.entries, async () => {

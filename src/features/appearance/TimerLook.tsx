@@ -62,7 +62,7 @@ export function TimerLook() {
           <div className="setting-hint">{modes.find((x) => x.id === design.mode)!.hint}</div>
         </div>
         <div>
-          <div className="setting-title">Начал раньше, чем нажал</div>
+          <div className="setting-title">Начало раньше или позже</div>
           <div className="chips design-chips">
             {startPicks.map((x) => (
               <button key={x.id} aria-pressed={design.startPick === x.id} onClick={() => setDesign({ startPick: x.id })}>{x.title}</button>

@@ -3,7 +3,7 @@ import { timerRange } from '../../../domain/tree';
 import { MIN_MS, formatClock, formatTimer } from '../../../domain/time';
 import { stopTimer } from '../../../db/commands';
 import { shortMin } from '../Dial';
-import { MAX_AGO_MIN, StartFromChip } from './StartFrom';
+import { MAX_SHIFT_MIN, StartFromChip } from './StartFrom';
 import type { ControlProps } from './types';
 import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
@@ -11,13 +11,13 @@ import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 // «схватилась»: дальше палец вверх — больше времени, вниз — меньше (заливка ходит за пальцем).
 // Отпустил — таймер на выбранное время. Короткий тап — без лимита.
 // Пока таймер идёт, сверху висит его полоса; тап по ней — стоп.
-// Тематическое начало: схватив карточку, палец влево — «начал на столько раньше».
+// Тематическое начало: схватив карточку, палец влево — «начал раньше», вправо — «начну позже».
 
 const HOLD_MS = 280;   // короче — это тап
 const STEP_PX = 12;    // столько пикселей пальцем = 5 минут
 
 export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpenRun, name, startAt, onPickStart, themedStart, onStart }: ControlProps) {
-  const [charging, setCharging] = useState<{ id: string; minutes: number; ago: number } | null>(null);
+  const [charging, setCharging] = useState<{ id: string; minutes: number; shift: number } | null>(null);
   // y0 и m0 — где был палец и сколько было минут в момент «схватывания» (null — ещё не схватили)
   const hold = useRef<{ id: string; x: number; y: number; timer: number; el: HTMLElement; pointer: number; y0: number | null; m0: number } | null>(null);
 
@@ -36,7 +36,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
       h.m0 = Math.round((lo + hi) / 10) * 5;
       h.y0 = h.y;
       el.setPointerCapture(pointer); // палец может уйти за карточку — она всё равно наша
-      setCharging({ id, minutes: h.m0, ago: 0 });
+      setCharging({ id, minutes: h.m0, shift: 0 });
     }, HOLD_MS);
     hold.current = h;
   };
@@ -48,9 +48,9 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
       if (Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) end(false);
       return;
     }
-    // влево — раньше; шаг тот же, что у длительности
-    const ago = themedStart ? Math.min(MAX_AGO_MIN, Math.max(0, Math.round(-(e.clientX - h.x) / STEP_PX) * 5)) : 0;
-    setCharging({ id: h.id, minutes: minutesAt(h.id, h.m0, e.clientY - h.y0), ago });
+    // влево — раньше, вправо — позже; шаг тот же, что у длительности
+    const shift = themedStart ? Math.min(MAX_SHIFT_MIN, Math.max(-MAX_SHIFT_MIN, Math.round((e.clientX - h.x) / STEP_PX) * 5)) : 0;
+    setCharging({ id: h.id, minutes: minutesAt(h.id, h.m0, e.clientY - h.y0), shift });
   };
   const end = (fire: boolean) => {
     const h = hold.current;
@@ -58,7 +58,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
     clearTimeout(h.timer);
     hold.current = null;
     if (fire) {
-      if (charging) onStart(h.id, charging.minutes * MIN_MS, charging.ago ? Date.now() - charging.ago * MIN_MS : undefined);
+      if (charging) onStart(h.id, charging.minutes * MIN_MS, charging.shift ? Date.now() + charging.shift * MIN_MS : undefined);
       else onStart(h.id);
     }
     setCharging(null);
@@ -113,8 +113,8 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
               <div className="charge-name">{name(id)}</div>
               <div className="charge-value">{c ? shortMin(c.minutes) : `${shortMin(lo)}–${shortMin(hi)}`}</div>
               {c && (() => {
-                const from = c.ago ? now - c.ago * MIN_MS : startAt;
-                return <div className="charge-until">{from ? `с ${formatClock(from)} ` : ''}до {formatClock((from ?? now) + c.minutes * MIN_MS)}</div>;
+                const from = c.shift ? now + c.shift * MIN_MS : startAt;
+                return <div className="charge-until">{from ? `${from > now ? 'в' : 'с'} ${formatClock(from)} ` : ''}до {formatClock((from ?? now) + c.minutes * MIN_MS)}</div>;
               })()}
             </div>
           );
@@ -123,7 +123,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
       </div>
       {!run && (
         <div className="charge-hint dim">
-          тап — без лимита · подержи и веди ↑↓{themedStart ? ', ← раньше' : ''} · <StartFromChip startAt={startAt} onPick={onPickStart} />
+          тап — без лимита · подержи и веди ↑↓{themedStart ? ', ←→ начало' : ''} · <StartFromChip startAt={startAt} onPick={onPickStart} />
         </div>
       )}
     </div>

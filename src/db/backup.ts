@@ -10,7 +10,7 @@ import { currentAppearance, replaceAppearance, type Appearance } from '../settin
 import { currentDesign, replaceDesign } from '../settings/design';
 
 /** Настройки из базы, которые относятся к этому телефону и в бэкап не едут. */
-const LOCAL_ONLY = new Set(['lastBackupAt', 'backupSnoozeUntil', 'forgottenAnswer']);
+const LOCAL_ONLY = new Set(['lastBackupAt', 'backupSnoozeUntil', 'forgottenAnswer', 'scheduledStart']);
 
 /** Весь бэкап одним объектом (его же синхронизация кладёт в гист). */
 export async function buildBackup(): Promise<Backup> {

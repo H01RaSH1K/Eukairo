@@ -5,7 +5,7 @@ import { db, type Entry } from './schema';
 import {
   deletePoint, savePoint,
   addActivity, archiveActivity, closeExpiredTimer, deleteActivity, logEntry, moveActivity, reorderActivity,
-  saveEntry, seedIfEmpty, startTimer, stopTimer,
+  saveEntry, seedIfEmpty, startTimer, stopTimer, scheduleTimer, fireScheduled,
 } from './commands';
 import { mergeBackup } from './backup';
 import { childrenOf } from '../domain/tree';
@@ -78,6 +78,22 @@ describe('таймер', () => {
     vi.setSystemTime(75 * MIN);
     await closeExpiredTimer();
     expect((await entries())[0]).toMatchObject({ start: 40 * MIN, end: 70 * MIN });
+  });
+
+  it('«начну позже»: запускается сам с назначенной минуты, даже если проверили позже', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(0);
+    await startTimer('a');
+    await scheduleTimer({ activityId: 'b', at: 30 * MIN, durationMs: 20 * MIN });
+    vi.setSystemTime(20 * MIN);
+    await fireScheduled();
+    expect(await entries()).toHaveLength(1); // ещё рано
+    vi.setSystemTime(35 * MIN);
+    await fireScheduled();
+    const [a, b] = await entries();
+    expect(a).toMatchObject({ activityId: 'a', end: 30 * MIN });
+    expect(b).toMatchObject({ activityId: 'b', start: 30 * MIN, end: null, plannedMs: 20 * MIN });
+    expect(await db.settings.get('scheduledStart')).toBeUndefined();
   });
 
   it('стоп раньше минуты — случайный тап, запись выбрасывается', async () => {

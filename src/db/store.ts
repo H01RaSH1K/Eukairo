@@ -5,7 +5,7 @@
 import { liveQuery } from 'dexie';
 import { useSyncExternalStore } from 'react';
 import { db, type Activity, type Entry, type Habit, type HabitMark, type Point } from './schema';
-import { closeExpiredTimer, seedIfEmpty } from './commands';
+import { closeExpiredTimer, fireScheduled, seedIfEmpty, type ScheduledStart } from './commands';
 import { installTombHooks } from './tombs';
 import { plannedEndOf } from '../domain/timer';
 
@@ -72,19 +72,26 @@ export function startStore() {
           data = { ready: true, error: null, activities, entries, settings: Object.fromEntries(settings.map((s) => [s.key, s.value])), running, habits, habitMarks, points };
           emit();
           if (expired(running)) void closeExpiredTimer();
+          if (due(data.settings.scheduledStart)) void fireScheduled();
         },
         error: (e) => fail(e),
       });
     })
     .catch(fail);
 
-  // Таймер на время закрывается сам, даже если приложение было свёрнуто:
-  // проверяем раз в 15 секунд и при каждом возврате в приложение.
+  // Таймер на время закрывается сам, а «начну позже» — запускается сам, даже если приложение
+  // было свёрнуто: проверяем раз в 15 секунд и при каждом возврате в приложение.
   const check = () => {
     if (expired(data.running)) void closeExpiredTimer();
+    if (due(data.settings.scheduledStart)) void fireScheduled();
   };
   setInterval(check, 15_000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+}
+
+/** Пора запускать таймер «начну позже»? */
+function due(s: unknown) {
+  return !!s && (s as ScheduledStart).at <= Date.now();
 }
 
 /** Таймер на время уже дошёл до конца? */

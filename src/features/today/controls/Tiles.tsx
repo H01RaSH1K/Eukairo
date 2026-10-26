@@ -3,7 +3,7 @@ import { timerRange } from '../../../domain/tree';
 import { MIN_MS, formatClock, formatTimer } from '../../../domain/time';
 import { stopTimer } from '../../../db/commands';
 import { shortMin } from '../Dial';
-import { MAX_AGO_MIN, StartFromChip, agoOf, startFromAgo } from './StartFrom';
+import { MAX_SHIFT_MIN, StartFromChip, shiftLabel, shiftOf, startFromShift } from './StartFrom';
 import type { ControlProps } from './types';
 import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
@@ -46,13 +46,13 @@ export function Tiles({ activities, colors, quick, current, onChoose, onMore, ru
       <input className="slider" type="range" min={lo} max={hi} step={5} value={minutes}
         style={{ accentColor: color }}
         onChange={(e) => setMinutesFor({ ...minutesFor, [current]: Number(e.target.value) })} />
-      {/* тематическое начало: второй ползунок «начал раньше на…» */}
+      {/* тематическое начало: второй ползунок, середина — «сейчас», влево — раньше, вправо — позже */}
       {themedStart && (
         <label className="tiles-ago dim">
-          <span>начал раньше {agoOf(startAt, now) ? `на ${shortMin(agoOf(startAt, now))}` : '— нет'}</span>
-          <input className="slider" type="range" min={0} max={MAX_AGO_MIN} step={5} value={agoOf(startAt, now)}
+          <span>{shiftLabel(shiftOf(startAt, now))}</span>
+          <input className="slider" type="range" min={-MAX_SHIFT_MIN} max={MAX_SHIFT_MIN} step={5} value={shiftOf(startAt, now)}
             style={{ accentColor: color }}
-            onChange={(e) => onSetStart(startFromAgo(now, Number(e.target.value)))} />
+            onChange={(e) => onSetStart(startFromShift(now, Number(e.target.value)))} />
         </label>
       )}
       <div className="tiles-actions">

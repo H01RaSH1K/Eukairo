@@ -1,28 +1,40 @@
 import { useState } from 'react';
 import { MIN_MS, formatClock } from '../../../domain/time';
+import { shortMin } from '../Dial';
 import { Sheet } from '../../../ui/Sheet';
 
-// Начать таймер не с «сейчас», а с момента, когда начал на самом деле
-// («сел работать в 12:10, а нажать забыл»). Выбранное начало действует на один старт.
+// Начать таймер не с «сейчас»: раньше («сел работать в 12:10, а нажать забыл»)
+// или позже («начну в 10:00» — таймер запустится сам). Выбранное начало действует на один старт.
 
-const AGO = [5, 10, 15, 30, 60]; // минуты назад: в одно касание
+const SHIFTS = [5, 10, 15, 30, 60]; // минуты: в одно касание, назад и вперёд
 
-/** Строчка под таймером: «сейчас · до 14:30 ▾» или «с 12:10 · до 14:10 ▾»; тап — выбрать другое начало. */
+/** Строчка под таймером: «сейчас · до 14:30 ▾», «с 12:10 · до 14:10 ▾», «в 15:00 · до 16:00 ▾». */
 export function StartFromChip({ startAt, until, onPick, className }: {
   startAt: number | null;
   until?: number;          // когда закончится таймер на время (без лимита — не показываем)
   onPick: () => void;
   className?: string;
 }) {
+  const later = startAt !== null && startAt > Date.now();
   return (
     <button className={'start-from ' + (className ?? '') + (startAt ? ' set' : '')} onClick={onPick}>
-      {startAt ? `с ${formatClock(startAt)}` : 'сейчас'}
+      {startAt ? `${later ? 'в' : 'с'} ${formatClock(startAt)}` : 'сейчас'}
       {until !== undefined && ` · до ${formatClock(until)}`} ▾
     </button>
   );
 }
 
-/** Лист выбора начала: «N мин назад» или точное время. */
+/** «12:10» → ближайший к `now` такой момент: сегодня, вчера или завтра. */
+export function nearestClock(clock: string, now: number): number | null {
+  const [h, m] = clock.split(':').map(Number);
+  const d = new Date(now);
+  d.setHours(h, m, 0, 0);
+  const t = d.getTime();
+  if (Number.isNaN(t)) return null;
+  return [t - 86_400_000, t, t + 86_400_000].reduce((a, b) => (Math.abs(b - now) < Math.abs(a - now) ? b : a));
+}
+
+/** Лист выбора начала: «N мин назад», «через N мин» или точное время. */
 export function StartFromSheet({ startAt, now, onSet, onClose }: {
   startAt: number | null;
   now: number;
@@ -31,31 +43,28 @@ export function StartFromSheet({ startAt, now, onSet, onClose }: {
 }) {
   const [clock, setClock] = useState(formatClock(startAt ?? now));
   const pick = (t: number | null) => { onSet(t); onClose(); };
-
-  // «12:10» → сегодня в 12:10; если это ещё не наступило — значит, вчера.
-  const parsed = (() => {
-    const [h, m] = clock.split(':').map(Number);
-    const d = new Date(now);
-    d.setHours(h, m, 0, 0);
-    let t = d.getTime();
-    if (t > now) t -= 86_400_000;
-    return Number.isNaN(t) ? null : t;
-  })();
+  const parsed = nearestClock(clock, now);
+  const day = parsed === null ? '' : parsed < now - 12 * 3_600_000 ? 'вчера ' : parsed > now + 12 * 3_600_000 ? 'завтра ' : '';
 
   return (
-    <Sheet title="Когда начал?" onClose={onClose}>
+    <Sheet title="Когда начать?" onClose={onClose}>
       <div className="form">
         <div className="chips">
-          {AGO.map((m) => (
+          {SHIFTS.map((m) => (
             <button key={m} onClick={() => pick(now - m * MIN_MS)}>{m < 60 ? `${m} мин назад` : 'час назад'}</button>
           ))}
         </div>
+        <div className="chips">
+          {SHIFTS.map((m) => (
+            <button key={m} onClick={() => pick(now + m * MIN_MS)}>{m < 60 ? `через ${m} мин` : 'через час'}</button>
+          ))}
+        </div>
         <label className="field time">
-          <span className="dim">Начал в</span>
+          <span className="dim">Начало в</span>
           <input type="time" value={clock} onChange={(e) => setClock(e.target.value)} />
         </label>
         <button className="btn primary" disabled={parsed === null} onClick={() => pick(parsed)}>
-          Начало — {parsed !== null && parsed < now - 12 * 3_600_000 ? 'вчера ' : ''}{clock}
+          Начало — {day}{clock}
         </button>
         <button className="btn" onClick={() => pick(null)}>С момента нажатия</button>
       </div>
@@ -63,14 +72,18 @@ export function StartFromSheet({ startAt, now, onSet, onClose }: {
   );
 }
 
-// ——— для тематических жестов: начало как «на столько минут раньше» ———
+// ——— для тематических жестов: начало как сдвиг от «сейчас» ———
 
-/** Насколько далеко назад тянут жесты (дальше — через лист). */
-export const MAX_AGO_MIN = 120;
+/** Насколько далеко назад и вперёд тянут жесты (дальше — через лист). */
+export const MAX_SHIFT_MIN = 120;
 
-/** Выбранное начало → «N мин назад» (кратно 5). */
-export const agoOf = (startAt: number | null, now: number) =>
-  startAt === null ? 0 : Math.max(0, Math.round((now - startAt) / MIN_MS / 5) * 5);
+/** Выбранное начало → сдвиг в минутах (кратно 5): < 0 — раньше, > 0 — позже. */
+export const shiftOf = (startAt: number | null, now: number) =>
+  startAt === null ? 0 : Math.round((startAt - now) / MIN_MS / 5) * 5;
 
-/** «N мин назад» → начало (0 — «сейчас»). */
-export const startFromAgo = (now: number, ago: number) => (ago > 0 ? now - ago * MIN_MS : null);
+/** Сдвиг → начало (0 — «сейчас»). */
+export const startFromShift = (now: number, shift: number) => (shift ? now + shift * MIN_MS : null);
+
+/** «начал раньше на 15 мин» / «начну через 15 мин» / «начало — сейчас». */
+export const shiftLabel = (shift: number) =>
+  shift < 0 ? `начал раньше на ${shortMin(-shift)}` : shift > 0 ? `начну через ${shortMin(shift)}` : 'начало — сейчас';

@@ -1,12 +1,13 @@
 import { useRef, type PointerEvent } from 'react';
 import type { Entry } from '../../db/schema';
 import { MIN_MS, formatClock, formatTimer } from '../../domain/time';
-import { MAX_AGO_MIN, StartFromChip, agoOf, startFromAgo } from './controls/StartFrom';
+import { MAX_SHIFT_MIN, StartFromChip, shiftOf, startFromShift } from './controls/StartFrom';
 import { plannedMsOf, plannedEndOf } from '../../domain/timer';
 
 // Полукруг внизу «Сегодня». По дуге — ползунок длительности (диапазон свой у занятия),
 // в середине — занятие и кнопки. Пока таймер идёт, дуга показывает, сколько прошло.
-// Тематическое начало: тонкая дуга снаружи — «начал раньше на 0…2 ч», со своей ручкой.
+// Тематическое начало: тонкая дуга снаружи со своей ручкой. Середина — «сейчас»,
+// влево — начал раньше (до 2 ч), вправо — начну позже.
 
 const CX = 100, CY = 100, R = 84; // геометрия во «внутренних» единицах SVG (viewBox 200 × 120)
 
@@ -65,7 +66,7 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
     if (a < 0) a = x < CX ? Math.PI : 0;           // ниже центра — прижимаем к краю
     const t = 1 - a / Math.PI;                     // доля дуги слева направо
     if (what.current === 'start') {
-      onSetStart(startFromAgo(Date.now(), Math.round((t * MAX_AGO_MIN) / 5) * 5));
+      onSetStart(startFromShift(Date.now(), Math.round(((t - 0.5) * 2 * MAX_SHIFT_MIN) / 5) * 5));
       return;
     }
     const value = lo + t * (hi - lo);
@@ -75,8 +76,10 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
   const planned = run ? plannedMsOf(run) : 0;
   const progress = run ? (planned ? (now - run.start) / planned : 1) : t;
   const [hx, hy] = at(t);
-  const tAgo = agoOf(startAt, now) / MAX_AGO_MIN;
-  const [sx, sy] = at2(Math.min(1, tAgo));
+  // доля внешней дуги: 0.5 — «сейчас»
+  const tStart = Math.min(1, Math.max(0, 0.5 + shiftOf(startAt, now) / MAX_SHIFT_MIN / 2));
+  const [sx, sy] = at2(tStart);
+  const [mx, my] = at2(0.5);
 
   return (
     <div className="widget dial">
@@ -90,7 +93,9 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
         {themedStart && !run && (
           <>
             <path d={ARC2} className="dial-track ago" />
-            <path d={ARC2} pathLength={1} className="dial-fill ago" style={{ stroke: color, strokeDasharray: `${Math.min(tAgo, 1)} 2` }} />
+            <path d={ARC2} pathLength={1} className="dial-fill ago"
+              style={{ stroke: color, strokeDasharray: `${Math.abs(tStart - 0.5)} 2`, strokeDashoffset: -Math.min(tStart, 0.5) }} />
+            <circle cx={mx} cy={my} r={1.6} className="dial-now-tick" />
             <circle cx={sx} cy={sy} r={5} className="dial-handle ago" style={{ stroke: color }} />
           </>
         )}

@@ -10,8 +10,8 @@ import { ChargeTray, ClockTray, DialTray, TilesTray } from './controls/Trays';
 import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
-import { MIN_MS, startOfLocalDay, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
-import { answerForgotten, saveEntry, snoozeBackupBanner, startTimer, stopTimer } from '../../db/commands';
+import { MIN_MS, startOfLocalDay, formatClock, formatTimer, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
+import { answerForgotten, cancelScheduled, saveEntry, scheduleTimer, snoozeBackupBanner, startTimer, stopTimer, type ScheduledStart } from '../../db/commands';
 import { settingOf, useData } from '../../db/store';
 import { shareBackup } from '../../db/backup';
 import { forgottenTimer, type ForgottenAnswer } from '../../domain/forgotten';
@@ -211,7 +211,24 @@ export default function Today() {
 
   // ——— управление таймером: режим из «Ещё», всегда внутри сворачиваемой панели ———
   // Выбранное начало — на один старт, дальше снова «сейчас».
-  const start = (id: string, durationMs?: number, at?: number) => { void startTimer(id, durationMs, at ?? startAt ?? undefined); setStartAt(null); };
+  // Начало в будущем — не запускаем, а планируем: таймер запустится сам.
+  const start = (id: string, durationMs?: number, at?: number) => {
+    const t = at ?? startAt ?? undefined;
+    if (t !== undefined && t > Date.now()) void scheduleTimer({ activityId: id, at: t, durationMs });
+    else void startTimer(id, durationMs, t);
+    setStartAt(null);
+  };
+  const scheduled = data.settings.scheduledStart as ScheduledStart | undefined;
+  const scheduledBar = scheduled && scheduled.at > now && (
+    <div className="scheduled-bar">
+      <span className="dot" style={{ background: colors.get(scheduled.activityId) }} />
+      <span className="scheduled-text">
+        {name(scheduled.activityId).at(-1)} — в {formatClock(scheduled.at)}
+        <span className="dim"> · через {formatTimer(scheduled.at - now)}</span>
+      </span>
+      <button className="scheduled-cancel" onClick={() => void cancelScheduled()} aria-label="Отменить">✕</button>
+    </div>
+  );
   const control: ControlProps = {
     activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
     run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
@@ -267,6 +284,7 @@ export default function Today() {
       label={name(run?.activityId ?? notingOk ?? dialId).at(-1) ?? ''}
       tray={tray}
     >
+      {scheduledBar}
       {body}
     </Drawer>
   );

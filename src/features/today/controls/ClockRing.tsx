@@ -11,7 +11,7 @@ import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 // «Циферблат»: кольцо — сутки (полночь сверху, по часовой). На нём видно, что уже было сегодня.
 // Тянешь от точки «сейчас» по часовой — ставишь таймер до этого времени;
 // против часовой — записываешь прошедшее время задним числом. Тап в центр — без лимита.
-// Тематическое начало: тонкое кольцо внутри, его ◦ тянешь назад — во сколько начал.
+// Тематическое начало: тонкое кольцо внутри, его ◦ тянешь назад (начал раньше) или вперёд (начну позже).
 
 const C = 100, R = 76;
 // Окружность, начатая сверху и идущая по часовой. pathLength = 1 → длина штриха = доля суток.
@@ -63,13 +63,13 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
     drag.current.acc = start;
     update(start);
   };
-  // Угол на кольце → момент за последние 12 часов (позже «сейчас» — значит, вчера), шаг 5 минут.
+  // Угол на кольце → ближайший к «сейчас» такой момент (±12 часов), шаг 5 минут.
   const setStartAtAngle = (a: number) => {
     let t = day0 + (((a / (2 * Math.PI)) % 1 + 1) % 1) * DAY;
-    if (t > now) t -= DAY;
-    t = Math.max(t, now - 12 * HOUR_MS);
-    const ago = Math.round((now - t) / MIN_MS / 5) * 5;
-    onSetStart(ago > 0 ? now - ago * MIN_MS : null);
+    if (t > now + DAY / 2) t -= DAY;
+    if (t < now - DAY / 2) t += DAY;
+    const shift = Math.round((t - now) / MIN_MS / 5) * 5;
+    onSetStart(shift ? now + shift * MIN_MS : null);
   };
   const move = (e: PointerEvent<SVGSVGElement>) => {
     if (startDrag.current) { setStartAtAngle(angleOf(e).a); return; }
@@ -130,8 +130,12 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
             return (
               <>
                 <circle cx={C} cy={C} r={R_IN} className="ring-in" />
-                {startAt && <path d={`M ${C} ${C - R_IN} A ${R_IN} ${R_IN} 0 1 1 ${C - 0.01} ${C - R_IN}`} pathLength={1} className="ring-in-arc"
-                  style={{ stroke: color, strokeDasharray: `${fNow - Math.max(0, fs)} 2`, strokeDashoffset: -Math.max(0, fs) }} />}
+                {startAt && (() => {
+                  // дуга между «сейчас» и началом (в пределах этих суток)
+                  const f1 = Math.max(0, Math.min(fs, fNow)), f2 = Math.min(1, Math.max(fs, fNow));
+                  return <path d={`M ${C} ${C - R_IN} A ${R_IN} ${R_IN} 0 1 1 ${C - 0.01} ${C - R_IN}`} pathLength={1} className="ring-in-arc"
+                    style={{ stroke: color, strokeDasharray: `${f2 - f1} 2`, strokeDashoffset: -f1 }} />;
+                })()}
                 <circle cx={sx} cy={sy} r={5} className="ring-in-handle" style={{ stroke: color }} />
               </>
             );
@@ -151,7 +155,7 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
               <div className="clock-value">{shortMin(minutes)}</div>
               <div className="dial-sub dim">{startAt ? `с ${formatClock(startAt)} ` : ''}до {formatClock(now + minutes * MIN_MS)}{minutes < lo ? ` · меньше ${shortMin(lo)}` : ''}</div>
               <div className="dial-buttons">
-                <button className="dial-go" style={{ background: color }} onClick={() => { onStart(current, now + minutes * MIN_MS - (startAt ?? now)); cancel(); }}>Старт</button>
+                <button className="dial-go" style={{ background: color }} onClick={() => { onStart(current, Math.max(5 * MIN_MS, now + minutes * MIN_MS - (startAt ?? now))); cancel(); }}>Старт</button>
                 <button className="dial-free" onClick={cancel}>✕</button>
               </div>
             </>
