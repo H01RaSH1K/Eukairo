@@ -28,6 +28,7 @@ import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
 import { PointForm } from '../points/PointSheet';
 import { HabitStrip } from '../habits/HabitStrip';
+import { StartFromSheet } from './controls/StartFrom';
 
 const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
 
@@ -42,6 +43,8 @@ export default function Today() {
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
+  const [startAt, setStartAt] = useState<number | null>(null); // «начал раньше, чем нажал»
+  const [pickingStart, setPickingStart] = useState(false);
   const [noting, setNoting] = useState<string | null>(null); // занятие «без времени»: вместо полукруга — форма записи
   // Куда листали в последний раз — для анимации «страница справа / слева».
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
@@ -207,10 +210,13 @@ export default function Today() {
   );
 
   // ——— управление таймером: режим из «Ещё», всегда внутри сворачиваемой панели ———
+  // Выбранное начало — на один старт, дальше снова «сейчас».
+  const start = (id: string, durationMs?: number) => { void startTimer(id, durationMs, startAt ?? undefined); setStartAt(null); };
   const control: ControlProps = {
     activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
     run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
     name: (id) => name(id).at(-1) ?? '',
+    startAt, onPickStart: () => setPickingStart(true), onStart: start,
   };
   const notingOk = noting && !isHidden(activities, noting) ? noting : null;
   const body = notingOk ? (
@@ -236,8 +242,10 @@ export default function Today() {
         run={run}
         now={now}
         onPick={() => setPicking(true)}
-        onStart={() => void startTimer(dialId, minutes * MIN_MS)}
-        onStartFree={() => void startTimer(dialId)}
+        startAt={startAt}
+        onPickStart={() => setPickingStart(true)}
+        onStart={() => start(dialId, minutes * MIN_MS)}
+        onStartFree={() => start(dialId)}
         onStop={() => void stopTimer()}
         onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
       />
@@ -328,6 +336,8 @@ export default function Today() {
           footer={<button className="btn ghost" onClick={() => { setPicking(false); newRetro(); }}>＋ Добавить запись задним числом</button>}
         />
       )}
+
+      {pickingStart && <StartFromSheet startAt={startAt} now={now} onSet={setStartAt} onClose={() => setPickingStart(false)} />}
 
       {selected && <EntrySheet entry={selected.entry} isNew={selected.isNew} onClose={() => setSelected(null)} />}
 

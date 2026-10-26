@@ -7,6 +7,7 @@
 import { db, type Activity, type Entry, type Habit, type Point } from './schema';
 import { nextHue } from '../domain/colors';
 import { resolveOverlaps } from '../domain/overlaps';
+import { plannedEndOf } from '../domain/timer';
 import { canMoveTo, childrenOf, subtreeIds } from '../domain/tree';
 import type { ForgottenAnswer } from '../domain/forgotten';
 import { dayKey, nextHabitHue } from '../domain/habits';
@@ -27,7 +28,7 @@ async function findRunning(): Promise<Entry | undefined> {
 
 /** Закрыть запись в момент `at` (таймер на время — не позже назначенного конца). */
 async function close(e: Entry, at: number) {
-  const end = Math.max(e.start, Math.min(at, e.plannedEnd ?? at));
+  const end = Math.max(e.start, Math.min(at, plannedEndOf(e) ?? at));
   if (end - e.start < MIN_ENTRY_MS) await db.entries.delete(e.id);
   else await db.entries.update(e.id, { end, updatedAt: Date.now() });
 }
@@ -41,15 +42,26 @@ export function stopTimer(at = Date.now()) {
   });
 }
 
-/** Запустить таймер. `durationMs` — на время (запись закроется сама), без него — без лимита. */
-export function startTimer(activityId: string, durationMs?: number) {
+/**
+ * Запустить таймер. `durationMs` — на время (запись закроется сама), без него — без лимита.
+ * `startAt` — если начал раньше, чем нажал (по умолчанию — сейчас). Тогда идущая запись
+ * закрывается в этот момент, а то, что успели записать после него, обрезается.
+ */
+export function startTimer(activityId: string, durationMs?: number, startAt?: number) {
   return db.transaction('rw', db.entries, async () => {
     const now = Date.now();
+    const start = Math.min(startAt ?? now, now);
     const run = await findRunning();
-    if (run) await close(run, now);
+    if (run) await close(run, Math.max(start, run.start));
+    if (start < now) {
+      const others = await db.entries.where('start').below(now).toArray();
+      const r = resolveOverlaps(others, start, now, now, newId);
+      await db.entries.bulkDelete(r.removed);
+      await db.entries.bulkPut([...r.updated, ...r.added]);
+    }
     await db.entries.add({
-      id: newId(), activityId, start: now, end: null,
-      plannedEnd: durationMs ? now + durationMs : undefined, source: 'timer', updatedAt: now,
+      id: newId(), activityId, start, end: null,
+      plannedMs: durationMs || undefined, source: 'timer', updatedAt: now,
     });
   });
 }
@@ -58,7 +70,8 @@ export function startTimer(activityId: string, durationMs?: number) {
 export function closeExpiredTimer(now = Date.now()) {
   return db.transaction('rw', db.entries, async () => {
     const run = await findRunning();
-    if (run?.plannedEnd && run.plannedEnd <= now) await close(run, run.plannedEnd);
+    const end = run && plannedEndOf(run);
+    if (run && end && end <= now) await close(run, end);
   });
 }
 

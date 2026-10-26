@@ -39,6 +39,47 @@ describe('таймер', () => {
     expect((await entries())[0].end).toBe(25 * MIN);
   });
 
+  it('правка начала таймера на время сдвигает и его конец', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(30 * MIN);
+    await startTimer('a', 60 * MIN);
+    const [run] = await entries();
+    await saveEntry({ ...run, start: 20 * MIN });
+    vi.setSystemTime(85 * MIN);
+    await closeExpiredTimer();
+    expect((await entries())[0]).toMatchObject({ start: 20 * MIN, end: 80 * MIN });
+  });
+
+  it('старый вид (готовый конец) читается и при правке становится длительностью', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(10 * MIN);
+    const old: Entry = { id: 'x', activityId: 'a', start: 0, end: null, plannedEnd: 60 * MIN, source: 'timer', updatedAt: 0 };
+    await db.entries.add(old);
+    vi.setSystemTime(70 * MIN);
+    await closeExpiredTimer();
+    expect((await entries())[0].end).toBe(60 * MIN);
+  });
+
+  it('старт с прошлого времени: идущий закрывается там, записанное после — обрезается', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await logEntry('m', 0, 25 * MIN);
+    vi.setSystemTime(30 * MIN);
+    await startTimer('a');
+    vi.setSystemTime(60 * MIN);
+    await startTimer('b', undefined, 20 * MIN);
+    const list = await entries();
+    expect(list.map((e) => [e.activityId, e.start / MIN, e.end === null ? null : e.end / MIN])).toEqual([['m', 0, 20], ['b', 20, null]]);
+  });
+
+  it('старт с прошлого на время считает конец от выбранного начала', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(60 * MIN);
+    await startTimer('a', 30 * MIN, 40 * MIN);
+    vi.setSystemTime(75 * MIN);
+    await closeExpiredTimer();
+    expect((await entries())[0]).toMatchObject({ start: 40 * MIN, end: 70 * MIN });
+  });
+
   it('стоп раньше минуты — случайный тап, запись выбрасывается', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(0);

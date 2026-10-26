@@ -12,4 +12,7 @@ export interface ControlProps {
   now: number;
   onOpenRun: () => void;            // открыть идущую запись
   name: (id: string) => string;
+  startAt: number | null;           // выбранное начало для следующего старта (null — сейчас)
+  onPickStart: () => void;          // выбрать другое начало
+  onStart: (activityId: string, durationMs?: number) => void; // запустить с учётом startAt
 }

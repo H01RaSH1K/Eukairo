@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import type { Entry } from '../../../db/schema';
 import { formatTimer } from '../../../domain/time';
+import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
 // Сворачиваемая панель внизу — оболочка для любого режима управления.
 // Свёрнута — тонкая полоска: что идёт (с прогрессом по краю) или что запустить.
@@ -39,7 +40,7 @@ export function Drawer({ open, onOpen, run, now, color, label, tray, children }:
     setPull(0);
   };
 
-  const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
+  const planned = run ? plannedMsOf(run) : 0;
   const progress = run ? (planned ? Math.min(1, (now - run.start) / planned) : 1) : 0;
 
   return (
@@ -52,7 +53,7 @@ export function Drawer({ open, onOpen, run, now, color, label, tray, children }:
           <div className="drawer-row">
             <span className="dot" style={{ background: color }} />
             <span className="drawer-name">{label}</span>
-            <span className="drawer-time">{run ? (planned ? formatTimer(Math.max(0, run.plannedEnd! - now)) : formatTimer(now - run.start)) : <span className="dim">потяни вверх ↑</span>}</span>
+            <span className="drawer-time">{run ? (planned ? formatTimer(Math.max(0, plannedEndOf(run)! - now)) : formatTimer(now - run.start)) : <span className="dim">потяни вверх ↑</span>}</span>
           </div>
         )}
         {run && !open && !tray && <div className="drawer-progress" style={{ width: `${progress * 100}%`, background: color }} />}

@@ -5,6 +5,7 @@ import { findOverlaps } from '../../domain/overlaps';
 import { isTimeless, pathOf } from '../../domain/tree';
 import { MIN_MS, addLocalDays, formatClock, formatDuration, startOfLocalDay } from '../../domain/time';
 import { deleteEntry, saveEntry, stopTimer } from '../../db/commands';
+import { withPlannedMs } from '../../domain/timer';
 import { useData } from '../../db/store';
 import { Sheet } from '../../ui/Sheet';
 import { ActivityPicker } from '../activities/ActivityPicker';
@@ -60,10 +61,8 @@ export function EntrySheet({ entry, isNew, onClose }: { entry: Entry; isNew: boo
   const name = (id: string) => pathOf(activities, id).map((a) => a.name).join(' › ');
 
   const save = () => {
-    // Таймер на время хранит свой конец (plannedEnd) отдельно от начала. Сдвинули начало —
-    // сдвигаем и конец на столько же, чтобы длительность таймера осталась прежней.
-    const plannedEnd = isRunning && entry.plannedEnd ? entry.plannedEnd + (start - entry.start) : entry.plannedEnd;
-    void saveEntry({ ...entry, activityId, start, end: isRunning ? null : end, plannedEnd, note: note || undefined });
+    // withPlannedMs: у таймера на время остаётся длительность, конец поедет вместе с началом.
+    void saveEntry({ ...withPlannedMs(entry), activityId, start, end: isRunning ? null : end, note: note || undefined });
     onClose();
   };
 

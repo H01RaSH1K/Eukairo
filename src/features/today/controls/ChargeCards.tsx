@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { timerRange } from '../../../domain/tree';
 import { MIN_MS, formatClock, formatTimer } from '../../../domain/time';
-import { startTimer, stopTimer } from '../../../db/commands';
+import { stopTimer } from '../../../db/commands';
 import { shortMin } from '../Dial';
+import { StartFromChip } from './StartFrom';
 import type { ControlProps } from './types';
+import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
 // «Зарядка»: занятия — крупные карточки в ленте. Нажал и чуть подержал — карточка
 // «схватилась»: дальше палец вверх — больше времени, вниз — меньше (заливка ходит за пальцем).
@@ -13,7 +15,7 @@ import type { ControlProps } from './types';
 const HOLD_MS = 280;   // короче — это тап
 const STEP_PX = 12;    // столько пикселей пальцем = 5 минут
 
-export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpenRun, name }: ControlProps) {
+export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpenRun, name, startAt, onPickStart, onStart }: ControlProps) {
   const [charging, setCharging] = useState<{ id: string; minutes: number } | null>(null);
   // y0 и m0 — где был палец и сколько было минут в момент «схватывания» (null — ещё не схватили)
   const hold = useRef<{ id: string; x: number; y: number; timer: number; el: HTMLElement; pointer: number; y0: number | null; m0: number } | null>(null);
@@ -53,8 +55,8 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
     clearTimeout(h.timer);
     hold.current = null;
     if (fire) {
-      if (charging) startTimer(h.id, charging.minutes * MIN_MS);
-      else startTimer(h.id);
+      if (charging) onStart(h.id, charging.minutes * MIN_MS);
+      else onStart(h.id);
     }
     setCharging(null);
   };
@@ -72,7 +74,7 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
     return () => el.removeEventListener('touchmove', block);
   }, []);
 
-  const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
+  const planned = run ? plannedMsOf(run) : 0;
   const runColor = run ? colors.get(run.activityId) ?? '#888' : '';
 
   return (
@@ -82,8 +84,8 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
           {/* заливка полосы — сколько прошло из запланированного */}
           <div className="charge-run-fill" style={{ width: `${planned ? Math.min(100, ((now - run.start) / planned) * 100) : 100}%` }} />
           <button className="charge-run-name" onClick={onOpenRun}>{name(run.activityId)}</button>
-          <span className="charge-run-time">{planned ? formatTimer(Math.max(0, run.plannedEnd! - now)) : formatTimer(now - run.start)}</span>
-          <span className="charge-run-sub">{planned ? `до ${formatClock(run.plannedEnd!)}` : 'без лимита'}</span>
+          <span className="charge-run-time">{planned ? formatTimer(Math.max(0, plannedEndOf(run)! - now)) : formatTimer(now - run.start)}</span>
+          <span className="charge-run-sub">{planned ? `до ${formatClock(plannedEndOf(run)!)}` : 'без лимита'}</span>
           <button className="charge-stop" onClick={() => stopTimer()}>■</button>
         </div>
       )}
@@ -107,13 +109,17 @@ export function ChargeCards({ activities, colors, quick, onMore, run, now, onOpe
               <div className="charge-fill" />
               <div className="charge-name">{name(id)}</div>
               <div className="charge-value">{c ? shortMin(c.minutes) : `${shortMin(lo)}–${shortMin(hi)}`}</div>
-              {c && <div className="charge-until">до {formatClock(now + c.minutes * MIN_MS)}</div>}
+              {c && <div className="charge-until">до {formatClock((startAt ?? now) + c.minutes * MIN_MS)}</div>}
             </div>
           );
         })}
         <button className="charge-card more" onClick={onMore}>Все занятия…</button>
       </div>
-      {!run && <div className="charge-hint dim">тап — без лимита · подержи и веди ↑↓</div>}
+      {!run && (
+        <div className="charge-hint dim">
+          тап — без лимита · подержи и веди ↑↓ · <StartFromChip startAt={startAt} onPick={onPickStart} />
+        </div>
+      )}
     </div>
   );
 }

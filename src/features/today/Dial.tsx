@@ -1,6 +1,8 @@
 import { useRef, type PointerEvent } from 'react';
 import type { Entry } from '../../db/schema';
 import { MIN_MS, formatClock, formatTimer } from '../../domain/time';
+import { StartFromChip } from './controls/StartFrom';
+import { plannedMsOf, plannedEndOf } from '../../domain/timer';
 
 // Полукруг внизу «Сегодня». По дуге — ползунок длительности (диапазон свой у занятия),
 // в середине — занятие и кнопки. Пока таймер идёт, дуга показывает, сколько прошло.
@@ -20,7 +22,7 @@ export function shortMin(min: number): string {
   return h === 0 ? `${m} мин` : m === 0 ? `${h} ч` : `${h} ч ${m}`;
 }
 
-export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick, onStart, onStartFree, onStop, onOpenRun }: {
+export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt, onPickStart, onPick, onStart, onStartFree, onStop, onOpenRun }: {
   name: string;
   color: string;
   range: [number, number];          // минуты, от и до
@@ -28,6 +30,8 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
   onMinutes: (m: number) => void;
   run: Entry | null;                // идущая запись (если есть)
   now: number;
+  startAt: number | null;           // выбранное начало следующего старта (null — сейчас)
+  onPickStart: () => void;
   onPick: () => void;               // выбрать другое занятие
   onStart: () => void;              // таймер на выбранное время
   onStartFree: () => void;          // без лимита
@@ -52,7 +56,7 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
     onMinutes(Math.min(hi, Math.max(lo, Math.round(value / 5) * 5)));
   };
 
-  const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
+  const planned = run ? plannedMsOf(run) : 0;
   const progress = run ? (planned ? (now - run.start) / planned : 1) : t;
   const [hx, hy] = at(t);
 
@@ -87,8 +91,8 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
             <button className="dial-activity" onClick={onOpenRun}>
               <span className="dot" style={{ background: color }} />{name}
             </button>
-            <div className="dial-value">{planned ? formatTimer(Math.max(0, run.plannedEnd! - now)) : formatTimer(now - run.start)}</div>
-            <div className="dial-sub dim">{planned ? `осталось · до ${formatClock(run.plannedEnd!)}` : `с ${formatClock(run.start)} · без лимита`}</div>
+            <div className="dial-value">{planned ? formatTimer(Math.max(0, plannedEndOf(run)! - now)) : formatTimer(now - run.start)}</div>
+            <div className="dial-sub dim">{planned ? `осталось · до ${formatClock(plannedEndOf(run)!)}` : `с ${formatClock(run.start)} · без лимита`}</div>
             <button className="dial-go stop" onClick={onStop}>Стоп</button>
           </>
         ) : (
@@ -97,7 +101,7 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
               <span className="dot" style={{ background: color }} />{name} <span className="dim">▾</span>
             </button>
             <div className="dial-value">{shortMin(minutes)}</div>
-            <div className="dial-sub dim">до {formatClock(now + minutes * MIN_MS)}</div>
+            <StartFromChip className="dial-sub dim" startAt={startAt} until={(startAt ?? now) + minutes * MIN_MS} onPick={onPickStart} />
             <div className="dial-buttons">
               <button className="dial-go" style={{ background: color }} onClick={onStart}>Старт</button>
               <button className="dial-free" onClick={onStartFree}>∞</button>

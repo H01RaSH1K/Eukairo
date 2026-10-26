@@ -4,6 +4,7 @@ import { timerRange } from '../../../domain/tree';
 import { useData } from '../../../db/store';
 import { shortMin } from '../Dial';
 import type { ControlProps } from './types';
+import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
 // «Трей» — свёрнутая шторка. У каждого режима свой, похожий на его управление в миниатюре:
 // полукруг, кольцо суток, «батарейка» зарядки, плитки. Трей только показывает —
@@ -12,10 +13,10 @@ import type { ControlProps } from './types';
 /** Сколько осталось (таймер) или прошло (без лимита) и доля пройденного (без лимита — 1). */
 function runState({ run, now }: Pick<ControlProps, 'run' | 'now'>) {
   if (!run) return null;
-  const planned = run.plannedEnd ? run.plannedEnd - run.start : 0;
+  const planned = plannedMsOf(run);
   return {
-    time: planned ? formatTimer(Math.max(0, run.plannedEnd! - now)) : formatTimer(now - run.start),
-    sub: planned ? `до ${formatClock(run.plannedEnd!)}` : `с ${formatClock(run.start)}, без лимита`,
+    time: planned ? formatTimer(Math.max(0, plannedEndOf(run)! - now)) : formatTimer(now - run.start),
+    sub: planned ? `до ${formatClock(plannedEndOf(run)!)}` : `с ${formatClock(run.start)}, без лимита`,
     progress: planned ? Math.min(1, (now - run.start) / planned) : 1,
     free: !planned,
   };
@@ -71,7 +72,7 @@ export function ClockTray(p: ControlProps) {
         <circle cx={C} cy={C} r={R} fill="none" strokeWidth={5} className="ring-track-mini" />
         {entries.filter((e) => e.end && e.end > day0 && e.start < p.now)
           .map((e) => arc(f(e.start), f(e.end!), p.colors.get(e.activityId) ?? '#888', e.id, 0.8))}
-        {p.run && arc(f(p.run.start), f(p.run.plannedEnd ?? p.now), p.colors.get(p.run.activityId) ?? '#888', 'run')}
+        {p.run && arc(f(p.run.start), f(plannedEndOf(p.run) ?? p.now), p.colors.get(p.run.activityId) ?? '#888', 'run')}
         <circle cx={C + R * Math.sin(nf * 2 * Math.PI)} cy={C - R * Math.cos(nf * 2 * Math.PI)} r={3} className="ring-now" style={{ strokeWidth: 1.5 }} />
       </svg>
       <Label title={p.name(id)} sub={s ? s.sub : 'тяни от точки по кругу'} time={s?.time} />
