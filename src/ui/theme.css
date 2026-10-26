@@ -445,11 +445,13 @@ html[data-embedded], html[data-embedded] body { height: 100%; overflow: hidden; 
 .start-from.set { color: var(--accent); }
 /* тематическое начало у полукруга: тонкая внешняя дуга со своей ручкой */
 .dial-track.ago, .dial-fill.ago { stroke-width: 3; }
+.dial-fill.ago { stroke-linecap: butt; }
 .dial-fill.ago { opacity: .7; }
 .dial-handle.ago { stroke-width: 2.5; }
 /* «Оформление → Таймер»: живое превью управления */
 .appearance .widget.timer-preview { flex: 6 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; overflow: hidden; }
-.dial-now-tick { fill: var(--text-dim); }
+.dial-tick-mark { stroke: var(--text-dim); stroke-width: 1; opacity: .6; }
+.appearance .widget.timer-preview > .widget { margin-block: auto; background: none; box-shadow: none; }
 /* «начну позже»: запланированный старт над управлением таймером */
 .scheduled-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px; border-radius: 12px; background: var(--chip); font-size: 13px; }
 .scheduled-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }

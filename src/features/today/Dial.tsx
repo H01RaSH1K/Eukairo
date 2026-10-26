@@ -17,9 +17,14 @@ const at = (t: number): [number, number] => [CX - R * Math.cos(t * Math.PI), CY 
 // Вся дуга слева направо через верх. Закрашенную часть рисуем той же дугой,
 // обрезая штрихом: pathLength = 1, штрих длиной t — ровно доля дуги, без пересчёта пути.
 const ARC = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
-const R2 = 97; // внешняя тонкая дуга начала
-const ARC2 = `M ${CX - R2} ${CY} A ${R2} ${R2} 0 0 1 ${CX + R2} ${CY}`;
+// Начало — короткая дуга-«корона» над верхушкой полукруга: середина — «сейчас»,
+// края — ±2 ч. Короткая, чтобы не лезть к подписям и краям основной дуги.
+const R2 = 100;
+const S0 = 0.3, S1 = 0.7; // от и до — доли полукруга
 const at2 = (t: number): [number, number] => [CX - R2 * Math.cos(t * Math.PI), CY - R2 * Math.sin(t * Math.PI)];
+const ARC2 = `M ${at2(S0).join(' ')} A ${R2} ${R2} 0 0 1 ${at2(S1).join(' ')}`;
+/** Засечки каждые полчаса: доли «короны» 0…1. */
+const TICKS = Array.from({ length: 9 }, (_, i) => i / 8);
 
 /** «45 мин», «1 ч», «1 ч 30». */
 export function shortMin(min: number): string {
@@ -60,13 +65,16 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
     const y = ((e.clientY - box.top) / box.height) * 120;
     if (e.type === 'pointerdown') {
       e.currentTarget.setPointerCapture(e.pointerId);
-      what.current = themedStart && Math.hypot(x - CX, y - CY) > R + 7 ? 'start' : 'minutes';
+      const a0 = Math.atan2(CY - y, x - CX) / Math.PI; // 1 — слева, 0 — справа
+      const onCrown = 1 - a0 > S0 - 0.04 && 1 - a0 < S1 + 0.04;
+      what.current = themedStart && onCrown && Math.hypot(x - CX, y - CY) > R + 8 ? 'start' : 'minutes';
     }
     let a = Math.atan2(CY - y, x - CX);            // 0 справа, π слева
     if (a < 0) a = x < CX ? Math.PI : 0;           // ниже центра — прижимаем к краю
     const t = 1 - a / Math.PI;                     // доля дуги слева направо
     if (what.current === 'start') {
-      onSetStart(startFromShift(Date.now(), Math.round(((t - 0.5) * 2 * MAX_SHIFT_MIN) / 5) * 5));
+      const f = Math.min(1, Math.max(0, (t - S0) / (S1 - S0))); // доля «короны»
+      onSetStart(startFromShift(Date.now(), Math.round(((f - 0.5) * 2 * MAX_SHIFT_MIN) / 5) * 5));
       return;
     }
     const value = lo + t * (hi - lo);
@@ -77,9 +85,9 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
   const progress = run ? (planned ? (now - run.start) / planned : 1) : t;
   const [hx, hy] = at(t);
   // доля внешней дуги: 0.5 — «сейчас»
-  const tStart = Math.min(1, Math.max(0, 0.5 + shiftOf(startAt, now) / MAX_SHIFT_MIN / 2));
-  const [sx, sy] = at2(tStart);
-  const [mx, my] = at2(0.5);
+  // доля «короны»: 0.5 — «сейчас»
+  const fStart = Math.min(1, Math.max(0, 0.5 + shiftOf(startAt, now) / MAX_SHIFT_MIN / 2));
+  const [sx, sy] = at2(S0 + fStart * (S1 - S0));
 
   return (
     <div className="widget dial">
@@ -93,9 +101,14 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
         {themedStart && !run && (
           <>
             <path d={ARC2} className="dial-track ago" />
+            {TICKS.map((f) => {
+              const t = S0 + f * (S1 - S0);
+              const [x1, y1] = at2(t);
+              const k = f === 0.5 ? 5 : 2.5; // «сейчас» — засечка длиннее
+              return <line key={f} x1={x1} y1={y1} x2={CX + (x1 - CX) * (1 + k / R2)} y2={CY + (y1 - CY) * (1 + k / R2)} className="dial-tick-mark" />;
+            })}
             <path d={ARC2} pathLength={1} className="dial-fill ago"
-              style={{ stroke: color, strokeDasharray: `${Math.abs(tStart - 0.5)} 2`, strokeDashoffset: -Math.min(tStart, 0.5) }} />
-            <circle cx={mx} cy={my} r={1.6} className="dial-now-tick" />
+              style={{ stroke: color, strokeDasharray: `${Math.abs(fStart - 0.5)} 2`, strokeDashoffset: -Math.min(fStart, 0.5) }} />
             <circle cx={sx} cy={sy} r={5} className="dial-handle ago" style={{ stroke: color }} />
           </>
         )}
