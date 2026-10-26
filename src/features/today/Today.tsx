@@ -10,8 +10,8 @@ import { ChargeTray, ClockTray, DialTray, TilesTray } from './controls/Trays';
 import { Drawer } from './controls/Drawer';
 import { Tiles } from './controls/Tiles';
 import type { ControlProps } from './controls/types';
-import { MIN_MS, startOfLocalDay, formatClock, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
-import { answerForgotten, saveEntry, snoozeBackupBanner, startTimer, stopTimer } from '../../db/commands';
+import { MIN_MS, startOfLocalDay, formatClock, formatTimer, formatDuration, periodRange, periodTitle, periodTitles, shiftPeriod, type Period } from '../../domain/time';
+import { answerForgotten, cancelScheduled, saveEntry, scheduleTimer, snoozeBackupBanner, startTimer, stopTimer, type ScheduledStart } from '../../db/commands';
 import { settingOf, useData } from '../../db/store';
 import { shareBackup } from '../../db/backup';
 import { forgottenTimer, type ForgottenAnswer } from '../../domain/forgotten';
@@ -28,6 +28,7 @@ import { ActivityPicker } from '../activities/ActivityPicker';
 import { EntrySheet } from '../timeline/EntrySheet';
 import { PointForm } from '../points/PointSheet';
 import { HabitStrip } from '../habits/HabitStrip';
+import { StartFromSheet } from './controls/StartFrom';
 
 const BACKUP_EVERY_MS = 3 * 86_400_000; // плашка «сделай бэкап», если его не было 3 дня
 
@@ -42,6 +43,8 @@ export default function Today() {
   const [selected, setSelected] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
+  const [startAt, setStartAt] = useState<number | null>(null); // «начал раньше, чем нажал»
+  const [pickingStart, setPickingStart] = useState(false);
   const [noting, setNoting] = useState<string | null>(null); // занятие «без времени»: вместо полукруга — форма записи
   // Куда листали в последний раз — для анимации «страница справа / слева».
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
@@ -207,10 +210,30 @@ export default function Today() {
   );
 
   // ——— управление таймером: режим из «Ещё», всегда внутри сворачиваемой панели ———
+  // Выбранное начало — на один старт, дальше снова «сейчас».
+  // Начало в будущем — не запускаем, а планируем: таймер запустится сам.
+  const start = (id: string, durationMs?: number, at?: number) => {
+    const t = at ?? startAt ?? undefined;
+    if (t !== undefined && t > Date.now()) void scheduleTimer({ activityId: id, at: t, durationMs });
+    else void startTimer(id, durationMs, t);
+    setStartAt(null);
+  };
+  const scheduled = data.settings.scheduledStart as ScheduledStart | undefined;
+  const scheduledBar = scheduled && scheduled.at > now && (
+    <div className="scheduled-bar">
+      <span className="dot" style={{ background: colors.get(scheduled.activityId) }} />
+      <span className="scheduled-text">
+        {name(scheduled.activityId).at(-1)} — в {formatClock(scheduled.at)}
+        <span className="dim"> · через {formatTimer(scheduled.at - now)}</span>
+      </span>
+      <button className="scheduled-cancel" onClick={() => void cancelScheduled()} aria-label="Отменить">✕</button>
+    </div>
+  );
   const control: ControlProps = {
     activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
     run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
     name: (id) => name(id).at(-1) ?? '',
+    startAt, onPickStart: () => setPickingStart(true), onSetStart: setStartAt, themedStart: design.startPick === 'themed', onStart: start,
   };
   const notingOk = noting && !isHidden(activities, noting) ? noting : null;
   const body = notingOk ? (
@@ -236,8 +259,12 @@ export default function Today() {
         run={run}
         now={now}
         onPick={() => setPicking(true)}
-        onStart={() => void startTimer(dialId, minutes * MIN_MS)}
-        onStartFree={() => void startTimer(dialId)}
+        startAt={startAt}
+        onPickStart={() => setPickingStart(true)}
+        onSetStart={setStartAt}
+        themedStart={design.startPick === 'themed'}
+        onStart={() => start(dialId, minutes * MIN_MS)}
+        onStartFree={() => start(dialId)}
         onStop={() => void stopTimer()}
         onOpenRun={() => run && setSelected({ entry: run, isNew: false })}
       />
@@ -257,6 +284,7 @@ export default function Today() {
       label={name(run?.activityId ?? notingOk ?? dialId).at(-1) ?? ''}
       tray={tray}
     >
+      {scheduledBar}
       {body}
     </Drawer>
   );
@@ -328,6 +356,8 @@ export default function Today() {
           footer={<button className="btn ghost" onClick={() => { setPicking(false); newRetro(); }}>＋ Добавить запись задним числом</button>}
         />
       )}
+
+      {pickingStart && <StartFromSheet startAt={startAt} now={now} onSet={setStartAt} onClose={() => setPickingStart(false)} />}
 
       {selected && <EntrySheet entry={selected.entry} isNew={selected.isNew} onClose={() => setSelected(null)} />}
 

@@ -1,9 +1,13 @@
 import { useRef, type PointerEvent } from 'react';
 import type { Entry } from '../../db/schema';
 import { MIN_MS, formatClock, formatTimer } from '../../domain/time';
+import { MAX_SHIFT_MIN, StartFromChip, shiftOf, startFromShift } from './controls/StartFrom';
+import { plannedMsOf, plannedEndOf } from '../../domain/timer';
 
 // Полукруг внизу «Сегодня». По дуге — ползунок длительности (диапазон свой у занятия),
 // в середине — занятие и кнопки. Пока таймер идёт, дуга показывает, сколько прошло.
+// Тематическое начало: тонкая дуга снаружи со своей ручкой. Середина — «сейчас»,
+// влево — начал раньше (до 2 ч), вправо — начну позже.
 
 const CX = 100, CY = 100, R = 84; // геометрия во «внутренних» единицах SVG (viewBox 200 × 120)
 
@@ -13,6 +17,16 @@ const at = (t: number): [number, number] => [CX - R * Math.cos(t * Math.PI), CY 
 // Вся дуга слева направо через верх. Закрашенную часть рисуем той же дугой,
 // обрезая штрихом: pathLength = 1, штрих длиной t — ровно доля дуги, без пересчёта пути.
 const ARC = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
+// Начало — тонкая дуга снаружи полукруга на всю его длину: середина — «сейчас»,
+// левый край — на 2 ч раньше, правый — на 2 ч позже. Засечки — каждые полчаса.
+const R2 = 104;
+// Место под внешнюю дугу (единиц SVG): сверху и по бокам, чтобы она не вылезала за карточку.
+const PAD_TOP = 16, PAD_X = 10;
+const S0 = 0, S1 = 1; // от и до — доли полукруга (вся дуга)
+const at2 = (t: number): [number, number] => [CX - R2 * Math.cos(t * Math.PI), CY - R2 * Math.sin(t * Math.PI)];
+const ARC2 = `M ${at2(S0).join(' ')} A ${R2} ${R2} 0 0 1 ${at2(S1).join(' ')}`;
+/** Засечки каждые полчаса: доли «короны» 0…1. */
+const TICKS = Array.from({ length: 9 }, (_, i) => i / 8);
 
 /** «45 мин», «1 ч», «1 ч 30». */
 export function shortMin(min: number): string {
@@ -20,7 +34,7 @@ export function shortMin(min: number): string {
   return h === 0 ? `${m} мин` : m === 0 ? `${h} ч` : `${h} ч ${m}`;
 }
 
-export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick, onStart, onStartFree, onStop, onOpenRun }: {
+export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt, onPickStart, onSetStart, themedStart, onPick, onStart, onStartFree, onStop, onOpenRun }: {
   name: string;
   color: string;
   range: [number, number];          // минуты, от и до
@@ -28,6 +42,10 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
   onMinutes: (m: number) => void;
   run: Entry | null;                // идущая запись (если есть)
   now: number;
+  startAt: number | null;           // выбранное начало следующего старта (null — сейчас)
+  onPickStart: () => void;
+  onSetStart: (t: number | null) => void;
+  themedStart: boolean;             // показывать внешнюю дугу начала
   onPick: () => void;               // выбрать другое занятие
   onStart: () => void;              // таймер на выбранное время
   onStartFree: () => void;          // без лимита
@@ -40,31 +58,63 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
 
   // Перетаскивание: угол от центра → доля дуги → минуты с шагом 5.
   // setPointerCapture ≈ «захват мыши»: события идут сюда, даже если палец ушёл за пределы.
+  // Что тянем: длительность или (снаружи дуги, если включено) начало.
+  const what = useRef<'minutes' | 'start'>('minutes');
   const drag = (e: PointerEvent<SVGSVGElement>) => {
     if (run || (e.type === 'pointermove' && !e.currentTarget.hasPointerCapture(e.pointerId))) return;
-    if (e.type === 'pointerdown') e.currentTarget.setPointerCapture(e.pointerId);
     const box = svg.current!.getBoundingClientRect();
-    const x = ((e.clientX - box.left) / box.width) * 200;
-    const y = ((e.clientY - box.top) / box.height) * 120;
+    const top = themedStart ? PAD_TOP : 0, side = themedStart ? PAD_X : 0;
+    const x = ((e.clientX - box.left) / box.width) * (200 + 2 * side) - side;
+    const y = ((e.clientY - box.top) / box.height) * (120 + top) - top;
+    if (e.type === 'pointerdown') {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const a0 = Math.atan2(CY - y, x - CX) / Math.PI; // 1 — слева, 0 — справа
+      const onCrown = 1 - a0 > S0 - 0.04 && 1 - a0 < S1 + 0.04;
+      what.current = themedStart && onCrown && Math.hypot(x - CX, y - CY) > R + 8 ? 'start' : 'minutes';
+    }
     let a = Math.atan2(CY - y, x - CX);            // 0 справа, π слева
     if (a < 0) a = x < CX ? Math.PI : 0;           // ниже центра — прижимаем к краю
-    const value = lo + (1 - a / Math.PI) * (hi - lo);
+    const t = 1 - a / Math.PI;                     // доля дуги слева направо
+    if (what.current === 'start') {
+      const f = Math.min(1, Math.max(0, (t - S0) / (S1 - S0))); // доля «короны»
+      onSetStart(startFromShift(Date.now(), Math.round(((f - 0.5) * 2 * MAX_SHIFT_MIN) / 5) * 5));
+      return;
+    }
+    const value = lo + t * (hi - lo);
     onMinutes(Math.min(hi, Math.max(lo, Math.round(value / 5) * 5)));
   };
 
-  const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
+  const planned = run ? plannedMsOf(run) : 0;
   const progress = run ? (planned ? (now - run.start) / planned : 1) : t;
   const [hx, hy] = at(t);
+  // доля внешней дуги: 0.5 — «сейчас»
+  // доля «короны»: 0.5 — «сейчас»
+  const fStart = Math.min(1, Math.max(0, 0.5 + shiftOf(startAt, now) / MAX_SHIFT_MIN / 2));
+  const [sx, sy] = at2(S0 + fStart * (S1 - S0));
 
   return (
-    <div className="widget dial">
+    <div className={'widget dial' + (themedStart && !run ? ' crown' : '')}>
       <svg
         ref={svg}
-        viewBox="0 0 200 120"
+        viewBox={themedStart ? `${-PAD_X} ${-PAD_TOP} ${200 + 2 * PAD_X} ${120 + PAD_TOP}` : '0 0 200 120'}
         className={'dial-svg' + (run ? ' running' : '')}
         onPointerDown={drag}
         onPointerMove={drag}
       >
+        {themedStart && !run && (
+          <>
+            <path d={ARC2} className="dial-track ago" />
+            {TICKS.map((f) => {
+              const t = S0 + f * (S1 - S0);
+              const [x1, y1] = at2(t);
+              const k = f === 0.5 ? 5 : 2.5; // «сейчас» — засечка длиннее
+              return <line key={f} x1={x1} y1={y1} x2={CX + (x1 - CX) * (1 + k / R2)} y2={CY + (y1 - CY) * (1 + k / R2)} className="dial-tick-mark" />;
+            })}
+            <path d={ARC2} pathLength={1} className="dial-fill ago"
+              style={{ stroke: color, strokeDasharray: `${Math.abs(fStart - 0.5)} 2`, strokeDashoffset: -Math.min(fStart, 0.5) }} />
+            <circle cx={sx} cy={sy} r={5} className="dial-handle ago" style={{ stroke: color }} />
+          </>
+        )}
         <path d={ARC} className="dial-track" />
         <path
           d={ARC}
@@ -87,8 +137,8 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
             <button className="dial-activity" onClick={onOpenRun}>
               <span className="dot" style={{ background: color }} />{name}
             </button>
-            <div className="dial-value">{planned ? formatTimer(Math.max(0, run.plannedEnd! - now)) : formatTimer(now - run.start)}</div>
-            <div className="dial-sub dim">{planned ? `осталось · до ${formatClock(run.plannedEnd!)}` : `с ${formatClock(run.start)} · без лимита`}</div>
+            <div className="dial-value">{planned ? formatTimer(Math.max(0, plannedEndOf(run)! - now)) : formatTimer(now - run.start)}</div>
+            <div className="dial-sub dim">{planned ? `осталось · до ${formatClock(plannedEndOf(run)!)}` : `с ${formatClock(run.start)} · без лимита`}</div>
             <button className="dial-go stop" onClick={onStop}>Стоп</button>
           </>
         ) : (
@@ -97,7 +147,7 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, onPick,
               <span className="dot" style={{ background: color }} />{name} <span className="dim">▾</span>
             </button>
             <div className="dial-value">{shortMin(minutes)}</div>
-            <div className="dial-sub dim">до {formatClock(now + minutes * MIN_MS)}</div>
+            <StartFromChip className="dial-sub dim" startAt={startAt} until={(startAt ?? now) + minutes * MIN_MS} onPick={onPickStart} />
             <div className="dial-buttons">
               <button className="dial-go" style={{ background: color }} onClick={onStart}>Старт</button>
               <button className="dial-free" onClick={onStartFree}>∞</button>

@@ -1,25 +1,27 @@
 import { useState, type CSSProperties } from 'react';
 import { timerRange } from '../../../domain/tree';
 import { MIN_MS, formatClock, formatTimer } from '../../../domain/time';
-import { startTimer, stopTimer } from '../../../db/commands';
+import { stopTimer } from '../../../db/commands';
 import { shortMin } from '../Dial';
+import { MAX_SHIFT_MIN, StartFromChip, shiftLabel, shiftOf, startFromShift } from './StartFrom';
 import type { ControlProps } from './types';
+import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
 // «Плитки»: плитки частых занятий, ползунок длительности, «Старт» и «∞».
 // Пока таймер идёт — крупное время, «Изменить» и «Стоп».
 
-export function Tiles({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name }: ControlProps) {
+export function Tiles({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name, startAt, onPickStart, onSetStart, themedStart, onStart }: ControlProps) {
   const [minutesFor, setMinutesFor] = useState<Record<string, number>>({});
   const [lo, hi] = timerRange(activities, current);
   const minutes = Math.min(hi, Math.max(lo, minutesFor[current] ?? Math.round((lo + hi) / 10) * 5));
   const color = colors.get(current) ?? '#888';
-  const planned = run?.plannedEnd ? run.plannedEnd - run.start : 0;
+  const planned = run ? plannedMsOf(run) : 0;
 
   if (run) {
     return (
       <div className="tiles">
-        <div className="tiles-big">{planned ? formatTimer(Math.max(0, run.plannedEnd! - now)) : formatTimer(now - run.start)}</div>
-        <div className="dim center">{name(run.activityId)} · {planned ? `до ${formatClock(run.plannedEnd!)}` : `с ${formatClock(run.start)}, без лимита`}</div>
+        <div className="tiles-big">{planned ? formatTimer(Math.max(0, plannedEndOf(run)! - now)) : formatTimer(now - run.start)}</div>
+        <div className="dim center">{name(run.activityId)} · {planned ? `до ${formatClock(plannedEndOf(run)!)}` : `с ${formatClock(run.start)}, без лимита`}</div>
         <div className="tiles-actions">
           <button className="btn" onClick={onOpenRun}>Изменить</button>
           <button className="btn primary" onClick={() => stopTimer()}>Стоп</button>
@@ -39,14 +41,23 @@ export function Tiles({ activities, colors, quick, current, onChoose, onMore, ru
       </div>
       <div className="tiles-duration">
         <span className="tiles-big">{shortMin(minutes)}</span>
-        <span className="dim">до {formatClock(now + minutes * MIN_MS)}</span>
+        <StartFromChip className="dim" startAt={startAt} until={(startAt ?? now) + minutes * MIN_MS} onPick={onPickStart} />
       </div>
       <input className="slider" type="range" min={lo} max={hi} step={5} value={minutes}
         style={{ accentColor: color }}
         onChange={(e) => setMinutesFor({ ...minutesFor, [current]: Number(e.target.value) })} />
+      {/* тематическое начало: второй ползунок, середина — «сейчас», влево — раньше, вправо — позже */}
+      {themedStart && (
+        <label className="tiles-ago dim">
+          <span>{shiftLabel(shiftOf(startAt, now))}</span>
+          <input className="slider" type="range" min={-MAX_SHIFT_MIN} max={MAX_SHIFT_MIN} step={5} value={shiftOf(startAt, now)}
+            style={{ accentColor: color }}
+            onChange={(e) => onSetStart(startFromShift(now, Number(e.target.value)))} />
+        </label>
+      )}
       <div className="tiles-actions">
-        <button className="btn" onClick={() => startTimer(current)}>∞ Без лимита</button>
-        <button className="btn primary" style={{ background: color }} onClick={() => startTimer(current, minutes * MIN_MS)}>Старт · {shortMin(minutes)}</button>
+        <button className="btn" onClick={() => onStart(current)}>∞ Без лимита</button>
+        <button className="btn primary" style={{ background: color }} onClick={() => onStart(current, minutes * MIN_MS)}>Старт · {shortMin(minutes)}</button>
       </div>
     </div>
   );

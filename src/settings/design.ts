@@ -12,6 +12,23 @@ export const modes: { id: ModeId; title: string; hint: string }[] = [
   { id: 'tiles', title: 'Плитки', hint: 'Плитки частых занятий, ползунок длительности, «Старт» и «∞»' },
 ];
 
+// Как выбрать начало раньше или позже, чем нажал: простое — строчка «сейчас ▾» и лист с вариантами
+// (одинаково во всех режимах); тематическое — ещё и свой жест в каждом режиме.
+export type StartPick = 'simple' | 'themed';
+
+export const startPicks: { id: StartPick; title: string; hint: string }[] = [
+  { id: 'simple', title: 'Простое', hint: 'Под таймером строчка «сейчас ▾»: тап — «5…60 мин назад», «через 5…60 мин» или точное время. Начало в будущем — таймер запустится сам' },
+  { id: 'themed', title: 'Тематическое', hint: 'Ещё и свой жест в каждом режиме' },
+];
+
+/** Тематический жест начала у каждого режима — подсказка для «Оформления». */
+export const themedStartHints: Record<ModeId, string> = {
+  dial: 'Тонкая дуга снаружи полукруга: её ручка в середине — «сейчас», влево — раньше, вправо — позже',
+  clock: 'Внутреннее кольцо: тяни ◦ на время начала — назад или вперёд',
+  charge: 'Схватил карточку — веди палец влево (раньше) или вправо (позже)',
+  tiles: 'Второй ползунок: середина — сейчас, влево — раньше, вправо — позже',
+};
+
 export type ThemeId = 'night' | 'paper' | 'neon' | 'cathedral' | 'frost' | 'dusk';
 
 /** Темы: палитра и материал стекла (CSS — ui/themes.css). sw — образец для выбора: фон, пустое стекло, свинец, акцент. */
@@ -29,6 +46,7 @@ export interface Design {
   showcase: boolean; // витрина: мозаика на весь экран, панели из матового стекла
   theme: ThemeId;
   feedByDuration: boolean; // Лента: высота записи по длительности (иначе все одинаковые)
+  startPick: StartPick;
 }
 
 const KEY = 'eukairo.design';
@@ -46,6 +64,7 @@ function load(raw = readRaw()): Design {
         showcase: d.showcase ?? true,
         theme: themes.some((t) => t.id === d.theme) ? d.theme! : 'night',
         feedByDuration: d.feedByDuration ?? true,
+        startPick: d.startPick === 'themed' ? 'themed' : 'simple',
       };
     }
     // старые значения, когда витрина была отдельным режимом
@@ -53,9 +72,9 @@ function load(raw = readRaw()): Design {
       classic: { mode: 'dial', showcase: false }, immersive: { mode: 'dial', showcase: true },
       clock: { mode: 'clock', showcase: true }, charge: { mode: 'charge', showcase: true }, pull: { mode: 'tiles', showcase: true },
     };
-    if (raw && old[raw]) return { ...old[raw], theme: 'night', feedByDuration: true };
+    if (raw && old[raw]) return { ...old[raw], theme: 'night', feedByDuration: true, startPick: 'simple' };
   } catch { /* приватный режим */ }
-  return { mode: 'dial', showcase: true, theme: 'night', feedByDuration: true };
+  return { mode: 'dial', showcase: true, theme: 'night', feedByDuration: true, startPick: 'simple' };
 }
 
 let current = load();

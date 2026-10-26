@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState, type ReactNode } from 'react';
 import { activityColors } from '../../domain/colors';
 import { parentsMap, toSpans } from '../../domain/spans';
 import { needIds } from '../../domain/tree';
@@ -10,15 +10,42 @@ import { useNow } from '../../ui/useNow';
 import { lazyViz } from '../../visualizations/lazy';
 import { findVisualization, visualizations } from '../../visualizations/registry';
 import { SettingControl } from './SettingControl';
+import { TimerLook } from './TimerLook';
 
 // Экран «Оформление»: у дня, недели и месяца — свой стиль и свои настройки.
 // Сверху выбираем, что настраиваем; ниже живое превью, стили с миниатюрами и настройки стиля.
 // Настройки берутся из описаний в реестре, поэтому новый стиль появляется здесь сам.
+// Последняя вкладка — «Таймер»: режим управления и выбор начала (TimerLook.tsx).
 export default function Appearance({ onBack }: { onBack: () => void }) {
+  const [tab, setTab] = useState<Period | 'timer'>('day');
+  const tabs = (
+    <Segmented
+      options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }, { id: 'timer', label: 'Таймер' }]}
+      value={tab}
+      onChange={setTab}
+    />
+  );
+  if (tab === 'timer') {
+    return (
+      <div className="screen fit appearance">
+        <div className="page-head">
+          <button className="nav-arrow" onClick={onBack} aria-label="Назад">‹</button>
+          <h1>Оформление</h1>
+          <span />
+        </div>
+        {tabs}
+        <TimerLook />
+      </div>
+    );
+  }
+  return <VizLook scale={tab} tabs={tabs} onBack={onBack} />;
+}
+
+// Мозаика и прочие стили — для дня, недели или месяца.
+function VizLook({ scale, tabs, onBack }: { scale: Period; tabs: ReactNode; onBack: () => void }) {
   const { activities, entries, running } = useData();
   const look = useAppearance();
   const now = useNow(30_000);
-  const [scale, setScale] = useState<Period>('day');
   const plugin = findVisualization(look[scale].vizId);
   const values = settingsOf(look, scale);
   const colors = useMemo(() => activityColors(activities), [activities]);
@@ -50,11 +77,7 @@ export default function Appearance({ onBack }: { onBack: () => void }) {
         <button className="btn small ghost" disabled={!changed} onClick={() => resetSettings(scale, plugin.id)}>Сбросить</button>
       </div>
 
-      <Segmented
-        options={[{ id: 'day', label: 'День' }, { id: 'week', label: 'Неделя' }, { id: 'month', label: 'Месяц' }]}
-        value={scale}
-        onChange={setScale}
-      />
+      {tabs}
 
       <div className="widget viz preview">
         <div className="preview-box">

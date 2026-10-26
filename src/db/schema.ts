@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { migrateHabitParams } from '../domain/points';
+import { withPlannedMs } from '../domain/timer';
 
 // Занятие — узел дерева. parentId = null → корневое.
 // interface в TS ≈ record/POCO в C#, но существует только при компиляции:
@@ -29,7 +30,8 @@ export interface Entry {
   activityId: string;
   start: number;
   end: number | null;         // null = таймер идёт
-  plannedEnd?: number;        // таймер на время: когда закрыть запись сама (нет = без лимита)
+  plannedMs?: number;         // таймер на время: через сколько от начала закрыть запись саму (нет = без лимита)
+  plannedEnd?: number;        // старый вид того же: готовый момент конца. Читать через domain/timer.ts
   note?: string;
   source: 'timer' | 'manual'; // строковый union вместо enum
   updatedAt: number;
@@ -152,5 +154,13 @@ db.version(4).stores({}).upgrade(async (tx) => {
   const tracked = new Set((await tx.table('entries').toArray()).map((e: Entry) => e.activityId));
   await tx.table('activities').toCollection().modify((a: Activity) => {
     if (a.id.startsWith('act-') && !tracked.has(a.id)) a.timeless = true;
+  });
+});
+// v5: таймер на время хранит длительность вместо готового конца — тогда правка начала
+// сдвигает и конец. updatedAt не трогаем: смысл записи не меняется, синхронизации нечего слать.
+db.version(5).stores({}).upgrade(async (tx) => {
+  await tx.table('entries').toCollection().modify((e: Entry, ref) => {
+    // ref.value ≈ заменить объект целиком (так из него пропадёт plannedEnd)
+    if (e.plannedEnd) ref.value = withPlannedMs(e);
   });
 });
