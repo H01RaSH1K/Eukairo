@@ -17,11 +17,12 @@ const at = (t: number): [number, number] => [CX - R * Math.cos(t * Math.PI), CY 
 // Вся дуга слева направо через верх. Закрашенную часть рисуем той же дугой,
 // обрезая штрихом: pathLength = 1, штрих длиной t — ровно доля дуги, без пересчёта пути.
 const ARC = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
-// Начало — короткая дуга-«корона» над верхушкой полукруга: середина — «сейчас»,
-// края — ±2 ч. Короткая, чтобы не лезть к подписям и краям основной дуги.
+// Начало — тонкая дуга снаружи полукруга на всю его длину: середина — «сейчас»,
+// левый край — на 2 ч раньше, правый — на 2 ч позже. Засечки — каждые полчаса.
 const R2 = 104;
-const CROWN_TOP = 16; // столько места добавляем над полукругом под «корону» (единиц SVG)
-const S0 = 0.3, S1 = 0.7; // от и до — доли полукруга
+// Место под внешнюю дугу (единиц SVG): сверху и по бокам, чтобы она не вылезала за карточку.
+const PAD_TOP = 16, PAD_X = 10;
+const S0 = 0, S1 = 1; // от и до — доли полукруга (вся дуга)
 const at2 = (t: number): [number, number] => [CX - R2 * Math.cos(t * Math.PI), CY - R2 * Math.sin(t * Math.PI)];
 const ARC2 = `M ${at2(S0).join(' ')} A ${R2} ${R2} 0 0 1 ${at2(S1).join(' ')}`;
 /** Засечки каждые полчаса: доли «короны» 0…1. */
@@ -62,8 +63,8 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
   const drag = (e: PointerEvent<SVGSVGElement>) => {
     if (run || (e.type === 'pointermove' && !e.currentTarget.hasPointerCapture(e.pointerId))) return;
     const box = svg.current!.getBoundingClientRect();
-    const x = ((e.clientX - box.left) / box.width) * 200;
-    const top = themedStart ? CROWN_TOP : 0;
+    const top = themedStart ? PAD_TOP : 0, side = themedStart ? PAD_X : 0;
+    const x = ((e.clientX - box.left) / box.width) * (200 + 2 * side) - side;
     const y = ((e.clientY - box.top) / box.height) * (120 + top) - top;
     if (e.type === 'pointerdown') {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -92,10 +93,10 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
   const [sx, sy] = at2(S0 + fStart * (S1 - S0));
 
   return (
-    <div className="widget dial">
+    <div className={'widget dial' + (themedStart && !run ? ' crown' : '')}>
       <svg
         ref={svg}
-        viewBox={themedStart ? `0 ${-CROWN_TOP} 200 ${120 + CROWN_TOP}` : '0 0 200 120'}
+        viewBox={themedStart ? `${-PAD_X} ${-PAD_TOP} ${200 + 2 * PAD_X} ${120 + PAD_TOP}` : '0 0 200 120'}
         className={'dial-svg' + (run ? ' running' : '')}
         onPointerDown={drag}
         onPointerMove={drag}

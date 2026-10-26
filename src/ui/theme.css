@@ -456,3 +456,7 @@ html[data-embedded], html[data-embedded] body { height: 100%; overflow: hidden; 
 .scheduled-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px; border-radius: 12px; background: var(--chip); font-size: 13px; }
 .scheduled-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .scheduled-cancel { border: 0; background: none; color: var(--text-dim); font: inherit; padding: 2px 4px; }
+/* с внешней дугой начала полукруг чуть меньше — центр опускаем, чтобы не наезжал на ручку */
+.widget.dial.crown .dial-center { bottom: 2px; gap: 0; }
+.widget.dial.crown .dial-value { margin-top: 2px; line-height: 1.05; }
+.widget.dial.crown .dial-buttons { margin-top: 4px; }
