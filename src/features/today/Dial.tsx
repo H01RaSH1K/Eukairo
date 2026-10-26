@@ -19,7 +19,8 @@ const at = (t: number): [number, number] => [CX - R * Math.cos(t * Math.PI), CY 
 const ARC = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
 // Начало — короткая дуга-«корона» над верхушкой полукруга: середина — «сейчас»,
 // края — ±2 ч. Короткая, чтобы не лезть к подписям и краям основной дуги.
-const R2 = 100;
+const R2 = 104;
+const CROWN_TOP = 16; // столько места добавляем над полукругом под «корону» (единиц SVG)
 const S0 = 0.3, S1 = 0.7; // от и до — доли полукруга
 const at2 = (t: number): [number, number] => [CX - R2 * Math.cos(t * Math.PI), CY - R2 * Math.sin(t * Math.PI)];
 const ARC2 = `M ${at2(S0).join(' ')} A ${R2} ${R2} 0 0 1 ${at2(S1).join(' ')}`;
@@ -62,7 +63,8 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
     if (run || (e.type === 'pointermove' && !e.currentTarget.hasPointerCapture(e.pointerId))) return;
     const box = svg.current!.getBoundingClientRect();
     const x = ((e.clientX - box.left) / box.width) * 200;
-    const y = ((e.clientY - box.top) / box.height) * 120;
+    const top = themedStart ? CROWN_TOP : 0;
+    const y = ((e.clientY - box.top) / box.height) * (120 + top) - top;
     if (e.type === 'pointerdown') {
       e.currentTarget.setPointerCapture(e.pointerId);
       const a0 = Math.atan2(CY - y, x - CX) / Math.PI; // 1 — слева, 0 — справа
@@ -93,7 +95,7 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
     <div className="widget dial">
       <svg
         ref={svg}
-        viewBox="0 0 200 120"
+        viewBox={themedStart ? `0 ${-CROWN_TOP} 200 ${120 + CROWN_TOP}` : '0 0 200 120'}
         className={'dial-svg' + (run ? ' running' : '')}
         onPointerDown={drag}
         onPointerMove={drag}
