@@ -62,3 +62,15 @@ export function StartFromSheet({ startAt, now, onSet, onClose }: {
     </Sheet>
   );
 }
+
+// ——— для тематических жестов: начало как «на столько минут раньше» ———
+
+/** Насколько далеко назад тянут жесты (дальше — через лист). */
+export const MAX_AGO_MIN = 120;
+
+/** Выбранное начало → «N мин назад» (кратно 5). */
+export const agoOf = (startAt: number | null, now: number) =>
+  startAt === null ? 0 : Math.max(0, Math.round((now - startAt) / MIN_MS / 5) * 5);
+
+/** «N мин назад» → начало (0 — «сейчас»). */
+export const startFromAgo = (now: number, ago: number) => (ago > 0 ? now - ago * MIN_MS : null);

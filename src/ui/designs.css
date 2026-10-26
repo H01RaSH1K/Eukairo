@@ -258,3 +258,7 @@ html[data-focus] .tabbar { display: none; }
 .today.focus .focus-plaque { position: fixed !important; }
 /* счётчик сегментов под итогом: мельче и тише */
 .focus-count { margin-top: 4px; font-size: 10px; letter-spacing: .18em; opacity: .75; font-variant-numeric: tabular-nums; }
+/* тематическое начало у циферблата: тонкое кольцо внутри, ◦ — во сколько начал */
+.ring-in { fill: none; stroke: var(--edge); stroke-width: 3; }
+.ring-in-arc { fill: none; stroke-width: 3; }
+.ring-in-handle { fill: var(--bg); stroke-width: 2.5; }

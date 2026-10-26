@@ -81,7 +81,7 @@ export default function More() {
       <div className="widget pad">
         <button className="row-btn look-row" onClick={() => setLookOpen(true)}>
           <span>Оформление</span>
-          <span className="dim">{lookSummary} ›</span>
+          <span className="dim">{lookSummary} · {modes.find((m) => m.id === design.mode)!.title.toLowerCase()} ›</span>
         </button>
         <div className="theme-swatches">
           {themes.map((t) => (
@@ -103,20 +103,6 @@ export default function More() {
         <label className="toggle-row">
           <span>Лента <span className="dim small">— высота по длительности</span></span>
           <input type="checkbox" checked={design.feedByDuration} onChange={(e) => setDesign({ feedByDuration: e.target.checked })} />
-        </label>
-      </div>
-
-      <div className="widget pad">
-        <div className="setting-title">Управление таймером</div>
-        <div className="chips design-chips mode-chips">
-          {modes.map((m) => (
-            <button key={m.id} aria-pressed={design.mode === m.id} onClick={() => setDesign({ mode: m.id })}>{m.title}</button>
-          ))}
-        </div>
-        <div className="setting-hint">{modes.find((m) => m.id === design.mode)!.hint}</div>
-        <label className="toggle-row">
-          <span>Витрина <span className="dim small">— мозаика на весь экран</span></span>
-          <input type="checkbox" checked={design.showcase} onChange={(e) => setDesign({ showcase: e.target.checked })} />
         </label>
       </div>
 

@@ -3,14 +3,14 @@ import { timerRange } from '../../../domain/tree';
 import { MIN_MS, formatClock, formatTimer } from '../../../domain/time';
 import { stopTimer } from '../../../db/commands';
 import { shortMin } from '../Dial';
-import { StartFromChip } from './StartFrom';
+import { MAX_AGO_MIN, StartFromChip, agoOf, startFromAgo } from './StartFrom';
 import type { ControlProps } from './types';
 import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 
 // «Плитки»: плитки частых занятий, ползунок длительности, «Старт» и «∞».
 // Пока таймер идёт — крупное время, «Изменить» и «Стоп».
 
-export function Tiles({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name, startAt, onPickStart, onStart }: ControlProps) {
+export function Tiles({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name, startAt, onPickStart, onSetStart, themedStart, onStart }: ControlProps) {
   const [minutesFor, setMinutesFor] = useState<Record<string, number>>({});
   const [lo, hi] = timerRange(activities, current);
   const minutes = Math.min(hi, Math.max(lo, minutesFor[current] ?? Math.round((lo + hi) / 10) * 5));
@@ -46,6 +46,15 @@ export function Tiles({ activities, colors, quick, current, onChoose, onMore, ru
       <input className="slider" type="range" min={lo} max={hi} step={5} value={minutes}
         style={{ accentColor: color }}
         onChange={(e) => setMinutesFor({ ...minutesFor, [current]: Number(e.target.value) })} />
+      {/* тематическое начало: второй ползунок «начал раньше на…» */}
+      {themedStart && (
+        <label className="tiles-ago dim">
+          <span>начал раньше {agoOf(startAt, now) ? `на ${shortMin(agoOf(startAt, now))}` : '— нет'}</span>
+          <input className="slider" type="range" min={0} max={MAX_AGO_MIN} step={5} value={agoOf(startAt, now)}
+            style={{ accentColor: color }}
+            onChange={(e) => onSetStart(startFromAgo(now, Number(e.target.value)))} />
+        </label>
+      )}
       <div className="tiles-actions">
         <button className="btn" onClick={() => onStart(current)}>∞ Без лимита</button>
         <button className="btn primary" style={{ background: color }} onClick={() => onStart(current, minutes * MIN_MS)}>Старт · {shortMin(minutes)}</button>

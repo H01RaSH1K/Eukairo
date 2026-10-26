@@ -11,11 +11,13 @@ import { plannedMsOf, plannedEndOf } from '../../../domain/timer';
 // «Циферблат»: кольцо — сутки (полночь сверху, по часовой). На нём видно, что уже было сегодня.
 // Тянешь от точки «сейчас» по часовой — ставишь таймер до этого времени;
 // против часовой — записываешь прошедшее время задним числом. Тап в центр — без лимита.
+// Тематическое начало: тонкое кольцо внутри, его ◦ тянешь назад — во сколько начал.
 
 const C = 100, R = 76;
 // Окружность, начатая сверху и идущая по часовой. pathLength = 1 → длина штриха = доля суток.
 const RING = `M ${C} ${C - R} A ${R} ${R} 0 1 1 ${C - 0.01} ${C - R}`;
 const DAY = 24 * HOUR_MS;
+const R_IN = 63; // внутреннее кольцо начала
 
 const at = (frac: number, r = R): [number, number] =>
   [C + r * Math.sin(frac * 2 * Math.PI), C - r * Math.cos(frac * 2 * Math.PI)];
@@ -26,7 +28,7 @@ const Arc = ({ f1, f2, color, className }: { f1: number; f2: number; color: stri
     style={{ stroke: color, strokeDasharray: `${Math.max(0, f2 - f1)} 2`, strokeDashoffset: -f1 }} />
 );
 
-export function ClockRing({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name, startAt, onPickStart, onStart }: ControlProps) {
+export function ClockRing({ activities, colors, quick, current, onChoose, onMore, run, now, onOpenRun, name, startAt, onPickStart, onSetStart, themedStart, onStart }: ControlProps) {
   const { entries } = useData();
   const day0 = startOfLocalDay(now);
   const frac = (t: number) => (t - day0) / DAY;
@@ -36,6 +38,7 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
   // Перетаскивание: копим угол по шагам, чтобы можно было пройти больше полукруга.
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ last: number; acc: number } | null>(null);
+  const startDrag = useRef(false);
   const [minutes, setMinutes] = useState(0); // > 0 — таймер вперёд, < 0 — запись назад
   const angleOf = (e: PointerEvent) => {
     const b = svg.current!.getBoundingClientRect();
@@ -45,7 +48,13 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
   const down = (e: PointerEvent<SVGSVGElement>) => {
     if (run) return;
     const { a, d } = angleOf(e);
-    if (d < R - 26 || d > R + 26) return; // хватаем только за кольцо
+    if (themedStart && d > R_IN - 11 && d < R - 7) { // внутреннее кольцо — начало
+      e.currentTarget.setPointerCapture(e.pointerId);
+      startDrag.current = true;
+      setStartAtAngle(a);
+      return;
+    }
+    if (d < (themedStart ? R - 7 : R - 26) || d > R + 26) return; // хватаем только за кольцо
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { last: a, acc: 0 };
     // начинаем от «сейчас»: прибавляем разницу между пальцем и стрелкой «сейчас»
@@ -54,7 +63,16 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
     drag.current.acc = start;
     update(start);
   };
+  // Угол на кольце → момент за последние 12 часов (позже «сейчас» — значит, вчера), шаг 5 минут.
+  const setStartAtAngle = (a: number) => {
+    let t = day0 + (((a / (2 * Math.PI)) % 1 + 1) % 1) * DAY;
+    if (t > now) t -= DAY;
+    t = Math.max(t, now - 12 * HOUR_MS);
+    const ago = Math.round((now - t) / MIN_MS / 5) * 5;
+    onSetStart(ago > 0 ? now - ago * MIN_MS : null);
+  };
   const move = (e: PointerEvent<SVGSVGElement>) => {
+    if (startDrag.current) { setStartAtAngle(angleOf(e).a); return; }
     const g = drag.current;
     if (!g) return;
     const { a } = angleOf(e);
@@ -70,7 +88,7 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
     m = Math.max(back, Math.min(hi, m));
     setMinutes(m);
   };
-  const up = () => { drag.current = null; };
+  const up = () => { drag.current = null; startDrag.current = false; };
   const cancel = () => setMinutes(0);
 
   const fNow = frac(now);
@@ -106,6 +124,18 @@ export function ClockRing({ activities, colors, quick, current, onChoose, onMore
           {minutes > 0 && <Arc f1={fNow} f2={fNow + minutes / 1440} color={color} className="ghost" />}
           {minutes < 0 && <Arc f1={fNow + minutes / 1440} f2={fNow} color={color} className="past" />}
           <circle cx={nx} cy={ny} r={7} className="ring-now" />
+          {themedStart && !run && (() => {
+            const fs = frac(startAt ?? now);
+            const [sx, sy] = at(fs, R_IN);
+            return (
+              <>
+                <circle cx={C} cy={C} r={R_IN} className="ring-in" />
+                {startAt && <path d={`M ${C} ${C - R_IN} A ${R_IN} ${R_IN} 0 1 1 ${C - 0.01} ${C - R_IN}`} pathLength={1} className="ring-in-arc"
+                  style={{ stroke: color, strokeDasharray: `${fNow - Math.max(0, fs)} 2`, strokeDashoffset: -Math.max(0, fs) }} />}
+                <circle cx={sx} cy={sy} r={5} className="ring-in-handle" style={{ stroke: color }} />
+              </>
+            );
+          })()}
         </svg>
 
         <div className="clock-center">

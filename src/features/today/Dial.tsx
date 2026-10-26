@@ -1,11 +1,12 @@
 import { useRef, type PointerEvent } from 'react';
 import type { Entry } from '../../db/schema';
 import { MIN_MS, formatClock, formatTimer } from '../../domain/time';
-import { StartFromChip } from './controls/StartFrom';
+import { MAX_AGO_MIN, StartFromChip, agoOf, startFromAgo } from './controls/StartFrom';
 import { plannedMsOf, plannedEndOf } from '../../domain/timer';
 
 // Полукруг внизу «Сегодня». По дуге — ползунок длительности (диапазон свой у занятия),
 // в середине — занятие и кнопки. Пока таймер идёт, дуга показывает, сколько прошло.
+// Тематическое начало: тонкая дуга снаружи — «начал раньше на 0…2 ч», со своей ручкой.
 
 const CX = 100, CY = 100, R = 84; // геометрия во «внутренних» единицах SVG (viewBox 200 × 120)
 
@@ -15,6 +16,9 @@ const at = (t: number): [number, number] => [CX - R * Math.cos(t * Math.PI), CY 
 // Вся дуга слева направо через верх. Закрашенную часть рисуем той же дугой,
 // обрезая штрихом: pathLength = 1, штрих длиной t — ровно доля дуги, без пересчёта пути.
 const ARC = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
+const R2 = 97; // внешняя тонкая дуга начала
+const ARC2 = `M ${CX - R2} ${CY} A ${R2} ${R2} 0 0 1 ${CX + R2} ${CY}`;
+const at2 = (t: number): [number, number] => [CX - R2 * Math.cos(t * Math.PI), CY - R2 * Math.sin(t * Math.PI)];
 
 /** «45 мин», «1 ч», «1 ч 30». */
 export function shortMin(min: number): string {
@@ -22,7 +26,7 @@ export function shortMin(min: number): string {
   return h === 0 ? `${m} мин` : m === 0 ? `${h} ч` : `${h} ч ${m}`;
 }
 
-export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt, onPickStart, onPick, onStart, onStartFree, onStop, onOpenRun }: {
+export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt, onPickStart, onSetStart, themedStart, onPick, onStart, onStartFree, onStop, onOpenRun }: {
   name: string;
   color: string;
   range: [number, number];          // минуты, от и до
@@ -32,6 +36,8 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
   now: number;
   startAt: number | null;           // выбранное начало следующего старта (null — сейчас)
   onPickStart: () => void;
+  onSetStart: (t: number | null) => void;
+  themedStart: boolean;             // показывать внешнюю дугу начала
   onPick: () => void;               // выбрать другое занятие
   onStart: () => void;              // таймер на выбранное время
   onStartFree: () => void;          // без лимита
@@ -44,21 +50,33 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
 
   // Перетаскивание: угол от центра → доля дуги → минуты с шагом 5.
   // setPointerCapture ≈ «захват мыши»: события идут сюда, даже если палец ушёл за пределы.
+  // Что тянем: длительность или (снаружи дуги, если включено) начало.
+  const what = useRef<'minutes' | 'start'>('minutes');
   const drag = (e: PointerEvent<SVGSVGElement>) => {
     if (run || (e.type === 'pointermove' && !e.currentTarget.hasPointerCapture(e.pointerId))) return;
-    if (e.type === 'pointerdown') e.currentTarget.setPointerCapture(e.pointerId);
     const box = svg.current!.getBoundingClientRect();
     const x = ((e.clientX - box.left) / box.width) * 200;
     const y = ((e.clientY - box.top) / box.height) * 120;
+    if (e.type === 'pointerdown') {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      what.current = themedStart && Math.hypot(x - CX, y - CY) > R + 7 ? 'start' : 'minutes';
+    }
     let a = Math.atan2(CY - y, x - CX);            // 0 справа, π слева
     if (a < 0) a = x < CX ? Math.PI : 0;           // ниже центра — прижимаем к краю
-    const value = lo + (1 - a / Math.PI) * (hi - lo);
+    const t = 1 - a / Math.PI;                     // доля дуги слева направо
+    if (what.current === 'start') {
+      onSetStart(startFromAgo(Date.now(), Math.round((t * MAX_AGO_MIN) / 5) * 5));
+      return;
+    }
+    const value = lo + t * (hi - lo);
     onMinutes(Math.min(hi, Math.max(lo, Math.round(value / 5) * 5)));
   };
 
   const planned = run ? plannedMsOf(run) : 0;
   const progress = run ? (planned ? (now - run.start) / planned : 1) : t;
   const [hx, hy] = at(t);
+  const tAgo = agoOf(startAt, now) / MAX_AGO_MIN;
+  const [sx, sy] = at2(Math.min(1, tAgo));
 
   return (
     <div className="widget dial">
@@ -69,6 +87,13 @@ export function Dial({ name, color, range, minutes, onMinutes, run, now, startAt
         onPointerDown={drag}
         onPointerMove={drag}
       >
+        {themedStart && !run && (
+          <>
+            <path d={ARC2} className="dial-track ago" />
+            <path d={ARC2} pathLength={1} className="dial-fill ago" style={{ stroke: color, strokeDasharray: `${Math.min(tAgo, 1)} 2` }} />
+            <circle cx={sx} cy={sy} r={5} className="dial-handle ago" style={{ stroke: color }} />
+          </>
+        )}
         <path d={ARC} className="dial-track" />
         <path
           d={ARC}

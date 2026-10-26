@@ -211,12 +211,12 @@ export default function Today() {
 
   // ——— управление таймером: режим из «Ещё», всегда внутри сворачиваемой панели ———
   // Выбранное начало — на один старт, дальше снова «сейчас».
-  const start = (id: string, durationMs?: number) => { void startTimer(id, durationMs, startAt ?? undefined); setStartAt(null); };
+  const start = (id: string, durationMs?: number, at?: number) => { void startTimer(id, durationMs, at ?? startAt ?? undefined); setStartAt(null); };
   const control: ControlProps = {
     activities, colors, quick, current: dialId, onChoose: setChosen, onMore: () => setPicking(true),
     run, now, onOpenRun: () => run && setSelected({ entry: run, isNew: false }),
     name: (id) => name(id).at(-1) ?? '',
-    startAt, onPickStart: () => setPickingStart(true), onStart: start,
+    startAt, onPickStart: () => setPickingStart(true), onSetStart: setStartAt, themedStart: design.startPick === 'themed', onStart: start,
   };
   const notingOk = noting && !isHidden(activities, noting) ? noting : null;
   const body = notingOk ? (
@@ -244,6 +244,8 @@ export default function Today() {
         onPick={() => setPicking(true)}
         startAt={startAt}
         onPickStart={() => setPickingStart(true)}
+        onSetStart={setStartAt}
+        themedStart={design.startPick === 'themed'}
         onStart={() => start(dialId, minutes * MIN_MS)}
         onStartFree={() => start(dialId)}
         onStop={() => void stopTimer()}
