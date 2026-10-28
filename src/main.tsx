@@ -31,6 +31,11 @@ try {
   if (localStorage.getItem('eukairo.sync')) void import('./db/sync').then((m) => m.startSync());
 } catch { /* приватный режим — без синка */ }
 
+// Надстройка «экран блокировки» (src/addons/lockscreen): тоже грузим, только если включена.
+try {
+  if (localStorage.getItem('eukairo.lockscreen')) void import('./addons/lockscreen/publish').then((m) => m.startLockscreen());
+} catch { /* приватный режим */ }
+
 // Service worker кэширует приложение для офлайна и тихо ставит обновления.
 registerSW({ immediate: true });
 

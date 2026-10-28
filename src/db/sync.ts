@@ -54,6 +54,9 @@ function saveConfig(c: Config | null) {
 /** Включён ли синк — без загрузки всего модуля (main.tsx решает, грузить ли его). */
 export const syncConfigured = () => loadConfig() !== null;
 
+/** Токен GitHub для надстроек (src/addons), которым нужен свой гист; null — синк выключен. */
+export const syncToken = () => loadConfig()?.token ?? null;
+
 let state: SyncState = { on: syncConfigured(), busy: false, lastAt: null, error: null };
 const listeners = new Set<() => void>();
 function setState(patch: Partial<SyncState>) {
