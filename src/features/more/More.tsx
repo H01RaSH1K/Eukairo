@@ -17,6 +17,8 @@ const ACTS: [string, string, string] = ['занятие', 'занятия', 'з�
 // Редактор занятий нужен редко — грузим его код только при первом открытии.
 const Activities = lazy(() => import('../activities/Activities'));
 const Habits = lazy(() => import('../habits/Habits'));
+// Надстройка: живёт в src/addons/lockscreen, сюда — только вход в неё.
+const LockscreenSheet = lazy(() => import('../../addons/lockscreen/LockscreenSheet'));
 
 // Экран «Ещё»: оформление, режим таймера, занятия, бэкап, служебное.
 export default function More() {
@@ -27,6 +29,7 @@ export default function More() {
   const [lookOpen, setLookOpen] = useState(false);
   const [restore, setRestore] = useState<{ backup?: Backup; error?: string; done?: string } | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
   const sync = useSync();
   const fileInput = useRef<HTMLInputElement>(null);
   const lastBackup = settingOf<number | null>(data, 'lastBackupAt', null);
@@ -142,7 +145,8 @@ export default function More() {
         Экран {screen.height} · окно {window.innerHeight} · поправка {viewportGap()}
       </div>
 
-      {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
+      {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} onLockscreen={() => { setSyncOpen(false); setLockOpen(true); }} />}
+      {lockOpen && <Suspense fallback={null}><LockscreenSheet onClose={() => setLockOpen(false)} /></Suspense>}
 
       {restore && (
         <Sheet title="Восстановление" onClose={() => setRestore(null)}>
@@ -177,7 +181,7 @@ function syncSummary(s: ReturnType<typeof useSync>): string {
 }
 
 // Окно синхронизации: подключение по токену или состояние и «отключить».
-function SyncSheet({ onClose }: { onClose: () => void }) {
+function SyncSheet({ onClose, onLockscreen }: { onClose: () => void; onLockscreen: () => void }) {
   const s = useSync();
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -207,6 +211,7 @@ function SyncSheet({ onClose }: { onClose: () => void }) {
             </p>
             <p className="dim small center">Сама при открытии, после правок и раз в 2 минуты. Удаления тоже переезжают; при правке одного и того же на двух устройствах побеждает более поздняя.</p>
             <button className="btn primary" disabled={s.busy} onClick={() => void syncNow()}>Синхронизировать сейчас</button>
+            <button className="btn" onClick={onLockscreen}>Виджет на экране блокировки ›</button>
             <button className="btn danger" onClick={off}>Отключить на этом устройстве</button>
           </>
         ) : (
